@@ -96,14 +96,15 @@ class CertificatedesignItemWidget extends StatelessWidget {
                       radius: BorderRadius.circular(12.h),
                       alignment: Alignment.center,
                     ),
-                    CustomElevatedButton(
-                      height: 32.v,
-                      width: 154.h,
-                      text: "msg_result_announced".tr,
-                      buttonStyle: CustomButtonStyles.fillPrimaryBR16,
-                      buttonTextStyle: theme.textTheme.labelLarge!,
-                      alignment: Alignment.topLeft,
-                    )
+                    if (certificatedesignItemModelObj.showResultAnnounced)
+                      CustomElevatedButton(
+                        height: 32.v,
+                        width: 154.h,
+                        text: "msg_result_announced".tr,
+                        buttonStyle: CustomButtonStyles.fillPrimaryBR16,
+                        buttonTextStyle: theme.textTheme.labelLarge!,
+                        alignment: Alignment.topLeft,
+                      )
                   ],
                 ),
               ),

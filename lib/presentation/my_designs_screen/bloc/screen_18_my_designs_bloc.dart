@@ -18,10 +18,11 @@ class Screen18MyDesignsBloc
   }
   final MediaRepository _repo;
 
-  /// Private designs from the last successful load (before search filter).
+  /// Cached designs from the last successful load (before search filter).
   List<PlaylistItemModel> _privatePlaylistCache = const [];
 
   String _searchQuery = '';
+  int _loadGeneration = 0;
 
   static final _fallback = <PlaylistItemModel>[
     PlaylistItemModel(
@@ -41,12 +42,15 @@ class Screen18MyDesignsBloc
     ),
   ];
 
-  _onInitialize(
+  void _onInitialize(
     Screen18MyDesignsInitialEvent event,
     Emitter<Screen18MyDesignsState> emit,
-  ) async {
-    emit(state.copyWith(searchController: TextEditingController()));
-    emit(state.copyWith(isLoading: true, errorMessage: null));
+  ) {
+    emit(state.copyWith(
+      searchController: TextEditingController(),
+      isLoading: true,
+      errorMessage: null,
+    ));
     add(Screen18MyDesignsLoadEvent());
   }
 
@@ -54,68 +58,85 @@ class Screen18MyDesignsBloc
     Screen18MyDesignsLoadEvent event,
     Emitter<Screen18MyDesignsState> emit,
   ) async {
-    if (!PrefUtils().isLoggedIn()) {
-      _privatePlaylistCache = const [];
-      emit(
-        state.copyWith(
-          isLoading: false,
-          errorMessage: 'Please sign in to see your designs.',
-          screen18MyDesignsModelObj:
-              (state.screen18MyDesignsModelObj ?? Screen18MyDesignsModel())
-                  .copyWith(playlistItemList: const []),
-        ),
-      );
-      return;
-    }
+    final generation = ++_loadGeneration;
+    emit(state.copyWith(isLoading: true, errorMessage: null));
 
-    final result = await _repo.list();
-    if (result is MediaFailure) {
-      _privatePlaylistCache = const [];
-      emit(
-        state.copyWith(
-          isLoading: false,
-          errorMessage: result.message,
-          screen18MyDesignsModelObj:
-              (state.screen18MyDesignsModelObj ?? Screen18MyDesignsModel())
-                  .copyWith(playlistItemList: _fallback),
-        ),
-      );
-      return;
-    }
-    final list = (result as MediaSuccess).items ?? const <MediaItem>[];
-    final session = PrefUtils().getUserSession();
-    final myUserId = session == null
-        ? null
-        : int.tryParse(session['id']?.toString() ?? '');
-    final mine = (myUserId == null)
-        ? list
-        : list.where((e) => e.userId == null || e.userId == myUserId).toList();
-    // My Designs: only private saves (API `visibility` / `is_public`).
-    final privateOnly = mine.where((e) => e.isPrivateDesign).toList();
-
-    final mapped = privateOnly
-        .take(30)
-        .map(
-          (e) => PlaylistItemModel(
-            image: e.fileUrl,
-            text1: e.name,
-            text2: _formatDesignDate(e.createdAt),
-            id: e.id.toString(),
+    try {
+      if (!PrefUtils().isLoggedIn()) {
+        _privatePlaylistCache = const [];
+        if (generation != _loadGeneration) return;
+        emit(
+          state.copyWith(
+            isLoading: false,
+            errorMessage: 'Please sign in to see your designs.',
+            screen18MyDesignsModelObj:
+                (state.screen18MyDesignsModelObj ?? Screen18MyDesignsModel())
+                    .copyWith(playlistItemList: const []),
           ),
-        )
-        .toList();
+        );
+        return;
+      }
 
-    _privatePlaylistCache = List<PlaylistItemModel>.from(mapped);
+      final result = await _repo.list();
+      if (generation != _loadGeneration) return;
 
-    emit(
-      state.copyWith(
-        isLoading: false,
-        errorMessage: null,
-        screen18MyDesignsModelObj:
-            (state.screen18MyDesignsModelObj ?? Screen18MyDesignsModel())
-                .copyWith(playlistItemList: _playlistAfterSearch()),
-      ),
-    );
+      if (result is MediaFailure) {
+        _privatePlaylistCache = const [];
+        emit(
+          state.copyWith(
+            isLoading: false,
+            errorMessage: result.message,
+            screen18MyDesignsModelObj:
+                (state.screen18MyDesignsModelObj ?? Screen18MyDesignsModel())
+                    .copyWith(playlistItemList: _fallback),
+          ),
+        );
+        return;
+      }
+      final list = (result as MediaSuccess).items ?? const <MediaItem>[];
+      final session = PrefUtils().getUserSession();
+      final myUserId = session == null
+          ? null
+          : int.tryParse(session['id']?.toString() ?? '');
+      // `design/list` returns the signed-in user's library (public + private).
+      final mine = myUserId == null
+          ? list
+          : list
+              .where((e) => e.userId == null || e.userId == myUserId)
+              .toList();
+
+      final mapped = mine
+          .take(30)
+          .map(
+            (e) => PlaylistItemModel(
+              image: e.fileUrl,
+              text1: e.name,
+              text2: _formatDesignDate(e.createdAt),
+              id: e.id.toString(),
+            ),
+          )
+          .toList();
+
+      _privatePlaylistCache = List<PlaylistItemModel>.from(mapped);
+
+      emit(
+        state.copyWith(
+          isLoading: false,
+          errorMessage: null,
+          screen18MyDesignsModelObj:
+              (state.screen18MyDesignsModelObj ?? Screen18MyDesignsModel())
+                  .copyWith(playlistItemList: _playlistAfterSearch()),
+        ),
+      );
+    } catch (_) {
+      if (generation != _loadGeneration) return;
+      emit(
+        state.copyWith(
+          isLoading: false,
+          errorMessage: 'Something went wrong',
+        ),
+      );
+    }
   }
 
   void _onSearchChanged(
@@ -143,7 +164,6 @@ class Screen18MyDesignsBloc
     }).toList();
   }
 
-  /// Short label for API timestamps (e.g. `2026-03-17T16:41:18.000000Z` → `2026-03-17`).
   static String _formatDesignDate(String? raw) {
     if (raw == null || raw.isEmpty) return '';
     final s = raw.trim();

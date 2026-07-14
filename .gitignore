@@ -2,6 +2,8 @@
 .dart_tool/
 .packages
 build/
+# Local AI debug keys (never commit)
+lib/core/config/ai_debug_secrets.dart
 # IDE
 .idea/
 *.iml

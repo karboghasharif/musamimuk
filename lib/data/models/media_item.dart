@@ -87,6 +87,22 @@ class MediaItem {
   bool get isPrivateDesign =>
       visibility != null && visibility!.toLowerCase().trim() == 'private';
 
+  /// Compact details for online designs preview (name, category, downloads, trending).
+  String formatOnlineDesignPreviewDetails() {
+    final lines = <String>[];
+    final n = name.trim();
+    if (n.isNotEmpty) lines.add('Name: $n');
+    final cat = category?.name.trim();
+    if (cat != null && cat.isNotEmpty) {
+      lines.add('Category: $cat');
+    } else if (categoryId != null) {
+      lines.add('Category: $categoryId');
+    }
+    if (downloadsCount != null) lines.add('Downloads: $downloadsCount');
+    if (trendingScore != null) lines.add('Trending score: $trendingScore');
+    return lines.join('\n');
+  }
+
   /// Human-readable lines for design detail sheets (admin catalog + rich payloads).
   String formatAdminDesignDetails() {
     void add(String label, String? value, List<String> lines) {
@@ -175,7 +191,9 @@ class MediaItem {
       creatorEmail = em.isEmpty ? null : em;
     }
 
-    final userIdRaw = json['user_id'] ?? json['created_by'];
+    final userIdRaw = json['user_id'] ??
+        json['created_by'] ??
+        (creator is Map ? creator['id'] : null);
 
     return MediaItem(
       id: apiParseInt(json['id']),

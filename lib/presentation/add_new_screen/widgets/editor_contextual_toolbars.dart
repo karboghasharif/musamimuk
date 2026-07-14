@@ -298,10 +298,17 @@ class TextContextToolbar extends StatelessWidget {
                               ),
                               _SecondaryBarTool(
                                 theme: theme,
-                                icon: Icons.format_color_fill_rounded,
-                                label: 'Color',
+                                icon: Icons.format_color_text_rounded,
+                                label: 'Colour',
                                 onTap: onColor,
                               ),
+                              if (onPickTextBackgroundColor != null)
+                                _SecondaryBarTool(
+                                  theme: theme,
+                                  icon: Icons.format_color_fill_rounded,
+                                  label: 'Background',
+                                  onTap: onPickTextBackgroundColor!,
+                                ),
                               _SecondaryBarTool(
                                 theme: theme,
                                 icon: Icons.text_fields_rounded,
@@ -663,6 +670,7 @@ class ImageContextToolbar extends StatelessWidget {
     required this.theme,
     required this.onDelete,
     required this.onResize,
+    this.onCrop,
     required this.onBorder,
     required this.onShadow,
     required this.onDuplicate,
@@ -679,6 +687,8 @@ class ImageContextToolbar extends StatelessWidget {
   final ThemeData theme;
   final VoidCallback onDelete;
   final VoidCallback onResize;
+  /// When null, the Crop tool is hidden (e.g. vector stickers or network-only assets).
+  final VoidCallback? onCrop;
   final VoidCallback onBorder;
   final VoidCallback onShadow;
   final VoidCallback onDuplicate;
@@ -734,6 +744,12 @@ class ImageContextToolbar extends StatelessWidget {
                       label: 'Resize',
                       onTap: onResize,
                     ),
+                    if (onCrop != null)
+                      _PrimaryBarTool(
+                        icon: Icons.crop_rounded,
+                        label: 'Crop',
+                        onTap: onCrop!,
+                      ),
                     _PrimaryBarTool(
                       icon: Icons.border_outer_rounded,
                       label: 'Border',
@@ -848,7 +864,7 @@ class ImageContextToolbar extends StatelessWidget {
                                 _SecondaryBarTool(
                                   theme: theme,
                                   icon: Icons.auto_fix_high_rounded,
-                                  label: 'AI Remove BG',
+                                  label: 'msg_remove_background'.tr,
                                   onTap: onAiRemoveBg,
                                 ),
                                 _SecondaryBarTool(

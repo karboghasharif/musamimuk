@@ -3,6 +3,7 @@ import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 
 import '../../core/app_export.dart';
 import '../../widgets/app_bar/appbar_leading_image.dart';
+import '../../widgets/app_bar/appbar_title.dart';
 import '../../widgets/app_bar/custom_app_bar.dart';
 import 'bloc/screen_2_new_design_bloc.dart';
 import 'models/screen_2_new_design_model.dart';
@@ -28,7 +29,7 @@ class Screen2NewDesignScreen extends StatelessWidget {
     return SafeArea(
       child: Scaffold(
         appBar: _buildAppBar(context),
-        backgroundColor: appTheme.blueGray90004,
+        backgroundColor: AppDs.surfaceBase,
         body: const _SelectSizeBody(),
       ),
     );
@@ -36,7 +37,12 @@ class Screen2NewDesignScreen extends StatelessWidget {
 
   PreferredSizeWidget _buildAppBar(BuildContext context) {
     return CustomAppBar(
-      leading: AppbarLeadingImage(imagePath: ImageConstant.imgArrowLeftPrimary),
+      leading: AppbarLeadingImage(
+        imagePath: ImageConstant.imgArrowLeftPrimary,
+        onTap: () => Navigator.of(context).pop(),
+      ),
+      centerTitle: true,
+      title: AppbarTitle(text: 'lbl_new_design'.tr),
     );
   }
 }
@@ -76,7 +82,6 @@ class _SelectSizeBodyState extends State<_SelectSizeBody> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final query = _searchCtrl.text.trim().toLowerCase();
     final presets = query.isEmpty
         ? kDesignSizePresets
@@ -89,98 +94,73 @@ class _SelectSizeBodyState extends State<_SelectSizeBody> {
               )
               .toList(growable: false);
 
-    final gap = 12.h;
-
-    // Use a single scrollable (slivers) to avoid nested scroll layout issues.
     return CustomScrollView(
       slivers: [
         SliverPadding(
-          padding: EdgeInsets.fromLTRB(16.h, 10.v, 16.h, 18.v),
+          padding: EdgeInsets.fromLTRB(
+            AppDs.space4.h,
+            AppDs.space3.v,
+            AppDs.space4.h,
+            AppDs.space4.v,
+          ),
           sliver: SliverList(
             delegate: SliverChildListDelegate([
-              SizedBox(height: 6.v),
-              Text(
-                'lbl_select_size'.tr,
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  color: theme.colorScheme.surface,
+              AppPageHeader(
+                title: 'lbl_select_size'.tr,
+                subtitle: 'msg_choose_from_below'.tr,
+              ),
+              SizedBox(height: AppDs.space6.v),
+              AppCard(
+                elevated: true,
+                child: CustomSizeSelector(
+                  initialWidth: 500,
+                  initialHeight: 500,
+                  onCreate: ({required width, required height, required unit}) =>
+                      _openEditor(
+                        width: width,
+                        height: height,
+                        unit: unit,
+                        presetName: 'lbl_custom_size'.tr,
+                      ),
                 ),
               ),
-              SizedBox(height: 12.v),
-              CustomSizeSelector(
-                initialWidth: 500,
-                initialHeight: 500,
-                onCreate: ({required width, required height, required unit}) =>
-                    _openEditor(
-                      width: width,
-                      height: height,
-                      unit: unit,
-                      presetName: 'lbl_custom_size'.tr,
-                    ),
-              ),
-              SizedBox(height: 18.v),
-              Divider(color: Colors.white.withValues(alpha: 0.15)),
-              SizedBox(height: 12.v),
-              TextField(
+              SizedBox(height: AppDs.space6.v),
+              AppSearchField(
                 controller: _searchCtrl,
+                hintText: 'lbl_search_presets'.tr,
                 onChanged: (_) => setState(() {}),
-                decoration: InputDecoration(
-                  hintText: 'lbl_search_presets'.tr,
-                  prefixIcon: const Icon(Icons.search),
-                  filled: true,
-                  fillColor: theme.colorScheme.surfaceContainerLow.withValues(
-                    alpha: 0.4,
-                  ),
-                  hintStyle: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.surface,
-                  ),
-                  prefixIconColor: theme.colorScheme.onPrimary.withValues(
-                    alpha: 0.7,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14.adaptSize),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onPrimary,
-                ),
               ),
-              SizedBox(height: 12.v),
-              Text(
-                'msg_choose_from_below'.tr,
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: theme.colorScheme.surface,
-                ),
-              ),
-              SizedBox(height: 12.v),
+              SizedBox(height: AppDs.space6.v),
+              AppSectionHeader(title: 'msg_choose_from_below'.tr),
             ]),
           ),
         ),
         SliverPadding(
-          padding: EdgeInsets.symmetric(horizontal: 16.h),
+          padding: EdgeInsets.symmetric(horizontal: AppDs.space4.h),
           sliver: SliverMasonryGrid.count(
             crossAxisCount: 2,
-            mainAxisSpacing: gap,
-            crossAxisSpacing: gap,
+            mainAxisSpacing: AppDs.space3.h,
+            crossAxisSpacing: AppDs.space3.h,
             childCount: presets.length,
             itemBuilder: (context, i) {
               final p = presets[i];
-              return SizePresetCard(
-                preset: p,
-                denseOnDark: true,
-                onTap: () => _openEditor(
-                  width: p.width,
-                  height: p.height,
-                  unit: 'px',
-                  presetName: p.name,
+              return AppFadeIn(
+                delay: Duration(milliseconds: 30 * i),
+                child: SizePresetCard(
+                  preset: p,
+                  denseOnDark: true,
+                  onTap: () => _openEditor(
+                    width: p.width,
+                    height: p.height,
+                    unit: 'px',
+                    presetName: p.name,
+                  ),
                 ),
               );
             },
           ),
         ),
-        SliverToBoxAdapter(child: SizedBox(height: 18.v)),
+        SliverToBoxAdapter(child: SizedBox(height: AppDs.space6.v)),
       ],
     );
   }

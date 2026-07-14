@@ -2,41 +2,29 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:musamimuk/core/network/api_error_mapper.dart';
+import 'package:musamimuk/core/session/session_manager.dart';
 import 'package:musamimuk/core/utils/pref_utils.dart';
 
 /// Base URL for the musamimuk API (versioned root). Paths in repositories are
 /// relative to this (e.g. `user/login` → `…/api/v1/user/login`).
-const String baseUrl = 'https://inthostech.com/api/v1/';
+const String baseUrl = 'https://srv1813447.hstgr.cloud/api/v1/';
 
-/// Dio-based API client with interceptors for auth and logging.
+/// Dio-based API client with interceptors for auth, session expiry, and logging.
 class ApiClient {
   ApiClient._() {
-    _dio = Dio(BaseOptions(
-      baseUrl: baseUrl,
-      connectTimeout: const Duration(seconds: 30),
-      receiveTimeout: const Duration(seconds: 30),
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
-    ));
-    _dio.interceptors.add(
-      InterceptorsWrapper(
-        onRequest: (options, handler) {
-          final token = PrefUtils().getToken();
-          if (token != null && token.isNotEmpty) {
-            options.headers['Authorization'] = 'Bearer $token';
-          }
-          return handler.next(options);
-        },
-        onError: (e, handler) {
-          if (e.response?.statusCode == 401) {
-            unawaited(PrefUtils().clearAuth());
-          }
-          return handler.next(e);
+    _dio = Dio(
+      BaseOptions(
+        baseUrl: baseUrl,
+        connectTimeout: const Duration(seconds: 30),
+        receiveTimeout: const Duration(seconds: 30),
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
         },
       ),
     );
+    _dio.interceptors.add(_AuthSessionInterceptor());
     _dio.interceptors.add(_ApiLoggerInterceptor());
   }
 
@@ -45,6 +33,34 @@ class ApiClient {
 
   late final Dio _dio;
   Dio get dio => _dio;
+}
+
+/// Attaches Bearer tokens and handles global 401 / auth-related 403 responses.
+class _AuthSessionInterceptor extends Interceptor {
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    final token = PrefUtils().getToken();
+    if (token != null && token.isNotEmpty) {
+      options.headers['Authorization'] = 'Bearer $token';
+    }
+    handler.next(options);
+  }
+
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) {
+    final friendly = ApiErrorMapper.messageFromDio(err);
+    final mapped = err.copyWith(message: friendly);
+
+    if (ApiErrorMapper.shouldExpireSession(err)) {
+      unawaited(
+        SessionManager.instance.handleSessionExpired(message: friendly),
+      );
+    } else if (ApiErrorMapper.isGuestForbidden(err)) {
+      SessionManager.instance.handleGuestForbidden(message: friendly);
+    }
+
+    handler.next(mapped);
+  }
 }
 
 /// Interceptor that logs API request and response (or error).
@@ -77,7 +93,9 @@ class _ApiLoggerInterceptor extends Interceptor {
           final fd = options.data! as FormData;
           final fields = fd.fields.map((e) => e.key).toList();
           final files = fd.files.map((e) => e.key).toList();
-          debugPrint('│ Body: FormData fields=[${fields.join(', ')}] files=[${files.join(', ')}]');
+          debugPrint(
+            '│ Body: FormData fields=[${fields.join(', ')}] files=[${files.join(', ')}]',
+          );
         } else {
           debugPrint('│ Body: ${_truncate(options.data)}');
         }
@@ -88,13 +106,12 @@ class _ApiLoggerInterceptor extends Interceptor {
   }
 
   @override
-  void onResponse(
-    Response response,
-    ResponseInterceptorHandler handler,
-  ) {
+  void onResponse(Response response, ResponseInterceptorHandler handler) {
     if (kDebugMode) {
       debugPrint('┌── API Response ──');
-      debugPrint('│ ${response.requestOptions.method} ${response.requestOptions.uri}');
+      debugPrint(
+        '│ ${response.requestOptions.method} ${response.requestOptions.uri}',
+      );
       debugPrint('│ Status: ${response.statusCode}');
       if (response.data != null) {
         debugPrint('│ Body: ${_truncate(response.data)}');

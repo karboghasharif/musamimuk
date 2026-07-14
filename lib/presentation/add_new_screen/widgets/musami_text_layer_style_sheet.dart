@@ -500,7 +500,9 @@ Future<void> showMusamiTextLayerStyleSheet({
                                   if (l == null) return;
                                   final nextSt = baseStyle(
                                     l,
-                                  ).copyWith(backgroundColor: null);
+                                  ).copyWith(
+                                    backgroundColor: Colors.transparent,
+                                  );
                                   apply(
                                     l.copyWith(
                                       textStyle: nextSt,

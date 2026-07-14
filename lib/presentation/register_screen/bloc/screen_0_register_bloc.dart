@@ -53,39 +53,51 @@ class Screen0RegisterBloc
     Emitter<Screen0RegisterState> emit,
   ) async {
     emit(state.copyWith(isLoading: true, registerError: null));
-    final result = await _authRepository.register(
-      name: event.name,
-      email: event.email,
-      password: event.password,
-      passwordConfirmation: event.passwordConfirmation,
-    );
-    if (result is RegisterSuccess) {
-      final prefs = PrefUtils();
-      await prefs.clearOfflineHomeSession();
-      await prefs.setRememberSession(true);
-      final data = result.data.data;
-      if (data == null || data.token.isEmpty) {
+    try {
+      final result = await _authRepository.register(
+        name: event.name,
+        email: event.email,
+        password: event.password,
+        passwordConfirmation: event.passwordConfirmation,
+      );
+      if (result is RegisterSuccess) {
+        final prefs = PrefUtils();
+        await prefs.clearOfflineHomeSession();
+        await prefs.setRememberSession(true);
+        final data = result.data.data;
+        if (data == null || data.token.isEmpty) {
+          emit(state.copyWith(
+            isLoading: false,
+            registerError: result.data.message.isNotEmpty
+                ? result.data.message
+                : 'Registration failed',
+          ));
+          return;
+        }
+        await prefs.setToken(data.token);
+        if (data.user != null) {
+          await prefs.setUserSession(data.user!.toJson());
+        }
         emit(state.copyWith(
           isLoading: false,
-          registerError: result.data.message.isNotEmpty
-              ? result.data.message
-              : 'Registration failed',
+          registerError: null,
+          registerSuccess: true,
         ));
-        return;
+      } else if (result is RegisterFailure) {
+        emit(state.copyWith(
+          isLoading: false,
+          registerError: result.message,
+        ));
+      } else {
+        emit(state.copyWith(
+          isLoading: false,
+          registerError: 'Registration failed',
+        ));
       }
-      await prefs.setToken(data.token);
-      if (data.user != null) {
-        await prefs.setUserSession(data.user!.toJson());
-      }
+    } catch (_) {
       emit(state.copyWith(
         isLoading: false,
-        registerError: null,
-        registerSuccess: true,
-      ));
-    } else if (result is RegisterFailure) {
-      emit(state.copyWith(
-        isLoading: false,
-        registerError: result.message,
+        registerError: 'Registration failed',
       ));
     }
   }

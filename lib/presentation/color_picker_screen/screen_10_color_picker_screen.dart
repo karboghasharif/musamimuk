@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../core/app_export.dart';
-import '../../theme/custom_button_style.dart';
-import '../../widgets/custom_elevated_button.dart';
 import '../../widgets/custom_icon_button.dart';
 import '../../widgets/custom_outlined_button.dart';
 import 'bloc/screen_10_color_picker_bloc.dart';
@@ -25,9 +23,10 @@ class Screen10ColorPickerScreen extends StatelessWidget {
       builder: (context, state) {
         return SafeArea(
           child: Scaffold(
+            backgroundColor: AppDs.surfaceBase,
             body: Container(
               width: double.maxFinite,
-              padding: EdgeInsets.symmetric(vertical: 43.v),
+              padding: EdgeInsets.symmetric(vertical: AppDs.space6.v),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -45,7 +44,7 @@ class Screen10ColorPickerScreen extends StatelessWidget {
                   ),
                   SizedBox(height: 8.v),
                   Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 49.h),
+                    padding: EdgeInsets.symmetric(horizontal: AppDs.space6.h),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -167,9 +166,8 @@ class Screen10ColorPickerScreen extends StatelessWidget {
 
   Widget _buildRowview(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(
-        left: 28.h,
-        right: 25.h,
+      padding: EdgeInsets.symmetric(
+        horizontal: AppDs.space6.h,
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -214,10 +212,10 @@ class Screen10ColorPickerScreen extends StatelessWidget {
                 height: 19.adaptSize,
                 width: 19.adaptSize,
               ),
-              SizedBox(height: 7.v),
-              Text(
+              SizedBox(height: AppDs.space2.v),
+              AppText(
                 "lbl_save".tr,
-                style: CustomTextStyles.bodySmall10,
+                variant: AppTextVariant.caption,
               )
             ],
           )
@@ -311,15 +309,13 @@ class Screen10ColorPickerScreen extends StatelessWidget {
   }
 
   Widget _buildRow(BuildContext context) {
-    return Container(
-      width: double.maxFinite,
+    return AppCard(
+      margin: EdgeInsets.symmetric(horizontal: AppDs.space4.h),
       padding: EdgeInsets.symmetric(
-        horizontal: 19.h,
-        vertical: 20.v,
+        horizontal: AppDs.space4.h,
+        vertical: AppDs.space5.v,
       ),
-      decoration: AppDecoration.fillPrimary.copyWith(
-        borderRadius: BorderRadiusStyle.roundedBorder33,
-      ),
+      elevated: true,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.end,
@@ -348,13 +344,10 @@ class Screen10ColorPickerScreen extends StatelessWidget {
                   width: 121.h,
                   text: "lbl_cancel".tr,
                 ),
-                CustomElevatedButton(
-                  height: 48.v,
-                  width: 115.h,
-                  text: "lbl_apply".tr,
-                  margin: EdgeInsets.only(left: 13.h),
-                  buttonStyle: CustomButtonStyles.outlineBlackTL24,
-                  buttonTextStyle: CustomTextStyles.bodyMedium14,
+                SizedBox(width: AppDs.space3.h),
+                AppPrimaryButton(
+                  label: "lbl_apply".tr,
+                  expandWidth: false,
                   onPressed: () {
                     onTapApply(context);
                   },

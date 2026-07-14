@@ -8,11 +8,21 @@ class AddNewEvent extends Equatable {
 
 // Event that is dispatched when the Screen3AddNew widget is first created.
 class Screen3AddNewInitialEvent extends AddNewEvent {
-  Screen3AddNewInitialEvent({this.height, this.width});
+  Screen3AddNewInitialEvent({
+    this.height,
+    this.width,
+    this.unit = 'px',
+    this.backgroundImageBytes,
+    this.designHistoryJson,
+  });
   final double? width;
   final double? height;
+  final String unit;
+  final Uint8List? backgroundImageBytes;
+  final String? designHistoryJson;
   @override
-  List<Object?> get props => [width, height];
+  List<Object?> get props =>
+      [width, height, unit, backgroundImageBytes, designHistoryJson];
 }
 
 class PickImageFromGalleryEvent extends AddNewEvent {}
@@ -67,11 +77,16 @@ class SetBgColorEvent extends AddNewEvent {
 }
 
 class ApplyCustomSizeEvent extends AddNewEvent {
-  ApplyCustomSizeEvent({required this.width, required this.height});
+  ApplyCustomSizeEvent({
+    required this.width,
+    required this.height,
+    this.unit = 'px',
+  });
   final double width;
   final double height;
+  final String unit;
   @override
-  List<Object?> get props => [width, height];
+  List<Object?> get props => [width, height, unit];
 }
 
 class SetBgColorToolModeEvent extends AddNewEvent {
@@ -80,6 +95,12 @@ class SetBgColorToolModeEvent extends AddNewEvent {
   @override
   List<Object?> get props => [mode];
 }
+
+/// Enter full-screen eyedropper mode (samples from canvas via RepaintBoundary).
+class StartScreenColorPickEvent extends AddNewEvent {}
+
+/// Exit eyedropper mode and restore the background-color panel.
+class EndScreenColorPickEvent extends AddNewEvent {}
 
 /// Editor selection changed (from ProImageEditor callbacks).
 class EditorSelectionChangedEvent extends AddNewEvent {
@@ -121,4 +142,9 @@ class SetImageContextSecondaryPanelEvent extends AddNewEvent {
 
   @override
   List<Object?> get props => [panel];
+}
+
+class ClearPendingDesignHistoryEvent extends AddNewEvent {
+  @override
+  List<Object?> get props => [];
 }

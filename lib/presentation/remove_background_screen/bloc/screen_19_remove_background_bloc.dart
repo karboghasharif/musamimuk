@@ -22,12 +22,6 @@ class Screen19RemoveBackgroundBloc
   }
 
   List<ImagelistItemModel> fillImagelistItemList() {
-    return [
-      ImagelistItemModel(rectangle: ImageConstant.imgRectangle5594),
-      ImagelistItemModel(rectangle: ImageConstant.imgRectangle5595),
-      ImagelistItemModel(rectangle: ImageConstant.imgRectangle5596),
-      ImagelistItemModel(rectangle: ImageConstant.imgRectangle5597),
-      ImagelistItemModel(rectangle: ImageConstant.imgRectangle5598)
-    ];
+    return const [];
   }
 }

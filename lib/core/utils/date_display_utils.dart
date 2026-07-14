@@ -44,6 +44,24 @@ String formatContestDateRangeDisplay(String? start, String? end) {
 
 /// True when [endDateIso] parses and local **now** is strictly after that instant.
 /// Missing or invalid dates → `false` (e.g. do not show “winner announced” yet).
+/// LinkedIn-style relative timestamp, e.g. "2h", "3d", "Jan 12".
+String formatRelativeTimestamp(String? iso) {
+  if (iso == null || iso.trim().isEmpty) return '';
+  try {
+    final dt = DateTime.parse(iso.trim()).toLocal();
+    final now = DateTime.now();
+    final diff = now.difference(dt);
+    if (diff.isNegative || diff.inSeconds < 60) return 'now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m';
+    if (diff.inHours < 24) return '${diff.inHours}h';
+    if (diff.inDays < 7) return '${diff.inDays}d';
+    if (dt.year == now.year) return DateFormat('d MMM').format(dt);
+    return DateFormat('d MMM yyyy').format(dt);
+  } catch (_) {
+    return iso.trim();
+  }
+}
+
 bool isContestEndOverdue(String? endDateIso) {
   if (endDateIso == null || endDateIso.trim().isEmpty) return false;
   try {

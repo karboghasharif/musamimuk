@@ -17,11 +17,14 @@ class AddNewState extends Equatable {
     this.previousBackgroundBytes,
     this.selectedBgColor,
     this.bgColorToolMode = 'wheel',
+    this.isScreenColorPicking = false,
     this.selectedElementId,
     this.selectedElementType,
     this.activeToolbarMode = 'default',
     this.textContextSecondaryPanel = 'default',
     this.imageContextSecondaryPanel = 'default',
+    this.canvasUnit = 'px',
+    this.pendingDesignHistoryJson,
   });
 
   final GlobalKey<ProImageEditorState>? editorKey;
@@ -39,6 +42,7 @@ class AddNewState extends Equatable {
   final Uint8List? previousBackgroundBytes;
   final Color? selectedBgColor;
   final String bgColorToolMode;
+  final bool isScreenColorPicking;
   final String? selectedElementId;
   final String? selectedElementType;
 
@@ -52,6 +56,12 @@ class AddNewState extends Equatable {
   /// Secondary row / expanded panel for the image contextual toolbar.
   /// 'default' | 'adjust'
   final String imageContextSecondaryPanel;
+
+  /// Last selected canvas dimension unit (`px`, `in`, `ft`, `cm`, `mm`).
+  final String canvasUnit;
+
+  /// Pro Image Editor history JSON to import once the editor is ready.
+  final String? pendingDesignHistoryJson;
 
   final AddNewModel? addNewModel = null;
   @override
@@ -70,11 +80,14 @@ class AddNewState extends Equatable {
     previousBackgroundBytes,
     selectedBgColor,
     bgColorToolMode,
+    isScreenColorPicking,
     selectedElementId,
     selectedElementType,
     activeToolbarMode,
     textContextSecondaryPanel,
     imageContextSecondaryPanel,
+    canvasUnit,
+    pendingDesignHistoryJson,
   ];
   AddNewState copyWith({
     final Uint8List? transparentBytes,
@@ -91,11 +104,15 @@ class AddNewState extends Equatable {
     Uint8List? previousBackgroundBytes,
     Color? selectedBgColor,
     String? bgColorToolMode,
+    bool? isScreenColorPicking,
     String? selectedElementId,
     String? selectedElementType,
     String? activeToolbarMode,
     String? textContextSecondaryPanel,
     String? imageContextSecondaryPanel,
+    String? canvasUnit,
+    String? pendingDesignHistoryJson,
+    bool clearPendingDesignHistory = false,
   }) {
     return AddNewState(
       valueoneController: valueoneController ?? this.valueoneController,
@@ -116,6 +133,8 @@ class AddNewState extends Equatable {
           previousBackgroundBytes ?? this.previousBackgroundBytes,
       selectedBgColor: selectedBgColor ?? this.selectedBgColor,
       bgColorToolMode: bgColorToolMode ?? this.bgColorToolMode,
+      isScreenColorPicking:
+          isScreenColorPicking ?? this.isScreenColorPicking,
       selectedElementId: selectedElementId ?? this.selectedElementId,
       selectedElementType: selectedElementType ?? this.selectedElementType,
       activeToolbarMode: activeToolbarMode ?? this.activeToolbarMode,
@@ -123,6 +142,10 @@ class AddNewState extends Equatable {
           textContextSecondaryPanel ?? this.textContextSecondaryPanel,
       imageContextSecondaryPanel:
           imageContextSecondaryPanel ?? this.imageContextSecondaryPanel,
+      canvasUnit: canvasUnit ?? this.canvasUnit,
+      pendingDesignHistoryJson: clearPendingDesignHistory
+          ? null
+          : (pendingDesignHistoryJson ?? this.pendingDesignHistoryJson),
     );
   }
 }

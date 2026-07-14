@@ -48,6 +48,10 @@ class RegisterUser {
   final String? name;
   final String? email;
   final int? roleId;
+  final String? role;
+  final String? roleLabel;
+  final bool isGuest;
+  final bool canAccessAdminPortal;
   final String? subscriptionPlan;
   final String? country;
   final String? image;
@@ -59,6 +63,10 @@ class RegisterUser {
     this.name,
     this.email,
     this.roleId,
+    this.role,
+    this.roleLabel,
+    this.isGuest = false,
+    this.canAccessAdminPortal = false,
     this.subscriptionPlan,
     this.country,
     this.image,
@@ -71,6 +79,10 @@ class RegisterUser {
         'name': name,
         'email': email,
         'role_id': roleId,
+        'role': role,
+        'role_label': roleLabel,
+        'is_guest': isGuest,
+        'can_access_admin_portal': canAccessAdminPortal,
         'subscription_plan': subscriptionPlan,
         'country': country,
         'image': image,
@@ -83,7 +95,15 @@ class RegisterUser {
           : int.tryParse(json['id']?.toString() ?? '0') ?? 0,
       name: json['name'] as String?,
       email: json['email'] as String?,
-      roleId: json['role_id'] as int?,
+      roleId: (json['role_id'] is int)
+          ? json['role_id'] as int
+          : int.tryParse(json['role_id']?.toString() ?? ''),
+      role: json['role'] as String?,
+      roleLabel: json['role_label'] as String?,
+      isGuest: json['is_guest'] == true ||
+          json['is_guest']?.toString().toLowerCase() == 'true',
+      canAccessAdminPortal: json['can_access_admin_portal'] == true ||
+          json['can_access_admin_portal']?.toString() == 'true',
       subscriptionPlan: json['subscription_plan'] as String?,
       country: json['country'] as String?,
       image: _normUserImage(json['image'] as String?),

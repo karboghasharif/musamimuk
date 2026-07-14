@@ -4,8 +4,6 @@ import 'package:toastification/toastification.dart';
 import '../../core/app_export.dart';
 import '../../core/utils/app_toast.dart';
 import '../../core/utils/validation_functions.dart';
-import '../../theme/custom_button_style.dart';
-import '../../widgets/custom_elevated_button.dart';
 import '../../widgets/custom_text_form_field.dart';
 import 'bloc/screen_0_register_bloc.dart';
 import 'models/screen_0_register_model.dart';
@@ -60,12 +58,12 @@ class _Screen0RegisterScreenState extends State<Screen0RegisterScreen> {
               width: double.maxFinite,
               child: Column(
                 children: [
-                  SizedBox(height: 43.v),
+                  SizedBox(height: AppDs.space6.v),
                   Expanded(
                     child: SingleChildScrollView(
                       child: Container(
-                        margin: EdgeInsets.only(bottom: 85.v),
-                        padding: EdgeInsets.symmetric(horizontal: 20.h),
+                        margin: EdgeInsets.only(bottom: AppDs.space12.v),
+                        padding: EdgeInsets.symmetric(horizontal: AppDs.space4.h),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -75,36 +73,35 @@ class _Screen0RegisterScreenState extends State<Screen0RegisterScreen> {
                               width: 276.h,
                               alignment: Alignment.center,
                             ),
-                            SizedBox(height: 21.v),
+                            SizedBox(height: AppDs.space3.v),
                             Padding(
-                              padding: EdgeInsets.only(left: 24.h),
-                              child: Text(
+                              padding: EdgeInsets.only(left: AppDs.space6.h),
+                              child: AppText(
                                 "lbl_register".tr,
-                                style: theme.textTheme.headlineLarge,
+                                variant: AppTextVariant.heading,
                               ),
                             ),
-                            SizedBox(height: 9.v),
+                            SizedBox(height: AppDs.space2.v),
                             Padding(
-                              padding: EdgeInsets.only(left: 24.h),
-                              child: Text(
+                              padding: EdgeInsets.only(left: AppDs.space6.h),
+                              child: AppText(
                                 "msg_make_your_own_account".tr,
-                                style: CustomTextStyles
-                                    .titleSmallVisbyRoundCFBluegray10001,
+                                variant: AppTextVariant.secondary,
                               ),
                             ),
-                            SizedBox(height: 69.v),
+                            SizedBox(height: AppDs.space12.v),
                             _buildUserProfile(context),
-                            SizedBox(height: 22.v),
+                            SizedBox(height: AppDs.space3.v),
                             _buildEmailOrMobileField(context),
-                            SizedBox(height: 22.v),
+                            SizedBox(height: AppDs.space3.v),
                             _buildPasswordField(context),
                             _buildPasswordStrengthFeedback(),
-                            SizedBox(height: 22.v),
+                            SizedBox(height: AppDs.space3.v),
                             _buildPasswordConfirmationField(context),
                             _buildConfirmMatchFeedback(),
-                            SizedBox(height: 84.v),
+                            SizedBox(height: AppDs.space12.v),
                             _buildRegisterButton(context),
-                            SizedBox(height: 16.v),
+                            SizedBox(height: AppDs.space4.v),
                             InkWell(
                               onTap: () {
                                 NavigatorService.pushNamed(
@@ -430,29 +427,9 @@ class _Screen0RegisterScreenState extends State<Screen0RegisterScreen> {
     return BlocBuilder<Screen0RegisterBloc, Screen0RegisterState>(
       buildWhen: (prev, curr) => prev.isLoading != curr.isLoading,
       builder: (context, state) {
-        if (state.isLoading) {
-          return Container(
-            height: 58.v,
-            margin: EdgeInsets.only(left: 5.h, right: 4.h),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primary,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: SizedBox(
-              height: 24.v,
-              width: 24.h,
-              child: const CircularProgressIndicator(
-                strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-              ),
-            ),
-          );
-        }
-        return CustomElevatedButton(
-          text: "lbl_register".tr,
-          margin: EdgeInsets.only(left: 5.h, right: 4.h),
-          buttonStyle: CustomButtonStyles.fillPrimary,
+        return AppPrimaryButton(
+          label: "lbl_register".tr,
+          isLoading: state.isLoading,
           onPressed: () => _onTapRegister(context),
         );
       },

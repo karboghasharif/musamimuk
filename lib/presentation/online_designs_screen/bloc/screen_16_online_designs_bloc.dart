@@ -13,7 +13,7 @@ part 'screen_16_online_designs_state.dart';
 class Screen16OnlineDesignsBloc
     extends Bloc<Screen16OnlineDesignsEvent, Screen16OnlineDesignsState> {
   Screen16OnlineDesignsBloc(super.initialState)
-      : _adminDesigns = AdminDesignRepository() {
+    : _adminDesigns = AdminDesignRepository() {
     on<Screen16OnlineDesignsInitialEvent>(_onInitialize);
     on<Screen16OnlineDesignsLoadEvent>(_onLoad);
     on<Screen16OnlineDesignsSearchChangedEvent>(_onSearchChanged);
@@ -21,10 +21,11 @@ class Screen16OnlineDesignsBloc
   }
   final AdminDesignRepository _adminDesigns;
 
-  /// Cached full list from `GET admin/designs` (client-side search/filter).
+  /// Cached full list from `GET /designs` (client-side search/filter).
   List<MediaItem> _allDesigns = [];
   String _searchQuery = '';
   int? _selectedCategoryId;
+  int _loadGeneration = 0;
 
   static final _fallbackRectangle = <RectanglelistsectionItemModel>[
     RectanglelistsectionItemModel(rectangle: ImageConstant.imgRectangle5582),
@@ -50,9 +51,7 @@ class Screen16OnlineDesignsBloc
     final list = map.entries
         .map((e) => MediaCategoryRef(id: e.key, name: e.value))
         .toList();
-    list.sort(
-      (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-    );
+    list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     return list;
   }
 
@@ -62,14 +61,17 @@ class Screen16OnlineDesignsBloc
     if (!exists) _selectedCategoryId = null;
   }
 
-  _onInitialize(
+  void _onInitialize(
     Screen16OnlineDesignsInitialEvent event,
     Emitter<Screen16OnlineDesignsState> emit,
-  ) async {
-    emit(state.copyWith(
-      searchController: TextEditingController(),
-    ));
-    emit(state.copyWith(isLoading: true, errorMessage: null));
+  ) {
+    emit(
+      state.copyWith(
+        searchController: TextEditingController(),
+        isLoading: true,
+        errorMessage: null,
+      ),
+    );
     add(Screen16OnlineDesignsLoadEvent());
   }
 
@@ -77,61 +79,82 @@ class Screen16OnlineDesignsBloc
     Screen16OnlineDesignsLoadEvent event,
     Emitter<Screen16OnlineDesignsState> emit,
   ) async {
-    if (!PrefUtils().isLoggedIn()) {
-      _allDesigns = [];
-      _selectedCategoryId = null;
-      emit(state.copyWith(
-        isLoading: false,
-        errorMessage: 'Please sign in to view online designs.',
-        selectedCategoryId: null,
-        categoryOptions: const [],
-        screen16OnlineDesignsModelObj: (state.screen16OnlineDesignsModelObj ??
-                Screen16OnlineDesignsModel())
-            .copyWith(
-          rectanglelistsectionItemList: _fallbackRectangle,
-          listsectionItemList: _fallbackList,
-          featuredImageUrls: const [],
-          featuredTiles: const [],
-          forYouGroupedSections: const [],
-        ),
-      ));
-      return;
-    }
+    final generation = ++_loadGeneration;
+    emit(state.copyWith(isLoading: true, errorMessage: null));
 
-    final result = await _adminDesigns.list(perPage: 20, sort: 'latest');
-    if (result is AdminDesignListFailure) {
-      _allDesigns = [];
-      emit(state.copyWith(
-        isLoading: false,
-        errorMessage: result.message,
-        selectedCategoryId: null,
-        categoryOptions: const [],
-        screen16OnlineDesignsModelObj: (state.screen16OnlineDesignsModelObj ??
-                Screen16OnlineDesignsModel())
-            .copyWith(
-          rectanglelistsectionItemList: _fallbackRectangle,
-          listsectionItemList: _fallbackList,
-          featuredImageUrls: const [],
-          featuredTiles: const [],
-          forYouGroupedSections: const [],
+    try {
+      if (!PrefUtils().isLoggedIn()) {
+        _allDesigns = [];
+        _selectedCategoryId = null;
+        if (generation != _loadGeneration) return;
+        emit(
+          state.copyWith(
+            isLoading: false,
+            errorMessage: 'Please sign in to view online designs.',
+            selectedCategoryId: null,
+            categoryOptions: const [],
+            screen16OnlineDesignsModelObj:
+                (state.screen16OnlineDesignsModelObj ??
+                        Screen16OnlineDesignsModel())
+                    .copyWith(
+                      rectanglelistsectionItemList: _fallbackRectangle,
+                      listsectionItemList: _fallbackList,
+                      featuredImageUrls: const [],
+                      featuredTiles: const [],
+                      forYouGroupedSections: const [],
+                    ),
+          ),
+        );
+        return;
+      }
+
+      final result = await _adminDesigns.list(perPage: 20, sort: 'latest');
+      if (generation != _loadGeneration) return;
+
+      if (result is AdminDesignListFailure) {
+        _allDesigns = [];
+        emit(
+          state.copyWith(
+            isLoading: false,
+            errorMessage: result.message,
+            selectedCategoryId: null,
+            categoryOptions: const [],
+            screen16OnlineDesignsModelObj:
+                (state.screen16OnlineDesignsModelObj ??
+                        Screen16OnlineDesignsModel())
+                    .copyWith(
+                      rectanglelistsectionItemList: _fallbackRectangle,
+                      listsectionItemList: _fallbackList,
+                      featuredImageUrls: const [],
+                      featuredTiles: const [],
+                      forYouGroupedSections: const [],
+                    ),
+          ),
+        );
+        return;
+      }
+      _allDesigns = (result as AdminDesignListSuccess).items;
+      final categories = _distinctCategories(_allDesigns);
+      _validateCategorySelection(categories);
+      emit(
+        state.copyWith(
+          isLoading: false,
+          errorMessage: null,
+          categoryOptions: categories,
+          selectedCategoryId: _selectedCategoryId,
+          screen16OnlineDesignsModelObj: _mapDesignsToModel(
+            _allDesigns,
+            _searchQuery,
+            _selectedCategoryId,
+          ),
         ),
-      ));
-      return;
+      );
+    } catch (_) {
+      if (generation != _loadGeneration) return;
+      emit(
+        state.copyWith(isLoading: false, errorMessage: 'Something went wrong'),
+      );
     }
-    _allDesigns = (result as AdminDesignListSuccess).items;
-    final categories = _distinctCategories(_allDesigns);
-    _validateCategorySelection(categories);
-    emit(state.copyWith(
-      isLoading: false,
-      errorMessage: null,
-      categoryOptions: categories,
-      selectedCategoryId: _selectedCategoryId,
-      screen16OnlineDesignsModelObj: _mapDesignsToModel(
-        _allDesigns,
-        _searchQuery,
-        _selectedCategoryId,
-      ),
-    ));
   }
 
   void _onSearchChanged(
@@ -140,13 +163,15 @@ class Screen16OnlineDesignsBloc
   ) {
     _searchQuery = event.query;
     if (_allDesigns.isEmpty) return;
-    emit(state.copyWith(
-      screen16OnlineDesignsModelObj: _mapDesignsToModel(
-        _allDesigns,
-        _searchQuery,
-        _selectedCategoryId,
+    emit(
+      state.copyWith(
+        screen16OnlineDesignsModelObj: _mapDesignsToModel(
+          _allDesigns,
+          _searchQuery,
+          _selectedCategoryId,
+        ),
       ),
-    ));
+    );
   }
 
   void _onCategoryChanged(
@@ -158,14 +183,16 @@ class Screen16OnlineDesignsBloc
       emit(state.copyWith(selectedCategoryId: _selectedCategoryId));
       return;
     }
-    emit(state.copyWith(
-      selectedCategoryId: _selectedCategoryId,
-      screen16OnlineDesignsModelObj: _mapDesignsToModel(
-        _allDesigns,
-        _searchQuery,
-        _selectedCategoryId,
+    emit(
+      state.copyWith(
+        selectedCategoryId: _selectedCategoryId,
+        screen16OnlineDesignsModelObj: _mapDesignsToModel(
+          _allDesigns,
+          _searchQuery,
+          _selectedCategoryId,
+        ),
       ),
-    ));
+    );
   }
 
   static const int _uncategorizedBucketId = -1;
@@ -188,7 +215,13 @@ class Screen16OnlineDesignsBloc
       name: m.name,
       isFeatured: m.isFeatured == true,
       tier: m.tier,
-      previewDetails: m.formatAdminDesignDetails(),
+      previewDetails: m.formatOnlineDesignPreviewDetails(),
+      categoryName: m.category?.name,
+      downloadsCount: m.downloadsCount,
+      trendingScore: m.trendingScore,
+      designDataRaw: m.designDataRaw,
+      width: m.width,
+      height: m.height,
     );
   }
 
@@ -199,7 +232,13 @@ class Screen16OnlineDesignsBloc
       name: m.name,
       isFeatured: m.isFeatured == true,
       tier: m.tier,
-      previewDetails: m.formatAdminDesignDetails(),
+      previewDetails: m.formatOnlineDesignPreviewDetails(),
+      categoryName: m.category?.name,
+      downloadsCount: m.downloadsCount,
+      trendingScore: m.trendingScore,
+      designDataRaw: m.designDataRaw,
+      width: m.width,
+      height: m.height,
     );
   }
 
@@ -259,14 +298,15 @@ class Screen16OnlineDesignsBloc
         );
       }
 
-      return (state.screen16OnlineDesignsModelObj ?? Screen16OnlineDesignsModel())
+      return (state.screen16OnlineDesignsModelObj ??
+              Screen16OnlineDesignsModel())
           .copyWith(
-        featuredImageUrls: featured,
-        featuredTiles: searchNoMatch ? const [] : featuredTiles,
-        forYouGroupedSections: searchNoMatch ? const [] : grouped,
-        rectanglelistsectionItemList: const [],
-        listsectionItemList: const [],
-      );
+            featuredImageUrls: featured,
+            featuredTiles: searchNoMatch ? const [] : featuredTiles,
+            forYouGroupedSections: searchNoMatch ? const [] : grouped,
+            rectanglelistsectionItemList: const [],
+            listsectionItemList: const [],
+          );
     }
 
     final first = filtered.take(24).toList();
@@ -275,15 +315,17 @@ class Screen16OnlineDesignsBloc
 
     return (state.screen16OnlineDesignsModelObj ?? Screen16OnlineDesignsModel())
         .copyWith(
-      featuredImageUrls: featured,
-      featuredTiles: searchNoMatch || categoryNoMatch ? const [] : featuredTiles,
-      forYouGroupedSections: const [],
-      rectanglelistsectionItemList: searchNoMatch || categoryNoMatch
-          ? const []
-          : (a.isEmpty && apiEmpty ? _fallbackRectangle : a),
-      listsectionItemList: searchNoMatch || categoryNoMatch
-          ? const []
-          : (b.isEmpty && apiEmpty ? _fallbackList : b),
-    );
+          featuredImageUrls: featured,
+          featuredTiles: searchNoMatch || categoryNoMatch
+              ? const []
+              : featuredTiles,
+          forYouGroupedSections: const [],
+          rectanglelistsectionItemList: searchNoMatch || categoryNoMatch
+              ? const []
+              : (a.isEmpty && apiEmpty ? _fallbackRectangle : a),
+          listsectionItemList: searchNoMatch || categoryNoMatch
+              ? const []
+              : (b.isEmpty && apiEmpty ? _fallbackList : b),
+        );
   }
 }

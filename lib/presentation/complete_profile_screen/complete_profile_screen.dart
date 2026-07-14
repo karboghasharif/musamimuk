@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/app_export.dart';
-import '../../theme/custom_button_style.dart';
-import '../../widgets/custom_elevated_button.dart';
+import '../../widgets/app_bar/appbar_leading_image.dart';
+import '../../widgets/app_bar/custom_app_bar.dart';
 import '../../widgets/custom_text_form_field.dart';
 
 /// Optional details after sign-up: country, photo, bio. Skip continues to home.
@@ -74,121 +74,126 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   Widget build(BuildContext context) {
     return SafeArea(
       child: Scaffold(
-        backgroundColor: appTheme.blueGray90004,
-        appBar: AppBar(
-          backgroundColor: appTheme.blueGray90004,
-          elevation: 0,
-          title: Text(
-            'lbl_complete_profile'.tr,
-            style: theme.textTheme.titleLarge?.copyWith(
-              color: theme.colorScheme.onPrimaryContainer,
-            ),
+        backgroundColor: AppDs.surfaceBase,
+        appBar: CustomAppBar(
+          leading: AppbarLeadingImage(
+            imagePath: ImageConstant.imgArrowLeftPrimary,
           ),
         ),
         body: SingleChildScrollView(
-            padding: EdgeInsets.symmetric(horizontal: 20.h, vertical: 16.v),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'msg_complete_profile_subtitle'.tr,
-                  style: CustomTextStyles.titleSmallVisbyRoundCFBluegray10001
-                      .copyWith(height: 1.35),
-                ),
-                SizedBox(height: 28.v),
-                Center(
-                  child: GestureDetector(
-                    onTap: _pickPhoto,
-                    child: _photoPath != null
-                        ? ClipRRect(
-                            borderRadius: BorderRadius.circular(53),
-                            child: Image.file(
-                              File(_photoPath!),
-                              height: 106.adaptSize,
-                              width: 106.adaptSize,
-                              fit: BoxFit.cover,
-                            ),
-                          )
-                        : Container(
+          padding: EdgeInsets.fromLTRB(
+            AppDs.space4.h,
+            AppDs.space3.v,
+            AppDs.space4.h,
+            AppDs.space8.v,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              AppPageHeader(
+                title: 'lbl_complete_profile'.tr,
+                subtitle: 'msg_complete_profile_subtitle'.tr,
+              ),
+              SizedBox(height: AppDs.space6.v),
+              Center(
+                child: GestureDetector(
+                  onTap: _pickPhoto,
+                  child: _photoPath != null
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(53),
+                          child: Image.file(
+                            File(_photoPath!),
                             height: 106.adaptSize,
                             width: 106.adaptSize,
-                            decoration: AppDecoration.fillBluegray90002.copyWith(
-                              borderRadius: BorderRadiusStyle.circleBorder53,
-                            ),
-                            child: CustomImageView(
-                              imagePath: ImageConstant.imgCamera,
-                              height: 35.v,
-                              width: 40.h,
-                              alignment: Alignment.center,
-                            ),
+                            fit: BoxFit.cover,
                           ),
-                  ),
+                        )
+                      : Container(
+                          height: 106.adaptSize,
+                          width: 106.adaptSize,
+                          decoration: AppDecoration.fillBluegray90002.copyWith(
+                            borderRadius: BorderRadiusStyle.circleBorder53,
+                          ),
+                          child: CustomImageView(
+                            imagePath: ImageConstant.imgCamera,
+                            height: 35.v,
+                            width: 40.h,
+                            alignment: Alignment.center,
+                          ),
+                        ),
                 ),
-                SizedBox(height: 12.v),
-                Center(
-                  child: Text(
-                    'msg_upload_a_photo_optional'.tr,
-                    style: CustomTextStyles.titleSmallVisbyRoundCFBluegray30015,
-                  ),
-                ),
-                SizedBox(height: 28.v),
-                CustomTextFormField(
-                  controller: _countryController,
-                  hintText: 'lbl_country'.tr,
-                  hintStyle: CustomTextStyles.titleMediumOnError,
-                  textInputAction: TextInputAction.next,
-                  prefix: Container(
-                    margin: EdgeInsets.fromLTRB(28.h, 20.v, 23.h, 19.v),
-                    child: CustomImageView(
-                      imagePath: ImageConstant.imgLock,
-                      height: 24.adaptSize,
-                      width: 24.adaptSize,
+              ),
+              SizedBox(height: AppDs.space3.v),
+              AppText(
+                'msg_upload_a_photo_optional'.tr,
+                variant: AppTextVariant.secondary,
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: AppDs.space6.v),
+              AppCard(
+                elevated: true,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    CustomTextFormField(
+                      controller: _countryController,
+                      hintText: 'lbl_country'.tr,
+                      hintStyle: CustomTextStyles.titleMediumOnError,
+                      textInputAction: TextInputAction.next,
+                      prefix: Container(
+                        margin: EdgeInsets.fromLTRB(28.h, 20.v, 23.h, 19.v),
+                        child: CustomImageView(
+                          imagePath: ImageConstant.imgLock,
+                          height: 24.adaptSize,
+                          width: 24.adaptSize,
+                        ),
+                      ),
+                      prefixConstraints: BoxConstraints(maxHeight: 63.v),
+                      borderDecoration: TextFormFieldStyleHelper.fillBlueGray,
+                      fillColor: appTheme.blueGray90001,
                     ),
-                  ),
-                  prefixConstraints: BoxConstraints(maxHeight: 63.v),
-                  borderDecoration: TextFormFieldStyleHelper.fillBlueGray,
-                  fillColor: appTheme.blueGray90001,
-                ),
-                SizedBox(height: 22.v),
-                CustomTextFormField(
-                  controller: _bioController,
-                  hintText: 'lbl_optional_info'.tr,
-                  hintStyle: CustomTextStyles.titleMediumOnError,
-                  textInputAction: TextInputAction.done,
-                  maxLines: 3,
-                  prefix: Container(
-                    margin: EdgeInsets.fromLTRB(28.h, 20.v, 23.h, 19.v),
-                    child: CustomImageView(
-                      imagePath: ImageConstant.imgCheckmark,
-                      height: 22.adaptSize,
-                      width: 22.adaptSize,
+                    SizedBox(height: AppDs.space4.v),
+                    CustomTextFormField(
+                      controller: _bioController,
+                      hintText: 'lbl_optional_info'.tr,
+                      hintStyle: CustomTextStyles.titleMediumOnError,
+                      textInputAction: TextInputAction.done,
+                      maxLines: 3,
+                      prefix: Container(
+                        margin: EdgeInsets.fromLTRB(28.h, 20.v, 23.h, 19.v),
+                        child: CustomImageView(
+                          imagePath: ImageConstant.imgCheckmark,
+                          height: 22.adaptSize,
+                          width: 22.adaptSize,
+                        ),
+                      ),
+                      prefixConstraints: BoxConstraints(maxHeight: 63.v),
+                      contentPadding: EdgeInsets.symmetric(
+                        vertical: AppDs.space4.v,
+                        horizontal: AppDs.space2.h,
+                      ),
+                      borderDecoration: TextFormFieldStyleHelper.fillBlueGray,
+                      fillColor: appTheme.blueGray90001,
                     ),
-                  ),
-                  prefixConstraints: BoxConstraints(maxHeight: 63.v),
-                  contentPadding: EdgeInsets.symmetric(
-                    vertical: 16.v,
-                    horizontal: 8.h,
-                  ),
-                  borderDecoration: TextFormFieldStyleHelper.fillBlueGray,
-                  fillColor: appTheme.blueGray90001,
+                  ],
                 ),
-                SizedBox(height: 40.v),
-                CustomElevatedButton(
-                  text: 'lbl_continue'.tr,
-                  buttonStyle: CustomButtonStyles.fillPrimary,
-                  onPressed: () => _finish(skipped: false),
+              ),
+              SizedBox(height: AppDs.space6.v),
+              AppPrimaryButton(
+                label: 'lbl_continue'.tr,
+                onPressed: () => _finish(skipped: false),
+              ),
+              SizedBox(height: AppDs.space3.v),
+              TextButton(
+                onPressed: () => _finish(skipped: true),
+                child: AppText(
+                  'lbl_skip_for_now'.tr,
+                  variant: AppTextVariant.accent,
                 ),
-                SizedBox(height: 12.v),
-                TextButton(
-                  onPressed: () => _finish(skipped: true),
-                  child: Text(
-                    'lbl_skip_for_now'.tr,
-                    style: CustomTextStyles.titleSmallVisbyRoundCFPrimary,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
+        ),
       ),
     );
   }

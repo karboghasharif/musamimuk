@@ -30,7 +30,8 @@ class AppLocalization {
   }
 
   static AppLocalization of() {
-    final ctx = materialAppBuilderContext ??
+    final ctx =
+        materialAppBuilderContext ??
         NavigatorService.navigatorKey.currentContext!;
     return Localizations.of<AppLocalization>(ctx, AppLocalization)!;
   }
@@ -90,7 +91,7 @@ class AppLocalizationDelegate extends LocalizationsDelegate<AppLocalization> {
   @override
   bool isSupported(Locale locale) =>
       AppLocalization.languages().contains(locale.languageCode);
-//Returning a SynchronousFuture here because an async "load" operation//cause an async "load" operation
+  //Returning a SynchronousFuture here because an async "load" operation//cause an async "load" operation
   @override
   Future<AppLocalization> load(Locale locale) {
     return SynchronousFuture<AppLocalization>(AppLocalization(locale));

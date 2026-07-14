@@ -4,6 +4,8 @@ import 'package:toastification/toastification.dart';
 import '../../core/app_export.dart';
 import '../../core/utils/app_toast.dart';
 import '../../data/repositories/auth_repository.dart';
+import '../../widgets/app_bar/appbar_leading_image.dart';
+import '../../widgets/app_bar/custom_app_bar.dart';
 
 /// Change password form (client-side validation). Wire [AuthRepository] when
 /// a backend endpoint is available.
@@ -19,15 +21,13 @@ class ChangePasswordScreen extends StatefulWidget {
 }
 
 class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
-  static const Color _pageBackground = Color(0xFF282C31);
-  static const Color _fieldBackground = Color(0xFF343A40);
-
   final _current = TextEditingController();
   final _next = TextEditingController();
   final _confirm = TextEditingController();
   bool _obscureCurrent = true;
   bool _obscureNext = true;
   bool _obscureConfirm = true;
+  bool _isSaving = false;
 
   @override
   void dispose() {
@@ -69,110 +69,92 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       );
       return;
     }
-    final result = await AuthRepository().changePassword(
-      currentPassword: cur,
-      newPassword: nw,
-      confirmPassword: cf,
-    );
-    if (!mounted) return;
-    if (result is ChangePasswordSuccess) {
-      showAppToast(
-        (result.message?.trim().isNotEmpty == true)
-            ? result.message!.trim()
-            : 'lbl_save'.tr,
-        type: ToastificationType.success,
+    setState(() => _isSaving = true);
+    try {
+      final result = await AuthRepository().changePassword(
+        currentPassword: cur,
+        newPassword: nw,
+        confirmPassword: cf,
       );
-      Navigator.pop(context);
-    } else if (result is ChangePasswordFailure) {
-      showAppToast(result.message, type: ToastificationType.error);
+      if (!mounted) return;
+      if (result is ChangePasswordSuccess) {
+        showAppToast(
+          (result.message?.trim().isNotEmpty == true)
+              ? result.message!.trim()
+              : 'lbl_save'.tr,
+          type: ToastificationType.success,
+        );
+        Navigator.pop(context);
+      } else if (result is ChangePasswordFailure) {
+        showAppToast(result.message, type: ToastificationType.error);
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final primary = theme.colorScheme.primary;
-    final onPrimary = theme.colorScheme.onPrimary;
-
     return SafeArea(
       child: Scaffold(
-        backgroundColor: _pageBackground,
-        appBar: AppBar(
-          elevation: 0,
-          backgroundColor: Colors.transparent,
-          foregroundColor: Colors.white,
-          title: Text(
-            'lbl_change_password'.tr,
-            style: theme.textTheme.titleMedium?.copyWith(
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => Navigator.pop(context),
+        backgroundColor: AppDs.surfaceBase,
+        appBar: CustomAppBar(
+          leading: AppbarLeadingImage(
+            imagePath: ImageConstant.imgArrowLeftPrimary,
           ),
         ),
         body: SingleChildScrollView(
-          padding: EdgeInsets.symmetric(horizontal: 24.h),
+          padding: EdgeInsets.fromLTRB(
+            AppDs.space4.h,
+            AppDs.space3.v,
+            AppDs.space4.h,
+            AppDs.space6.v,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SizedBox(height: 8.v),
-              Text(
-                'msg_change_password_hint'.tr,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: Colors.white60,
+              AppPageHeader(
+                title: 'lbl_change_password'.tr,
+                subtitle: 'msg_change_password_hint'.tr,
+              ),
+              SizedBox(height: AppDs.space6.v),
+              AppCard(
+                elevated: true,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _LabeledPasswordField(
+                      label: 'lbl_current_password'.tr,
+                      controller: _current,
+                      obscure: _obscureCurrent,
+                      onToggleObscure: () =>
+                          setState(() => _obscureCurrent = !_obscureCurrent),
+                    ),
+                    SizedBox(height: AppDs.space4.v),
+                    _LabeledPasswordField(
+                      label: 'lbl_new_password'.tr,
+                      controller: _next,
+                      obscure: _obscureNext,
+                      onToggleObscure: () =>
+                          setState(() => _obscureNext = !_obscureNext),
+                    ),
+                    SizedBox(height: AppDs.space4.v),
+                    _LabeledPasswordField(
+                      label: 'lbl_confirm_new_password'.tr,
+                      controller: _confirm,
+                      obscure: _obscureConfirm,
+                      onToggleObscure: () =>
+                          setState(() => _obscureConfirm = !_obscureConfirm),
+                    ),
+                  ],
                 ),
               ),
-              SizedBox(height: 28.v),
-              _LabeledPasswordField(
-                label: 'lbl_current_password'.tr,
-                controller: _current,
-                obscure: _obscureCurrent,
-                fieldBg: _fieldBackground,
-                onToggleObscure: () =>
-                    setState(() => _obscureCurrent = !_obscureCurrent),
+              SizedBox(height: AppDs.space6.v),
+              AppPrimaryButton(
+                label: 'lbl_save'.tr,
+                isLoading: _isSaving,
+                onPressed: _isSaving ? null : _submit,
               ),
-              SizedBox(height: 18.v),
-              _LabeledPasswordField(
-                label: 'lbl_new_password'.tr,
-                controller: _next,
-                obscure: _obscureNext,
-                fieldBg: _fieldBackground,
-                onToggleObscure: () =>
-                    setState(() => _obscureNext = !_obscureNext),
-              ),
-              SizedBox(height: 18.v),
-              _LabeledPasswordField(
-                label: 'lbl_confirm_new_password'.tr,
-                controller: _confirm,
-                obscure: _obscureConfirm,
-                fieldBg: _fieldBackground,
-                onToggleObscure: () =>
-                    setState(() => _obscureConfirm = !_obscureConfirm),
-              ),
-              SizedBox(height: 36.v),
-              SizedBox(
-                height: 52.v,
-                child: FilledButton(
-                  onPressed: () async => _submit(),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: primary,
-                    foregroundColor: onPrimary,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14.h),
-                    ),
-                  ),
-                  child: Text(
-                    'lbl_save'.tr,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      color: onPrimary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
-              SizedBox(height: 24.v),
             ],
           ),
         ),
@@ -186,14 +168,12 @@ class _LabeledPasswordField extends StatelessWidget {
     required this.label,
     required this.controller,
     required this.obscure,
-    required this.fieldBg,
     required this.onToggleObscure,
   });
 
   final String label;
   final TextEditingController controller;
   final bool obscure;
-  final Color fieldBg;
   final VoidCallback onToggleObscure;
 
   @override
@@ -201,36 +181,32 @@ class _LabeledPasswordField extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: theme.textTheme.labelMedium?.copyWith(
-            color: Colors.white60,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        SizedBox(height: 8.v),
+        AppText(label, variant: AppTextVariant.caption),
+        SizedBox(height: AppDs.space2.v),
         Container(
           decoration: BoxDecoration(
-            color: fieldBg,
-            borderRadius: BorderRadius.circular(12.h),
+            color: AppDs.surfaceRaised,
+            borderRadius: BorderRadius.circular(AppDs.radiusMd.h),
             border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
           ),
           child: TextField(
             controller: controller,
             obscureText: obscure,
-            style: theme.textTheme.bodyLarge?.copyWith(color: Colors.white),
+            style: AppTypography.body(theme),
             decoration: InputDecoration(
               border: InputBorder.none,
               isDense: true,
               contentPadding: EdgeInsets.symmetric(
-                horizontal: 16.h,
-                vertical: 16.v,
+                horizontal: AppDs.space4.h,
+                vertical: AppDs.space4.v,
               ),
               suffixIcon: IconButton(
                 icon: Icon(
-                  obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                  color: Colors.white54,
-                  size: 22.adaptSize,
+                  obscure
+                      ? Icons.visibility_off_outlined
+                      : Icons.visibility_outlined,
+                  color: AppDs.textOnDarkSecondary,
+                  size: AppDs.iconMd.adaptSize,
                 ),
                 onPressed: onToggleObscure,
               ),

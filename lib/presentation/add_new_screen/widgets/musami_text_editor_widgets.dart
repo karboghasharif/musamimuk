@@ -5,7 +5,9 @@ import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:pro_image_editor/pro_image_editor.dart';
 
 import '../../../core/app_export.dart';
+import '../../add_text_screen/add_text_ai_actions.dart';
 import 'arabic_custom_keyboard.dart';
+import 'musami_text_editor_arabic_fonts.dart';
 
 /// Swatches for **text** (foreground).
 const List<Color> kMusamiTextColorPalette = [
@@ -89,6 +91,7 @@ void musamiShowTextBackgroundPicker(
                       onTap: () {
                         editor.backgroundColorMode =
                             LayerBackgroundMode.onlyColor;
+                        editor.secondaryColor = Colors.transparent;
                         Navigator.pop(ctx);
                       },
                     ),
@@ -134,6 +137,7 @@ void _musamiShowHueColorPickerSheet(
   required String title,
   required Color initialColor,
   required ValueChanged<Color> onColorChanged,
+  bool enableAlpha = false,
 }) {
   showAppModalBottomSheet<void>(
     context: context,
@@ -166,7 +170,106 @@ void _musamiShowHueColorPickerSheet(
                           setModalState(() => pickerColor = c);
                           onColorChanged(c);
                         },
-                        enableAlpha: false,
+                        enableAlpha: enableAlpha,
+                        displayThumbColor: true,
+                        paletteType: PaletteType.hsvWithHue,
+                        labelTypes: const [],
+                        pickerAreaHeightPercent: 0.65,
+                        colorPickerWidth: pickerWidth,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      );
+    },
+  );
+}
+
+/// Full HSV colour picker for a canvas [TextLayer] (matches inline text editor UX).
+void musamiShowLayerTextColorPicker(
+  BuildContext context, {
+  required String title,
+  required Color initialColor,
+  required ValueChanged<Color> onColorChanged,
+  bool enableAlpha = false,
+}) {
+  _musamiShowHueColorPickerSheet(
+    context,
+    title: title,
+    initialColor: initialColor,
+    onColorChanged: onColorChanged,
+    enableAlpha: enableAlpha,
+  );
+}
+
+/// Background / highlight behind glyphs on a canvas [TextLayer].
+void musamiShowLayerTextBackgroundPicker(
+  BuildContext context, {
+  required String title,
+  required Color? currentBackground,
+  required ValueChanged<Color?> onBackgroundChanged,
+}) {
+  showAppModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    builder: (ctx) {
+      final sheetTheme = Theme.of(ctx);
+      Color pickerColor =
+          currentBackground != null && currentBackground.a > 0.01
+          ? currentBackground
+          : Colors.white;
+      return AppDarkSheetTheme(
+        child: AppSheetPagePadding(
+          child: StatefulBuilder(
+            builder: (innerCtx, setModalState) {
+              final pickerWidth = min(
+                MediaQuery.sizeOf(innerCtx).width - 32,
+                320.0,
+              );
+              return SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      title,
+                      style: AppDs.sheetTitle(sheetTheme, color: Colors.white),
+                    ),
+                    SizedBox(height: AppDs.space3.v),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(
+                        Icons.format_color_reset,
+                        color: sheetTheme.colorScheme.primary,
+                      ),
+                      title: Text('lbl_text_bg_transparent'.tr),
+                      subtitle: Text('msg_text_bg_transparent_hint'.tr),
+                      onTap: () {
+                        onBackgroundChanged(Colors.transparent);
+                        Navigator.pop(ctx);
+                      },
+                    ),
+                    SizedBox(height: AppDs.space2.v),
+                    Text(
+                      'lbl_solid_background'.tr,
+                      style: AppDs.sheetCaption(
+                        sheetTheme,
+                        color: Colors.white,
+                      ).copyWith(fontWeight: FontWeight.w700),
+                    ),
+                    SizedBox(height: AppDs.space3.v),
+                    Center(
+                      child: ColorPicker(
+                        pickerColor: pickerColor,
+                        onColorChanged: (Color c) {
+                          setModalState(() => pickerColor = c);
+                          onBackgroundChanged(c);
+                        },
+                        enableAlpha: true,
                         displayThumbColor: true,
                         paletteType: PaletteType.hsvWithHue,
                         labelTypes: const [],
@@ -275,25 +378,25 @@ ReactiveAppbar musamiTextEditorAppBar({
 }) {
   return ReactiveAppbar(
     stream: rebuildStream,
-    appbarSize: Size.fromHeight(56.v),
+    appbarSize: Size.fromHeight(52.v),
     builder: (context) {
       final rtl = editor.inputTextDirection == TextDirection.rtl;
       return PreferredSize(
-        preferredSize: Size.fromHeight(56.v),
+        preferredSize: Size.fromHeight(52.v),
         child: Material(
           color: appTheme.blueGray90004,
           elevation: 0,
           child: SafeArea(
             bottom: false,
             child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 14.h),
+              padding: EdgeInsets.symmetric(horizontal: 8.h, vertical: 4.v),
               child: Row(
                 children: [
                   IconButton(
                     icon: const Icon(Icons.arrow_back),
+                    tooltip: MaterialLocalizations.of(context).backButtonTooltip,
                     onPressed: editor.close,
                   ),
-                  SizedBox(width: 6.h),
                   Expanded(
                     child: _MusamiScriptToggle(editor: editor, rtl: rtl),
                   ),
@@ -368,7 +471,7 @@ class _MusamiScriptToggle extends StatelessWidget {
         borderRadius: BorderRadius.circular(14.adaptSize),
         onTap: onTap,
         child: SizedBox(
-          height: 56.v,
+          height: 48.v,
           child: Center(
             child: Text(
               label,
@@ -398,10 +501,10 @@ ReactiveWidget musamiTextEditorBottomBar({
       return SafeArea(
         top: false,
         child: Padding(
-          padding: EdgeInsets.fromLTRB(16.h, 10.v, 16.h, 14.v),
+          padding: EdgeInsets.fromLTRB(16.h, 8.v, 16.h, 12.v),
           child: SizedBox(
             width: double.infinity,
-            height: 56.v,
+            height: 52.v,
             child: FilledButton(
               style: FilledButton.styleFrom(
                 backgroundColor: theme.colorScheme.primary,
@@ -426,7 +529,11 @@ ReactiveWidget musamiTextEditorBottomBar({
   );
 }
 
-/// Harakat strip + quick actions above the bottom bar.
+/// Reserve space above the keyboard for the floating toolbar (LTR / RTL).
+const double kMusamiTextEditorChromeHeightLtr = 96;
+const double kMusamiTextEditorChromeHeightRtl = 256;
+
+/// Tashkeela strip + quick actions above the bottom bar.
 List<ReactiveWidget> musamiTextEditorBodyOverlay({
   required TextEditorState editor,
   required Stream<void> rebuildStream,
@@ -460,107 +567,316 @@ class _MusamiTextEditorFloatingChrome extends StatefulWidget {
 
 class _MusamiTextEditorFloatingChromeState
     extends State<_MusamiTextEditorFloatingChrome> {
-  double _chromeHeight({required bool rtl}) => rtl ? 154.v : 86.v;
+  final AddTextAiActions _aiActions = AddTextAiActions();
+  bool _aiBusy = false;
 
-  Widget _colorChip({
+  /// Body stack bottom — scaffold already insets above the keyboard.
+  double _overlayBottom(BuildContext context) => 8.v;
+
+  IconData _alignIcon(TextAlign align) {
+    return switch (align) {
+      TextAlign.left => Icons.format_align_left_rounded,
+      TextAlign.right => Icons.format_align_right_rounded,
+      TextAlign.center || _ => Icons.format_align_center_rounded,
+    };
+  }
+
+  void _nudgeFontScale(TextEditorState editor, double delta) {
+    final next = (editor.fontScale + delta).clamp(
+      editor.textEditorConfigs.minFontScale,
+      editor.textEditorConfigs.maxFontScale,
+    );
+    editor.fontScale = next;
+    editor.focusNode.requestFocus();
+  }
+
+  void _openFontsSheet(BuildContext context, TextEditorState editor) {
+    showAppModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return AppDarkSheetTheme(
+          child: AppSheetPagePadding(
+            bottomExtra: AppDs.space4,
+            child: SingleChildScrollView(
+              child: MusamiArabicFontPickerStrip(
+                editor: editor,
+                theme: widget.theme,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _openTashkeelaSheet(BuildContext context, TextEditorState editor) {
+    showAppModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return AppDarkSheetTheme(
+          child: AppSheetPagePadding(
+            bottomExtra: AppDs.space4,
+            child: ArabicTashkeelaStrip(
+              controller: editor.textCtrl,
+              focusNode: editor.focusNode,
+            ),
+          ),
+        );
+      },
+    ).then((_) => editor.focusNode.requestFocus());
+  }
+
+  Widget _toolbarButton({
     required ThemeData theme,
+    required IconData icon,
     required String label,
-    required Color color,
-    required VoidCallback onTap,
+    required VoidCallback? onTap,
+    Color? iconColor,
+    bool enabled = true,
   }) {
     final cs = theme.colorScheme;
-    return Expanded(
-      child: Material(
-        color: appTheme.blueGray90002,
-        borderRadius: BorderRadius.circular(14.adaptSize),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14.adaptSize),
-          onTap: onTap,
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 12.h, vertical: 10.v),
-            child: Row(
-              children: [
-                Container(
-                  width: 22.adaptSize,
-                  height: 22.adaptSize,
-                  decoration: BoxDecoration(
-                    color: color,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: cs.onPrimary.withValues(alpha: 0.22),
-                    ),
-                  ),
+    final color = enabled
+        ? (iconColor ?? cs.primary)
+        : (iconColor ?? cs.primary).withValues(alpha: 0.35);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12.adaptSize),
+        onTap: enabled ? onTap : null,
+        child: SizedBox(
+          width: 72.h,
+          height: AppDs.minTap.v,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 22.adaptSize, color: color),
+              SizedBox(height: 2.v),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: enabled
+                      ? Colors.white.withValues(alpha: 0.9)
+                      : Colors.white.withValues(alpha: 0.35),
+                  fontSize: 10.fSize,
+                  fontWeight: FontWeight.w600,
                 ),
-                SizedBox(width: 10.h),
-                Expanded(
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.labelLarge?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 
+  List<Widget> _toolbarButtons({
+    required BuildContext context,
+    required TextEditorState editor,
+    required ThemeData theme,
+    required bool rtl,
+    required bool keyboardOpen,
+  }) {
+    final aiBusy = _aiBusy;
+    return [
+      _toolbarButton(
+        theme: theme,
+        icon: Icons.auto_awesome_rounded,
+        label: 'lbl_text_editor_ai'.tr,
+        enabled: !aiBusy,
+        onTap: () {
+          _aiActions.showSuggestions(
+            context: context,
+            controller: editor.textCtrl,
+            isUrdu: rtl,
+            isMounted: () => mounted,
+            isBusy: _aiBusy,
+            setBusy: (v) => setState(() => _aiBusy = v),
+          ).then((_) => editor.focusNode.requestFocus());
+        },
+      ),
+      _toolbarButton(
+        theme: theme,
+        icon: Icons.auto_fix_high_rounded,
+        label: 'lbl_toolbar_beautify'.tr,
+        enabled: !aiBusy,
+        onTap: () {
+          _aiActions.beautify(
+            context: context,
+            controller: editor.textCtrl,
+            isUrdu: rtl,
+            isMounted: () => mounted,
+            isBusy: _aiBusy,
+            setBusy: (v) => setState(() => _aiBusy = v),
+          ).then((_) => editor.focusNode.requestFocus());
+        },
+      ),
+      _toolbarButton(
+        theme: theme,
+        icon: Icons.translate_rounded,
+        label: 'lbl_text_editor_translate'.tr,
+        enabled: !aiBusy,
+        onTap: () {
+          _aiActions.translateWithLanguagePicker(
+            context: context,
+            controller: editor.textCtrl,
+            isUrdu: rtl,
+            isMounted: () => mounted,
+            isBusy: _aiBusy,
+            setBusy: (v) => setState(() => _aiBusy = v),
+          ).then((_) => editor.focusNode.requestFocus());
+        },
+      ),
+      _toolbarButton(
+        theme: theme,
+        icon: Icons.compress_rounded,
+        label: 'lbl_toolbar_shorten'.tr,
+        enabled: !aiBusy,
+        onTap: () {
+          _aiActions.shorten(
+            context: context,
+            controller: editor.textCtrl,
+            isUrdu: rtl,
+            isMounted: () => mounted,
+            isBusy: _aiBusy,
+            setBusy: (v) => setState(() => _aiBusy = v),
+          ).then((_) => editor.focusNode.requestFocus());
+        },
+      ),
+      _toolbarButton(
+        theme: theme,
+        icon: Icons.bolt_rounded,
+        label: 'lbl_toolbar_make_punchy'.tr,
+        enabled: !aiBusy,
+        onTap: () {
+          _aiActions.makePunchy(
+            context: context,
+            controller: editor.textCtrl,
+            isUrdu: rtl,
+            isMounted: () => mounted,
+            isBusy: _aiBusy,
+            setBusy: (v) => setState(() => _aiBusy = v),
+          ).then((_) => editor.focusNode.requestFocus());
+        },
+      ),
+      _toolbarButton(
+        theme: theme,
+        icon: Icons.format_color_text_rounded,
+        label: 'lbl_text_editor_color'.tr,
+        iconColor: editor.primaryColor,
+        onTap: () {
+          musamiShowTextColorPicker(context, editor);
+          editor.focusNode.requestFocus();
+        },
+      ),
+      _toolbarButton(
+        theme: theme,
+        icon: _alignIcon(editor.align),
+        label: 'lbl_text_editor_align'.tr,
+        onTap: () {
+          editor.toggleTextAlign();
+          editor.focusNode.requestFocus();
+        },
+      ),
+      _toolbarButton(
+        theme: theme,
+        icon: Icons.text_decrease_rounded,
+        label: 'lbl_text_editor_smaller'.tr,
+        onTap: () => _nudgeFontScale(editor, -0.1),
+      ),
+      _toolbarButton(
+        theme: theme,
+        icon: Icons.text_increase_rounded,
+        label: 'lbl_text_editor_larger'.tr,
+        onTap: () => _nudgeFontScale(editor, 0.1),
+      ),
+      if (rtl)
+        _toolbarButton(
+          theme: theme,
+          icon: Icons.font_download_rounded,
+          label: 'lbl_text_editor_fonts_toolbar'.tr,
+          onTap: () => _openFontsSheet(context, editor),
+        ),
+      if (rtl && keyboardOpen)
+        _toolbarButton(
+          theme: theme,
+          icon: Icons.spellcheck_rounded,
+          label: 'lbl_keyboard_tashkeela'.tr,
+          onTap: () => _openTashkeelaSheet(context, editor),
+        ),
+      if (aiBusy)
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: 8.h),
+          child: SizedBox(
+            width: 22.adaptSize,
+            height: 22.adaptSize,
+            child: const CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
-    final theme = widget.theme;
     final editor = widget.editor;
+    final theme = widget.theme;
 
     return ValueListenableBuilder<TextEditingValue>(
       valueListenable: editor.textCtrl,
       builder: (context, value, _) {
         final rtl = editor.inputTextDirection == TextDirection.rtl;
-        final bottomPad =
-            MediaQuery.viewInsetsOf(context).bottom + _chromeHeight(rtl: rtl);
+        final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
+        final bottomPad = _overlayBottom(context);
+        final showInlineTashkeela = rtl && !keyboardOpen;
 
         return Positioned(
-          left: 12.h,
-          right: 12.h,
+          left: 10.h,
+          right: 10.h,
           bottom: bottomPad,
           child: Material(
             color: Colors.transparent,
             elevation: 0,
             child: Container(
-              padding: EdgeInsets.symmetric(horizontal: 10.h, vertical: 10.v),
+              padding: EdgeInsets.symmetric(horizontal: 6.h, vertical: 8.v),
               decoration: BoxDecoration(
                 color: appTheme.blueGray90002,
-                borderRadius: BorderRadius.circular(14.adaptSize),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+                borderRadius: BorderRadius.circular(16.adaptSize),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.28),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Row(
-                    children: [
-                      _colorChip(
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: _toolbarButtons(
+                        context: context,
+                        editor: editor,
                         theme: theme,
-                        label: 'Text',
-                        color: editor.primaryColor,
-                        onTap: () => musamiShowTextColorPicker(context, editor),
+                        rtl: rtl,
+                        keyboardOpen: keyboardOpen,
                       ),
-                      SizedBox(width: 10.h),
-                      _colorChip(
-                        theme: theme,
-                        label: 'Background',
-                        color: editor.secondaryColor,
-                        onTap: () =>
-                            musamiShowTextBackgroundPicker(context, editor),
-                      ),
-                    ],
+                    ),
                   ),
-                  if (rtl) ...[
-                    SizedBox(height: 10.v),
-                    ArabicHarakatStrip(
+                  if (showInlineTashkeela) ...[
+                    Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8.v),
+                      child: Divider(
+                        height: 1,
+                        color: Colors.white.withValues(alpha: 0.12),
+                      ),
+                    ),
+                    ArabicTashkeelaStrip(
                       controller: editor.textCtrl,
                       focusNode: editor.focusNode,
                     ),

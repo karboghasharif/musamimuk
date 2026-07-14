@@ -17,10 +17,7 @@ const Color kAppNavigationDrawerBackground = Color(0xFF1E2128);
 /// When [homePopsToRootHome] is true, "Home" clears the stack and opens [AppRoutes.screen1HomeScreen]
 /// (use from Add New / deep screens). When false, "Home" only closes the drawer (use on Home).
 class AppNavigationDrawer extends StatelessWidget {
-  const AppNavigationDrawer({
-    super.key,
-    this.homePopsToRootHome = false,
-  });
+  const AppNavigationDrawer({super.key, this.homePopsToRootHome = false});
 
   final bool homePopsToRootHome;
 
@@ -28,13 +25,13 @@ class AppNavigationDrawer extends StatelessWidget {
   Widget build(BuildContext context) {
     final session = PrefUtils().getUserSession();
     final rawName = session?['name']?.toString().trim() ?? '';
-    final displayName =
-        rawName.isNotEmpty ? rawName : 'lbl_jonathan_saul'.tr;
+    final displayName = rawName.isNotEmpty ? rawName : 'lbl_jonathan_saul'.tr;
     final initial = displayName.isNotEmpty
         ? displayName.substring(0, 1).toUpperCase()
         : 'J';
     final primary = theme.colorScheme.primary;
     final onPrimary = theme.colorScheme.onPrimary;
+    final isGuest = PrefUtils().isGuestAccount();
 
     return Drawer(
       backgroundColor: kAppNavigationDrawerBackground,
@@ -129,16 +126,37 @@ class AppNavigationDrawer extends StatelessWidget {
                       );
                     },
                   ),
-                  _DrawerNavTile(
-                    icon: Icons.add_to_photos_outlined,
-                    label: 'lbl_my_designs'.tr,
-                    onTap: () {
-                      Navigator.pop(context);
-                      NavigatorService.pushNamed(
-                        AppRoutes.screen18MyDesignsScreen,
-                      );
-                    },
-                  ),
+                  if (!isGuest)
+                    _DrawerNavTile(
+                      icon: Icons.add_to_photos_outlined,
+                      label: 'lbl_my_designs'.tr,
+                      onTap: () {
+                        Navigator.pop(context);
+                        NavigatorService.pushNamed(
+                          AppRoutes.screen18MyDesignsScreen,
+                        );
+                      },
+                    ),
+                  if (!isGuest)
+                    _DrawerNavTile(
+                      icon: Icons.favorite_border,
+                      label: 'lbl_favorites'.tr,
+                      onTap: () {
+                        Navigator.pop(context);
+                        NavigatorService.pushNamed(AppRoutes.favoritesScreen);
+                      },
+                    ),
+                  if (!isGuest)
+                    _DrawerNavTile(
+                      icon: Icons.notifications_outlined,
+                      label: 'lbl_notifications'.tr,
+                      onTap: () {
+                        Navigator.pop(context);
+                        NavigatorService.pushNamed(
+                          AppRoutes.notificationsScreen,
+                        );
+                      },
+                    ),
                   _DrawerNavTile(
                     icon: Icons.qr_code_2_outlined,
                     label: 'msg_generate_qr_code'.tr,
@@ -180,11 +198,38 @@ class AppNavigationDrawer extends StatelessWidget {
                     label: 'lbl_language'.tr,
                     onTap: () => _showLanguageDialog(context),
                   ),
-                  _DrawerNavTile(
-                    icon: Icons.logout,
-                    label: 'lbl_log_out'.tr,
-                    onTap: () => _drawerLogout(context),
-                  ),
+                  if (isGuest) ...[
+                    _DrawerNavTile(
+                      icon: Icons.login,
+                      label: 'lbl_sign_in'.tr,
+                      onTap: () {
+                        Navigator.pop(context);
+                        NavigatorService.pushNamed(
+                          AppRoutes.screen0LoginScreen,
+                        );
+                      },
+                    ),
+                    _DrawerNavTile(
+                      icon: Icons.person_add_outlined,
+                      label: 'lbl_create_account'.tr,
+                      onTap: () {
+                        Navigator.pop(context);
+                        NavigatorService.pushNamed(
+                          AppRoutes.guestUpgradeScreen,
+                        );
+                      },
+                    ),
+                    _DrawerNavTile(
+                      icon: Icons.logout,
+                      label: 'lbl_log_out'.tr,
+                      onTap: () => _drawerLogout(context),
+                    ),
+                  ] else
+                    _DrawerNavTile(
+                      icon: Icons.logout,
+                      label: 'lbl_log_out'.tr,
+                      onTap: () => _drawerLogout(context),
+                    ),
                 ],
               ),
             ),
@@ -304,10 +349,7 @@ Future<void> _showLanguageDialog(BuildContext drawerContext) async {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(
-              'lbl_cancel'.tr,
-              style: TextStyle(color: primary),
-            ),
+            child: Text('lbl_cancel'.tr, style: TextStyle(color: primary)),
           ),
         ],
       );
@@ -333,9 +375,7 @@ Future<void> _showRateAppDialog(BuildContext context) async {
         ),
         content: Text(
           'msg_rate_app_dialog_body'.tr,
-          style: theme.textTheme.bodyLarge?.copyWith(
-            color: onPrimary,
-          ),
+          style: theme.textTheme.bodyLarge?.copyWith(color: onPrimary),
         ),
         actions: [
           TextButton(
@@ -375,11 +415,5 @@ Future<void> _drawerLogout(BuildContext context) async {
   try {
     await GoogleSignIn().signOut();
   } catch (_) {}
-  await PrefUtils().clearAuth();
-  if (context.mounted) {
-    NavigatorService.pushNamedAndRemoveUntil(
-      AppRoutes.screen0LoginScreen,
-      routePredicate: false,
-    );
-  }
+  await SessionManager.instance.logout();
 }

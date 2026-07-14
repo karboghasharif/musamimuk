@@ -16,7 +16,7 @@ class CategoryItem {
   factory CategoryItem.fromJson(Map<String, dynamic> json) {
     return CategoryItem(
       id: apiParseInt(json['id']),
-      type: apiParseString(json['type']),
+      type: apiParseString(json['type'] ?? json['slug']),
       name: apiParseString(json['name']),
       parentId: json['parent_id'] == null ? null : apiParseInt(json['parent_id']),
     );

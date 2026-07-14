@@ -67,7 +67,7 @@ class DesignInteractionRepository {
           await _api.dio.get<Map<String, dynamic>>('designs/favorites');
       final data = response.data;
       if (data == null) return FavoriteDesignsFailure('Empty response');
-      final list = apiExtractDbDataList(data).map(MediaItem.fromJson).toList();
+      final list = apiExtractDataList(data).map(MediaItem.fromJson).toList();
       return FavoriteDesignsSuccess(items: list, message: apiExtractMessage(data));
     } on DioException catch (e) {
       return FavoriteDesignsFailure(apiMessageFromDioException(e));
@@ -93,12 +93,42 @@ class DesignInteractionRepository {
       );
       final data = response.data;
       if (data == null) return FavoriteDesignsFailure('Empty response');
-      final list = apiExtractDbDataList(data).map(MediaItem.fromJson).toList();
+      final list = apiExtractDataList(data).map(MediaItem.fromJson).toList();
       return FavoriteDesignsSuccess(items: list, message: apiExtractMessage(data));
     } on DioException catch (e) {
       return FavoriteDesignsFailure(apiMessageFromDioException(e));
     } catch (_) {
       return FavoriteDesignsFailure('Something went wrong');
+    }
+  }
+
+  /// POST `/remove-background` — upload image for server-side BG removal.
+  Future<DesignInteractionResult> removeBackgroundFromFile(
+    String filePath,
+  ) async {
+    try {
+      final form = FormData();
+      form.files.add(
+        MapEntry('image', await MultipartFile.fromFile(filePath)),
+      );
+      final response = await _api.dio.post<Map<String, dynamic>>(
+        'remove-background',
+        data: form,
+        options: Options(
+          contentType: 'multipart/form-data',
+          sendTimeout: const Duration(seconds: 120),
+          receiveTimeout: const Duration(seconds: 120),
+        ),
+      );
+      final data = response.data;
+      return DesignInteractionSuccess(
+        message: apiExtractMessage(data),
+        data: apiExtractPayloadMap(data),
+      );
+    } on DioException catch (e) {
+      return DesignInteractionFailure(apiMessageFromDioException(e));
+    } catch (_) {
+      return DesignInteractionFailure('Something went wrong');
     }
   }
 

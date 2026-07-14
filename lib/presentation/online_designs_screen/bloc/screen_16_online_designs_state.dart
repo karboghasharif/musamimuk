@@ -21,7 +21,7 @@ class Screen16OnlineDesignsState extends Equatable {
   final String? errorMessage;
   /// When non-null, only designs in this category are shown (after search).
   final int? selectedCategoryId;
-  /// Distinct categories from the last successful `admin/designs` response.
+  /// Distinct categories from the last successful `GET /designs` response.
   final List<MediaCategoryRef> categoryOptions;
   @override
   List<Object?> get props => [

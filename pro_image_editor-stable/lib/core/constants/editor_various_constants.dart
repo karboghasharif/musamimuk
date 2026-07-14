@@ -5,6 +5,10 @@ const kImageEditorHeroTag = 'Pro-Image-Editor-Hero';
 /// the layer (used by the app layers panel).
 const String kMusamiLayerHiddenMetaKey = 'musamiLayerHidden';
 
+/// When `true` in [Layer.meta], the layer stays visible but cannot be
+/// selected, moved, scaled, rotated, or edited on the canvas.
+const String kMusamiLayerLockedMetaKey = 'musamiLayerLocked';
+
 /// The maximum distance (in logical pixels) that a pointer can move before
 /// being considered a drag instead of a tap.
 const double tapSlop = 18.0;

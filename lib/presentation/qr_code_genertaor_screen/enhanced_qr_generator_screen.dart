@@ -4,14 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:toastification/toastification.dart';
 
 import '../../core/app_export.dart';
 import '../../core/utils/app_toast.dart';
-import '../../theme/custom_button_style.dart';
+import '../../core/utils/save_raster_to_gallery.dart';
 import '../../widgets/app_bar/appbar_leading_image.dart';
 import '../../widgets/app_bar/custom_app_bar.dart';
-import '../../widgets/custom_elevated_button.dart';
 
 class EnhancedQrGeneratorScreen extends StatefulWidget {
   const EnhancedQrGeneratorScreen({super.key});
@@ -58,10 +58,6 @@ class _EnhancedQrGeneratorScreenState extends State<EnhancedQrGeneratorScreen> {
   /// Visual preset (foreground/background for QR)
   int _selectedTemplate = 0;
 
-  static const Color _pageBackground = Color(0xFF1C1F22);
-  static const Color _fieldBackground = Color(0xFF25282C);
-  static const Color _templateTrayBg = Color(0xFF2A2D32);
-
   @override
   void initState() {
     super.initState();
@@ -77,7 +73,7 @@ class _EnhancedQrGeneratorScreenState extends State<EnhancedQrGeneratorScreen> {
     switch (index) {
       case 0:
         _foregroundColor = p;
-        _backgroundColor = _templateTrayBg;
+        _backgroundColor = AppDs.surfaceElevated;
         break;
       case 1:
         _foregroundColor = Colors.black;
@@ -85,7 +81,7 @@ class _EnhancedQrGeneratorScreenState extends State<EnhancedQrGeneratorScreen> {
         break;
       case 2:
         _foregroundColor = Colors.white;
-        _backgroundColor = _pageBackground;
+        _backgroundColor = AppDs.surfaceBase;
         break;
       default:
         _foregroundColor = const Color(0xFF1C1F22);
@@ -105,69 +101,48 @@ class _EnhancedQrGeneratorScreenState extends State<EnhancedQrGeneratorScreen> {
   Widget build(BuildContext context) {
     return SafeArea(
       child: Scaffold(
-        backgroundColor: _pageBackground,
+        backgroundColor: AppDs.surfaceBase,
         appBar: CustomAppBar(
           leading: AppbarLeadingImage(
             imagePath: ImageConstant.imgArrowLeftPrimary,
           ),
         ),
         body: SingleChildScrollView(
-          padding: EdgeInsets.symmetric(horizontal: 24.h, vertical: 16.v),
+          padding: EdgeInsets.fromLTRB(
+            AppDs.space4.h,
+            AppDs.space3.v,
+            AppDs.space4.h,
+            AppDs.space6.v,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _buildHeroHeader(),
-              SizedBox(height: 24.v),
-              // Content | Customization tabs (customization commented out).
-              // _buildMainTabs(),
-              // SizedBox(height: 20.v),
-              // if (_mainTab == 0)
+              AppPageHeader(
+                title: 'msg_qr_code_generator_title'.tr,
+                subtitle: 'msg_generate_your_customize'.tr.replaceAll('\n', ' '),
+                align: TextAlign.center,
+              ),
+              SizedBox(height: AppDs.space4.v),
+              Center(
+                child: CustomImageView(
+                  imagePath: ImageConstant.imgQrCodeSvgrepoComBlueGray70002,
+                  height: 80.adaptSize,
+                  width: 80.adaptSize,
+                  color: Colors.white38,
+                ),
+              ),
+              SizedBox(height: AppDs.space4.v),
               _buildContentTab(),
-              // else
-              //   _buildCustomizationSection(),
-              SizedBox(height: 20.v),
+              SizedBox(height: AppDs.space4.v),
               _buildQrPreview(),
-              SizedBox(height: 20.v),
+              SizedBox(height: AppDs.space4.v),
               _buildActionButtons(),
-              SizedBox(height: 24.v),
             ],
           ),
         ),
       ),
     );
   }
-
-  Widget _buildHeroHeader() {
-    return Column(
-      children: [
-        CustomImageView(
-          imagePath: ImageConstant.imgQrCodeSvgrepoComBlueGray70002,
-          height: 80.adaptSize,
-          width: 80.adaptSize,
-          color: Colors.white38,
-        ),
-        SizedBox(height: 16.v),
-        Text(
-          'msg_qr_code_generator_title'.tr,
-          textAlign: TextAlign.center,
-          style: theme.textTheme.headlineSmall?.copyWith(
-            color: Colors.white,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        SizedBox(height: 8.v),
-        Text(
-          'msg_generate_your_customize'.tr.replaceAll('\n', ' '),
-          textAlign: TextAlign.center,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: Colors.white70,
-            height: 1.35,
-          ),
-        ),
-      ],
-    );
-  }
-
   /*
   Widget _buildMainTabs() {
     final primary = theme.colorScheme.primary;
@@ -207,49 +182,45 @@ class _EnhancedQrGeneratorScreenState extends State<EnhancedQrGeneratorScreen> {
   */
 
   Widget _buildContentTab() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // _buildQrTypeSelector(),
-        // SizedBox(height: 16.v),
-        Text(
-          _fieldLabelForType(),
-          style: theme.textTheme.titleSmall?.copyWith(color: Colors.white),
-        ),
-        SizedBox(height: 10.v),
-        TextField(
-          controller: _contentController,
-          style: const TextStyle(color: Colors.white),
-          keyboardType: TextInputType.url,
-          maxLines: 1,
-          decoration: InputDecoration(
-            filled: true,
-            fillColor: _fieldBackground,
-            hintText: _hintForType(),
-            hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.38)),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14.h),
-              borderSide: BorderSide.none,
+    return AppCard(
+      elevated: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          AppText(_fieldLabelForType(), variant: AppTextVariant.title),
+          SizedBox(height: AppDs.space3.v),
+          TextField(
+            controller: _contentController,
+            style: AppTypography.body(theme),
+            keyboardType: TextInputType.url,
+            maxLines: 1,
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: AppDs.surfaceRaised,
+              hintText: _hintForType(),
+              hintStyle: TextStyle(
+                color: Colors.white.withValues(alpha: 0.38),
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppDs.radiusMd.h),
+                borderSide: BorderSide.none,
+              ),
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: AppDs.space4.h,
+                vertical: AppDs.space4.v,
+              ),
             ),
-            contentPadding: EdgeInsets.symmetric(
-              horizontal: 16.h,
-              vertical: 16.v,
-            ),
+            onChanged: (value) {
+              setState(() {
+                _qrData = value;
+              });
+            },
           ),
-          onChanged: (value) {
-            setState(() {
-              _qrData = value;
-            });
-          },
-        ),
-        SizedBox(height: 24.v),
-        Text(
-          'msg_choose_a_template'.tr,
-          style: theme.textTheme.titleSmall?.copyWith(color: Colors.white),
-        ),
-        SizedBox(height: 12.v),
-        _buildTemplateRow(),
-      ],
+          SizedBox(height: AppDs.space6.v),
+          AppSectionHeader(title: 'msg_choose_a_template'.tr),
+          _buildTemplateRow(),
+        ],
+      ),
     );
   }
 
@@ -259,10 +230,13 @@ class _EnhancedQrGeneratorScreenState extends State<EnhancedQrGeneratorScreen> {
 
   Widget _buildTemplateRow() {
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 8.h, vertical: 14.v),
+      padding: EdgeInsets.symmetric(
+        horizontal: AppDs.space2.h,
+        vertical: AppDs.space3.v,
+      ),
       decoration: BoxDecoration(
-        color: _templateTrayBg,
-        borderRadius: BorderRadius.circular(16.h),
+        color: AppDs.surfaceRaised,
+        borderRadius: BorderRadius.circular(AppDs.radiusLg.h),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -281,8 +255,8 @@ class _EnhancedQrGeneratorScreenState extends State<EnhancedQrGeneratorScreen> {
         width: 56.h,
         height: 56.h,
         decoration: BoxDecoration(
-          color: selected ? primary.withValues(alpha: 0.22) : _fieldBackground,
-          borderRadius: BorderRadius.circular(12.h),
+          color: selected ? primary.withValues(alpha: 0.22) : AppDs.surfaceElevated,
+          borderRadius: BorderRadius.circular(AppDs.radiusMd.h),
           border: Border.all(
             color: selected ? primary : Colors.white12,
             width: selected ? 2 : 1,
@@ -579,33 +553,17 @@ class _EnhancedQrGeneratorScreenState extends State<EnhancedQrGeneratorScreen> {
   */
 
   Widget _buildQrPreview() {
-    return Container(
-      padding: EdgeInsets.all(20.h),
-      decoration: BoxDecoration(
-        color: _fieldBackground,
-        borderRadius: BorderRadius.circular(16.h),
-        border: Border.all(color: Colors.white12),
-      ),
-      child: Column(
-        children: [
-          Text(
-            "Preview",
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
-          SizedBox(height: 16.v),
-          Container(
-            padding: EdgeInsets.all(20.h),
-            decoration: BoxDecoration(
-              color: _backgroundColor,
-              borderRadius: BorderRadius.circular(14.h),
-              border: Border.all(color: Colors.white12),
-            ),
-            child: _buildQrCode(),
-          ),
-        ],
+    return AppCard(
+      elevated: true,
+      title: 'Preview',
+      child: Container(
+        padding: EdgeInsets.all(AppDs.space5.h),
+        decoration: BoxDecoration(
+          color: _backgroundColor,
+          borderRadius: BorderRadius.circular(AppDs.radiusMd.h),
+          border: Border.all(color: Colors.white12),
+        ),
+        child: _buildQrCode(),
       ),
     );
   }
@@ -616,8 +574,8 @@ class _EnhancedQrGeneratorScreenState extends State<EnhancedQrGeneratorScreen> {
         height: _qrSize,
         width: _qrSize,
         decoration: BoxDecoration(
-          color: _templateTrayBg,
-          borderRadius: BorderRadius.circular(8.h),
+          color: AppDs.surfaceElevated,
+          borderRadius: BorderRadius.circular(AppDs.radiusSm.h),
         ),
         child: Center(
           child: Text(
@@ -671,45 +629,34 @@ class _EnhancedQrGeneratorScreenState extends State<EnhancedQrGeneratorScreen> {
         Row(
           children: [
             Expanded(
-              child: CustomElevatedButton(
-                height: 50.v,
-                text: _isGenerating ? "Generating..." : "Generate QR Code",
-                buttonStyle: CustomButtonStyles.fillPrimary,
-                buttonTextStyle: CustomTextStyles.bodySmallBluegray90004,
+              child: AppPrimaryButton(
+                label: _isGenerating ? 'Generating...' : 'msg_generate_qr_code'.tr,
+                isLoading: _isGenerating,
                 onPressed: _isGenerating ? null : _generateQrCode,
               ),
             ),
-            SizedBox(width: 12.h),
+            SizedBox(width: AppDs.space3.h),
             Expanded(
-              child: CustomElevatedButton(
-                height: 50.v,
-                text: "Save Image",
-                buttonStyle: CustomButtonStyles.outlineBlackTL24,
-                buttonTextStyle: CustomTextStyles.bodyLargeOnPrimaryContainer,
+              child: AppSecondaryButton(
+                label: 'lbl_save_to_gallery'.tr,
                 onPressed: _generatedQrBytes != null ? _saveQrCode : null,
               ),
             ),
           ],
         ),
-        SizedBox(height: 12.v),
+        SizedBox(height: AppDs.space3.v),
         Row(
           children: [
             Expanded(
-              child: CustomElevatedButton(
-                height: 50.v,
-                text: "Share QR Code",
-                buttonStyle: CustomButtonStyles.fillYellow,
-                buttonTextStyle: CustomTextStyles.bodySmallBluegray90004,
+              child: AppPrimaryButton(
+                label: 'lbl_share'.tr,
                 onPressed: _generatedQrBytes != null ? _shareQrCode : null,
               ),
             ),
-            SizedBox(width: 12.h),
+            SizedBox(width: AppDs.space3.h),
             Expanded(
-              child: CustomElevatedButton(
-                height: 50.v,
-                text: "Reset",
-                buttonStyle: CustomButtonStyles.outlineBlackTL24,
-                buttonTextStyle: CustomTextStyles.titleMediumBold,
+              child: AppSecondaryButton(
+                label: 'Reset',
                 onPressed: _resetGenerator,
               ),
             ),
@@ -873,43 +820,47 @@ class _EnhancedQrGeneratorScreenState extends State<EnhancedQrGeneratorScreen> {
 
   Future<void> _saveQrCode() async {
     if (_generatedQrBytes == null) return;
-
-    try {
-      final directory = await getApplicationDocumentsDirectory();
-      final filePath =
-          '${directory.path}/qr_code_${DateTime.now().millisecondsSinceEpoch}.png';
-      final file = File(filePath);
-      await file.writeAsBytes(_generatedQrBytes!);
-
-      if (!mounted) return;
-      showAppToast(
-        'QR Code saved to: $filePath',
-        type: ToastificationType.success,
-      );
-    } catch (e) {
-      if (!mounted) return;
-      showAppToast(
-        'Error saving QR code: $e',
-        type: ToastificationType.error,
-      );
-    }
+    await saveRasterToGalleryAndOpen(
+      context,
+      bytes: _generatedQrBytes!,
+      fileBaseName: 'qr_code',
+    );
   }
 
   Future<void> _shareQrCode() async {
     if (_generatedQrBytes == null) return;
 
+    File? tmp;
     try {
-      // In a real implementation, you would use share_plus package
-      // For now, we'll show a message
-      showAppToast(
-        'Share functionality would be implemented here',
-        type: ToastificationType.info,
+      final dir = await getTemporaryDirectory();
+      final stamp = DateTime.now().millisecondsSinceEpoch;
+      tmp = File('${dir.path}/musami_qr_$stamp.png');
+      await tmp.writeAsBytes(_generatedQrBytes!);
+
+      final encoded = _qrData.trim();
+      await Share.shareXFiles(
+        [
+          XFile(
+            tmp.path,
+            mimeType: 'image/png',
+            name: 'musamimuk_qr_code.png',
+          ),
+        ],
+        subject: 'msg_qr_code_generator_title'.tr,
+        text: encoded.isNotEmpty ? encoded : null,
       );
-    } catch (e) {
+    } catch (_) {
+      if (!mounted) return;
       showAppToast(
-        'Error sharing QR code: $e',
+        'msg_share_failed'.tr,
         type: ToastificationType.error,
       );
+    } finally {
+      try {
+        if (tmp != null && await tmp.exists()) {
+          await tmp.delete();
+        }
+      } catch (_) {}
     }
   }
 

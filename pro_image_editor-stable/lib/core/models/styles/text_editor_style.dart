@@ -74,6 +74,9 @@ class TextEditorStyle {
     this.inputTextFieldBorderRadius = const BorderRadius.all(
       Radius.circular(4),
     ),
+    this.inputTextFieldBorderWidth = 10,
+    this.inputTextFieldMinHeight = 0,
+    this.textFieldKeyboardBottomInset = 0,
     this.inputTextFieldPadding = EdgeInsets.zero,
     this.inputLetterSpacing = 0,
     this.inputShadows = const [],
@@ -123,6 +126,17 @@ class TextEditorStyle {
 
   /// Border radius of the input text field.
   final BorderRadius inputTextFieldBorderRadius;
+
+  /// Border width of the input text field.
+  final double inputTextFieldBorderWidth;
+
+  /// Minimum height of the input text field (0 = intrinsic height only).
+  final double inputTextFieldMinHeight;
+
+  /// Extra bottom scroll padding when the software keyboard is open (0 = use
+  /// [textFieldMargin] only). Reserves space for floating toolbars above the
+  /// keyboard.
+  final double textFieldKeyboardBottomInset;
 
   /// Padding of the input text field.
   final EdgeInsets inputTextFieldPadding;
@@ -175,6 +189,9 @@ class TextEditorStyle {
     Color? inputTextFieldBackground,
     Color? inputTextFieldBorderColor,
     BorderRadius? inputTextFieldBorderRadius,
+    double? inputTextFieldBorderWidth,
+    double? inputTextFieldMinHeight,
+    double? textFieldKeyboardBottomInset,
     EdgeInsets? inputTextFieldPadding,
     MainAxisAlignment? bottomBarMainAxisAlignment,
     EdgeInsets? textFieldMargin,
@@ -200,6 +217,12 @@ class TextEditorStyle {
           inputTextFieldBorderColor ?? this.inputTextFieldBorderColor,
       inputTextFieldBorderRadius:
           inputTextFieldBorderRadius ?? this.inputTextFieldBorderRadius,
+      inputTextFieldBorderWidth:
+          inputTextFieldBorderWidth ?? this.inputTextFieldBorderWidth,
+      inputTextFieldMinHeight:
+          inputTextFieldMinHeight ?? this.inputTextFieldMinHeight,
+      textFieldKeyboardBottomInset:
+          textFieldKeyboardBottomInset ?? this.textFieldKeyboardBottomInset,
       inputTextFieldPadding:
           inputTextFieldPadding ?? this.inputTextFieldPadding,
       bottomBarMainAxisAlignment:

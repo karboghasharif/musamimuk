@@ -8,6 +8,7 @@ import 'package:pro_image_editor/pro_image_editor.dart';
 
 import '../../../core/app_export.dart';
 import '../../../data/models/selectionPopupModel/selection_popup_model.dart';
+import '../../../core/utils/canvas_unit_utils.dart';
 import '../models/add_new_model.dart';
 import '../models/gridgallery_pic_item_model.dart';
 
@@ -26,17 +27,50 @@ class AddNewBloc extends Bloc<AddNewEvent, AddNewState> {
     on<SetBgColorEvent>(_onSetBgColor);
     on<ApplyCustomSizeEvent>(_onApplyCustomSize);
     on<SetBgColorToolModeEvent>(_onSetBgColorToolMode);
+    on<StartScreenColorPickEvent>(_onStartScreenColorPick);
+    on<EndScreenColorPickEvent>(_onEndScreenColorPick);
     on<EditorSelectionChangedEvent>(_onEditorSelectionChanged);
     on<EditorClearSelectionEvent>(_onEditorClearSelection);
     on<SetTextContextSecondaryPanelEvent>(_onSetTextContextSecondaryPanel);
     on<SetImageContextSecondaryPanelEvent>(_onSetImageContextSecondaryPanel);
+    on<ClearPendingDesignHistoryEvent>(_onClearPendingDesignHistory);
   }
+
+  /// Drops stale [SetBgColorEvent] completions when the slider moves quickly.
+  int _bgColorApplyGeneration = 0;
+
+  static bool _bgUsesCheckerboardPreview(Color color) => color.a < 1.0;
 
   _onSetBgColorToolMode(
     SetBgColorToolModeEvent event,
     Emitter<AddNewState> emit,
   ) {
     emit(state.copyWith(bgColorToolMode: event.mode));
+  }
+
+  void _onStartScreenColorPick(
+    StartScreenColorPickEvent event,
+    Emitter<AddNewState> emit,
+  ) {
+    emit(
+      state.copyWith(
+        isScreenColorPicking: true,
+        showbottomContainer: '0',
+      ),
+    );
+  }
+
+  void _onEndScreenColorPick(
+    EndScreenColorPickEvent event,
+    Emitter<AddNewState> emit,
+  ) {
+    emit(
+      state.copyWith(
+        isScreenColorPicking: false,
+        showbottomContainer: '4',
+        bgColorToolMode: 'picker',
+      ),
+    );
   }
 
   void _onEditorSelectionChanged(
@@ -113,6 +147,13 @@ class AddNewBloc extends Bloc<AddNewEvent, AddNewState> {
   ) {
     final next = event.panel.trim().isEmpty ? 'default' : event.panel.trim();
     emit(state.copyWith(imageContextSecondaryPanel: next));
+  }
+
+  void _onClearPendingDesignHistory(
+    ClearPendingDesignHistoryEvent event,
+    Emitter<AddNewState> emit,
+  ) {
+    emit(state.copyWith(clearPendingDesignHistory: true));
   }
 
   _onSliderHeightValueChanged(
@@ -223,31 +264,61 @@ class AddNewBloc extends Bloc<AddNewEvent, AddNewState> {
     Screen3AddNewInitialEvent event,
     Emitter<AddNewState> emit,
   ) async {
-    Uint8List image = await _createTransparentImage(
-      event.width!,
-      event.height!,
-    );
-    final w = event.width!.toInt().toString();
-    final h = event.height!.toInt().toString();
-    emit(
-      state.copyWith(
-        transparentBytes: image,
-        editorKey: GlobalKey<ProImageEditorState>(),
-        selectedheight: event.height,
-        selectedwidth: event.width,
-        valueoneController: TextEditingController(text: w),
-        valueTwoController: TextEditingController(text: h),
-        screen3AddNewModelObj: state.screen3AddNewModelObj?.copyWith(
-          gridgalleryPicItemList: fillGridgalleryPicItemList(),
+    final width = (event.width ?? 400.0).clamp(1.0, 8192.0);
+    final height = (event.height ?? 400.0).clamp(1.0, 8192.0);
+    final unit =
+        CanvasUnitUtils.isSupported(event.unit) ? event.unit : 'px';
+    final history = event.designHistoryJson?.trim();
+    try {
+      final image = event.backgroundImageBytes != null &&
+              event.backgroundImageBytes!.isNotEmpty
+          ? event.backgroundImageBytes!
+          : await _createTransparentImage(width, height);
+      final w = width.toInt().toString();
+      final h = height.toInt().toString();
+      emit(
+        state.copyWith(
+          transparentBytes: image,
+          editorKey: GlobalKey<ProImageEditorState>(),
+          selectedheight: height,
+          selectedwidth: width,
+          canvasUnit: unit,
+          pendingDesignHistoryJson:
+              (history != null && history.isNotEmpty) ? history : null,
+          valueoneController: TextEditingController(text: w),
+          valueTwoController: TextEditingController(text: h),
+          screen3AddNewModelObj: state.screen3AddNewModelObj?.copyWith(
+            gridgalleryPicItemList: fillGridgalleryPicItemList(),
+          ),
         ),
-      ),
-    );
+      );
+    } catch (_) {
+      final fallback = await _createTransparentImage(400, 400);
+      emit(
+        state.copyWith(
+          transparentBytes: fallback,
+          editorKey: GlobalKey<ProImageEditorState>(),
+          selectedheight: 400,
+          selectedwidth: 400,
+          canvasUnit: unit,
+          pendingDesignHistoryJson:
+              (history != null && history.isNotEmpty) ? history : null,
+          valueoneController: TextEditingController(text: '400'),
+          valueTwoController: TextEditingController(text: '400'),
+          screen3AddNewModelObj: state.screen3AddNewModelObj?.copyWith(
+            gridgalleryPicItemList: fillGridgalleryPicItemList(),
+          ),
+        ),
+      );
+    }
   }
 
   _onApplyCustomSize(
     ApplyCustomSizeEvent event,
     Emitter<AddNewState> emit,
   ) async {
+    final unit =
+        CanvasUnitUtils.isSupported(event.unit) ? event.unit : state.canvasUnit;
     state.valueoneController?.text = event.width.toInt().toString();
     state.valueTwoController?.text = event.height.toInt().toString();
     Uint8List image = await _createTransparentImage(event.width, event.height);
@@ -256,6 +327,7 @@ class AddNewBloc extends Bloc<AddNewEvent, AddNewState> {
         transparentBytes: image,
         selectedheight: event.height,
         selectedwidth: event.width,
+        canvasUnit: unit,
       ),
     );
     if (state.editorKey?.currentState != null) {
@@ -333,6 +405,8 @@ class AddNewBloc extends Bloc<AddNewEvent, AddNewState> {
         transparentBytes: transparentImage,
         previousBackgroundBytes: currentBytes,
         isBackgroundTransparent: true,
+        selectedBgColor:
+            state.selectedBgColor?.withValues(alpha: 0) ?? Colors.transparent,
       ),
     );
     _applyBackgroundToEditor(transparentImage);
@@ -384,15 +458,31 @@ class AddNewBloc extends Bloc<AddNewEvent, AddNewState> {
   }
 
   _onSetBgColor(SetBgColorEvent event, Emitter<AddNewState> emit) async {
+    final generation = ++_bgColorApplyGeneration;
     final w = state.selectedwidth ?? 200;
     final h = state.selectedheight ?? 200;
+    final usesCheckerboard = _bgUsesCheckerboardPreview(event.color);
+
+    // Update color immediately so sliders / wheels stay in sync while rendering.
+    emit(
+      state.copyWith(
+        selectedBgColor: event.color,
+        isBackgroundTransparent: usesCheckerboard,
+        previousBackgroundBytes:
+            usesCheckerboard ? state.previousBackgroundBytes : null,
+      ),
+    );
+
     final imageBytes = await _createSolidColorImage(w, h, event.color);
+    if (generation != _bgColorApplyGeneration || isClosed) return;
+
     emit(
       state.copyWith(
         transparentBytes: imageBytes,
         selectedBgColor: event.color,
-        isBackgroundTransparent: false,
-        previousBackgroundBytes: null,
+        isBackgroundTransparent: usesCheckerboard,
+        previousBackgroundBytes:
+            usesCheckerboard ? state.previousBackgroundBytes : null,
       ),
     );
     _applyBackgroundToEditor(imageBytes);
@@ -410,32 +500,17 @@ class AddNewBloc extends Bloc<AddNewEvent, AddNewState> {
         gallerypic: "Add Text",
         icon: Icons.text_fields,
       ),
-      GridgalleryPicItemModel(
-        galleryPicOne: ImageConstant.imgBookmark,
-        gallerypic: "Shapes",
-        icon: Icons.category_outlined,
-      ),
-      GridgalleryPicItemModel(
-        galleryPicOne: ImageConstant.imgPngSvgrepoCom,
-        gallerypic: "PNG Images",
-        icon: Icons.image,
-      ),
-      GridgalleryPicItemModel(
-        galleryPicOne: ImageConstant.imgTwitterLogoSvgrepoCom,
-        gallerypic: "Logos",
-        icon: Icons.branding_watermark_outlined,
-      ),
-      GridgalleryPicItemModel(gallerypic: "Paint", icon: Icons.brush_outlined),
-      GridgalleryPicItemModel(
-        gallerypic: "Crop& Rotate",
-        icon: Icons.crop_rotate,
-      ),
-      GridgalleryPicItemModel(gallerypic: "Tune", icon: Icons.tune),
-      GridgalleryPicItemModel(
-        gallerypic: "Filter",
-        icon: Icons.filter_alt_outlined,
-      ),
-      GridgalleryPicItemModel(gallerypic: "Blur", icon: Icons.blur_on_outlined),
+      // GridgalleryPicItemModel(gallerypic: "Paint", icon: Icons.brush_outlined),
+      // GridgalleryPicItemModel(
+      //   gallerypic: "Crop& Rotate",
+      //   icon: Icons.crop_rotate,
+      // ),
+      // GridgalleryPicItemModel(gallerypic: "Tune", icon: Icons.tune),
+      // GridgalleryPicItemModel(
+      //   gallerypic: "Filter",
+      //   icon: Icons.filter_alt_outlined,
+      // ),
+      // GridgalleryPicItemModel(gallerypic: "Blur", icon: Icons.blur_on_outlined),
     ];
   }
 }

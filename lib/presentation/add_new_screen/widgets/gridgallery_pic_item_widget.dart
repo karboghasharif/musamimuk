@@ -30,7 +30,7 @@ class GridgalleryPicItemWidget extends StatelessWidget {
                 ? Icon(
                     gridgalleryPicItemModelObj.icon,
                     size: 26.adaptSize,
-                    color: appTheme.blueGray90004,
+                    color: appTheme.black900,
                   )
                 : CustomImageView(
                     imagePath: gridgalleryPicItemModelObj.galleryPicOne!,
@@ -46,6 +46,7 @@ class GridgalleryPicItemWidget extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: CustomTextStyles.bodySmallBluegray90004.copyWith(
                   height: 1.15,
+                  color: appTheme.black900,
                 ),
               ),
             ),

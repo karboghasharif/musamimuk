@@ -19,15 +19,15 @@ class ScreenTwentythreeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocBuilder<ScreenTwentythreeBloc, ScreenTwentythreeState>(
       builder: (context, state) {
-        return SafeArea(
-          child: Scaffold(
-              body: Center(
+        return Scaffold(
+          backgroundColor: appTheme.blueGray90007,
+          body: Center(
             child: CustomImageView(
               imagePath: ImageConstant.imgMusammimuk02,
               height: 269.v,
               width: 276.h,
             ),
-          )),
+          ),
         );
       },
     );

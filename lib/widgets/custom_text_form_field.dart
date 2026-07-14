@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../core/app_export.dart';
 
 extension TextFormFieldStyleHelper on CustomTextFormField {
@@ -55,6 +56,7 @@ class CustomTextFormField extends StatelessWidget {
     this.validator,
     this.onFieldSubmitted,
     this.onChanged,
+    this.inputFormatters,
   });
   final Alignment? alignment;
   final double? width;
@@ -80,6 +82,7 @@ class CustomTextFormField extends StatelessWidget {
   final FormFieldValidator<String>? validator;
   final ValueChanged<String?>? onFieldSubmitted;
   final ValueChanged<String>? onChanged;
+  final List<TextInputFormatter>? inputFormatters;
   @override
   Widget build(BuildContext context) {
     return alignment != null
@@ -115,6 +118,7 @@ class CustomTextFormField extends StatelessWidget {
       validator: validator,
       onFieldSubmitted: onFieldSubmitted,
       onChanged: onChanged,
+      inputFormatters: inputFormatters,
     ),
   );
   InputDecoration get decoration => InputDecoration(

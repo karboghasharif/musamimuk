@@ -23,12 +23,6 @@ class Screen20RemoveBackgroundBloc
   }
 
   List<ListrectangleItemModel> fillListrectangleItemList() {
-    return [
-      ListrectangleItemModel(rectangle: ImageConstant.imgRectangle5594),
-      ListrectangleItemModel(rectangle: ImageConstant.imgRectangle5595),
-      ListrectangleItemModel(rectangle: ImageConstant.imgRectangle5596),
-      ListrectangleItemModel(rectangle: ImageConstant.imgRectangle5597),
-      ListrectangleItemModel(rectangle: ImageConstant.imgRectangle5598)
-    ];
+    return const [];
   }
 }

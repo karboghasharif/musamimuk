@@ -1,4 +1,3 @@
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
@@ -6,13 +5,14 @@ import 'package:toastification/toastification.dart';
 
 import '../../core/app_export.dart';
 import '../../core/utils/app_toast.dart';
+import 'add_text_ai_actions.dart';
 import 'bloc/screen_4_add_text_bloc.dart';
 import 'models/add_text_input_language.dart';
 import 'models/screen_4_add_text_model.dart';
 import 'widgets/urdu_marks_strip.dart';
 
 /// Maximum characters allowed in the Add Text field.
-const int kAddTextMaxLength = 250;
+const int kAddTextMaxLength = AddTextAiActions.maxLength;
 
 Widget? _addTextHideCounter(
   BuildContext context, {
@@ -52,8 +52,10 @@ class _Screen4AddTextScaffold extends StatefulWidget {
 class _Screen4AddTextScaffoldState extends State<_Screen4AddTextScaffold> {
   final FocusNode _focusNode = FocusNode();
   final stt.SpeechToText _speech = stt.SpeechToText();
+  final AddTextAiActions _aiActions = AddTextAiActions();
   bool _speechListening = false;
   bool _speechReady = false;
+  bool _aiBusy = false;
 
   @override
   void dispose() {
@@ -156,83 +158,80 @@ class _Screen4AddTextScaffoldState extends State<_Screen4AddTextScaffold> {
     _focusNode.requestFocus();
   }
 
-  String _beautify(String raw, AddTextInputLanguage lang) {
-    var s = raw.trim().replaceAll(RegExp(r'\s+'), ' ');
-    if (lang == AddTextInputLanguage.english && s.isNotEmpty) {
-      final chunks = s.split(RegExp(r'(?<=[.!?])\s+'));
-      return chunks
-          .map((p) {
-            if (p.isEmpty) return p;
-            return p[0].toUpperCase() + p.substring(1);
-          })
-          .join(' ');
-    }
-    return s;
-  }
-
-  Future<void> _translate(
+  Future<void> _beautifyWithAi(
     TextEditingController controller,
     AddTextInputLanguage language,
   ) async {
-    final t = controller.text.trim();
-    if (t.isEmpty) {
-      showAppToast('msg_translate_empty'.tr, type: ToastificationType.warning);
-      return;
-    }
-
-    final dio = Dio(
-      BaseOptions(
-        connectTimeout: const Duration(seconds: 14),
-        receiveTimeout: const Duration(seconds: 14),
-      ),
+    await _aiActions.beautify(
+      context: context,
+      controller: controller,
+      isUrdu: language == AddTextInputLanguage.urdu,
+      isMounted: () => mounted,
+      isBusy: _aiBusy,
+      setBusy: (v) => setState(() => _aiBusy = v),
     );
+  }
 
-    try {
-      final pair = language == AddTextInputLanguage.urdu ? 'ur|en' : 'en|ur';
-      final q = t.length > 450 ? t.substring(0, 450) : t;
-      final r = await dio.get<Map<String, dynamic>>(
-        'https://api.mymemory.translated.net/get',
-        queryParameters: <String, dynamic>{'q': q, 'langpair': pair},
-      );
-      final data = r.data;
-      final block = data?['responseData'];
-      final translated = block is Map<String, dynamic>
-          ? block['translatedText'] as String?
-          : null;
-      if (translated == null || translated.isEmpty) {
-        throw StateError('empty translation');
-      }
-      var out = translated;
-      if (out.length > kAddTextMaxLength) {
-        out = out.substring(0, kAddTextMaxLength);
-      }
-      controller.text = out;
-      controller.selection = TextSelection.collapsed(
-        offset: controller.text.length,
-      );
-      if (mounted) {
-        showAppToast('msg_translate_done'.tr);
-      }
-    } catch (_) {
-      if (mounted) {
-        showAppToast('msg_translate_failed'.tr, type: ToastificationType.error);
-      }
-    }
+  Future<void> _translateWithAi(
+    TextEditingController controller,
+    AddTextInputLanguage language,
+  ) async {
+    await _aiActions.translateWithLanguagePicker(
+      context: context,
+      controller: controller,
+      isUrdu: language == AddTextInputLanguage.urdu,
+      isMounted: () => mounted,
+      isBusy: _aiBusy,
+      setBusy: (v) => setState(() => _aiBusy = v),
+    );
+  }
+
+  Future<void> _showAiSuggestions(
+    TextEditingController controller,
+    AddTextInputLanguage language,
+  ) async {
+    await _aiActions.showSuggestions(
+      context: context,
+      controller: controller,
+      isUrdu: language == AddTextInputLanguage.urdu,
+      isMounted: () => mounted,
+      isBusy: _aiBusy,
+      setBusy: (v) => setState(() => _aiBusy = v),
+    );
+  }
+
+  Future<void> _shortenWithAi(
+    TextEditingController controller,
+    AddTextInputLanguage language,
+  ) async {
+    await _aiActions.shorten(
+      context: context,
+      controller: controller,
+      isUrdu: language == AddTextInputLanguage.urdu,
+      isMounted: () => mounted,
+      isBusy: _aiBusy,
+      setBusy: (v) => setState(() => _aiBusy = v),
+    );
+  }
+
+  Future<void> _makePunchyWithAi(
+    TextEditingController controller,
+    AddTextInputLanguage language,
+  ) async {
+    await _aiActions.makePunchy(
+      context: context,
+      controller: controller,
+      isUrdu: language == AddTextInputLanguage.urdu,
+      isMounted: () => mounted,
+      isBusy: _aiBusy,
+      setBusy: (v) => setState(() => _aiBusy = v),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    const pageBg = Color(0xFFFFFFFF);
-    const cardFill = Color(0xFFF3F4F6);
-    const border = Color(0xFFE5E7EB);
-    const muted = Color(0xFF6B7280);
-    const titleColor = Color(0xFF111827);
-    const ctaActive = Color(0xFF16A34A);
-    const ctaDisabledFill = Color(0xFFE5E7EB);
-    const ctaDisabledFg = Color(0xFF9CA3AF);
-
     return Scaffold(
-      backgroundColor: pageBg,
+      backgroundColor: AppDs.surfaceBase,
       resizeToAvoidBottomInset: true,
       body: BlocBuilder<Screen4AddTextBloc, Screen4AddTextState>(
         builder: (context, state) {
@@ -241,7 +240,7 @@ class _Screen4AddTextScaffoldState extends State<_Screen4AddTextScaffold> {
           final isUrdu = lang == AddTextInputLanguage.urdu;
 
           if (controller == null) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(child: AppLoadingBlock());
           }
 
           return Column(
@@ -251,7 +250,12 @@ class _Screen4AddTextScaffoldState extends State<_Screen4AddTextScaffold> {
                 child: SafeArea(
                   bottom: false,
                   child: SingleChildScrollView(
-                    padding: EdgeInsets.fromLTRB(20.h, 12.v, 20.h, 24.v),
+                    padding: EdgeInsets.fromLTRB(
+                      AppDs.space4.h,
+                      AppDs.space3.v,
+                      AppDs.space4.h,
+                      AppDs.space6.v,
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -272,174 +276,182 @@ class _Screen4AddTextScaffoldState extends State<_Screen4AddTextScaffold> {
                                 context,
                               ).closeButtonTooltip,
                               style: IconButton.styleFrom(
-                                foregroundColor: titleColor,
+                                foregroundColor: AppDs.textOnDarkPrimary,
                               ),
                             ),
                           ],
                         ),
-                        SizedBox(height: 8.v),
-                        Text(
-                          isUrdu
+                        AppPageHeader(
+                          title: isUrdu
                               ? 'lbl_add_text_title_urdu'.tr
                               : 'lbl_add_text_title_english'.tr,
-                          style: TextStyle(
-                            fontSize: 26.fSize,
-                            fontWeight: FontWeight.w700,
-                            color: titleColor,
-                            height: 1.2,
-                          ),
+                          subtitle: 'msg_add_text_helper'.tr,
                         ),
-                        SizedBox(height: 10.v),
-                        Text(
-                          'msg_add_text_helper'.tr,
-                          style: TextStyle(
-                            fontSize: 14.fSize,
-                            height: 1.45,
-                            color: muted,
-                          ),
-                        ),
-                        SizedBox(height: 22.v),
+                        SizedBox(height: AppDs.space4.v),
                         _LanguageToggle(
                           language: lang,
                           onChanged: (v) => context
                               .read<Screen4AddTextBloc>()
                               .add(Screen4AddTextSetLanguageEvent(v)),
                         ),
-                        SizedBox(height: 20.v),
-                        Container(
-                          padding: EdgeInsets.all(4.adaptSize),
-                          decoration: BoxDecoration(
-                            color: cardFill,
-                            borderRadius: BorderRadius.circular(16.adaptSize),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.04),
-                                blurRadius: 12,
-                                offset: const Offset(0, 4),
+                        SizedBox(height: AppDs.space4.v),
+                        AppCard(
+                          elevated: true,
+                          padding: EdgeInsets.fromLTRB(
+                            AppDs.space4.h,
+                            AppDs.space3.v,
+                            AppDs.space4.h,
+                            AppDs.space3.v,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              TextField(
+                                controller: controller,
+                                focusNode: _focusNode,
+                                maxLines: 8,
+                                minLines: 5,
+                                maxLength: kAddTextMaxLength,
+                                textAlign: isUrdu
+                                    ? TextAlign.right
+                                    : TextAlign.left,
+                                textDirection: isUrdu
+                                    ? TextDirection.rtl
+                                    : TextDirection.ltr,
+                                style: AppTypography.body(Theme.of(context)),
+                                decoration: InputDecoration(
+                                  isDense: true,
+                                  border: InputBorder.none,
+                                  hintText: isUrdu
+                                      ? 'msg_add_text_placeholder_ur'.tr
+                                      : 'msg_add_text_placeholder_en'.tr,
+                                  hintStyle: AppTypography.secondary(
+                                    Theme.of(context),
+                                  ),
+                                  counterText: '',
+                                ),
+                                buildCounter: _addTextHideCounter,
+                              ),
+                              SizedBox(height: AppDs.space2.v),
+                              ValueListenableBuilder<TextEditingValue>(
+                                valueListenable: controller,
+                                builder: (context, value, _) {
+                                  final len = value.text.length;
+                                  return Align(
+                                    alignment: isUrdu
+                                        ? Alignment.centerLeft
+                                        : Alignment.centerRight,
+                                    child: AppText(
+                                      '$len/$kAddTextMaxLength',
+                                      variant: AppTextVariant.caption,
+                                    ),
+                                  );
+                                },
                               ),
                             ],
                           ),
-                          child: Container(
-                            padding: EdgeInsets.fromLTRB(
-                              16.h,
-                              14.v,
-                              16.h,
-                              12.v,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(14.adaptSize),
-                              border: Border.all(color: border),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                        ),
+                        SizedBox(height: AppDs.space4.v),
+                        AppCard(
+                          padding: EdgeInsets.symmetric(
+                            vertical: AppDs.space3.v,
+                            horizontal: AppDs.space2.h,
+                          ),
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
                               children: [
-                                TextField(
-                                  controller: controller,
-                                  focusNode: _focusNode,
-                                  maxLines: 8,
-                                  minLines: 5,
-                                  maxLength: kAddTextMaxLength,
-                                  textAlign: isUrdu
-                                      ? TextAlign.right
-                                      : TextAlign.left,
-                                  textDirection: isUrdu
-                                      ? TextDirection.rtl
-                                      : TextDirection.ltr,
-                                  style: TextStyle(
-                                    fontSize: 16.fSize,
-                                    height: 1.45,
-                                    color: titleColor,
-                                  ),
-                                  decoration: InputDecoration(
-                                    isDense: true,
-                                    border: InputBorder.none,
-                                    hintText: isUrdu
-                                        ? 'msg_add_text_placeholder_ur'.tr
-                                        : 'msg_add_text_placeholder_en'.tr,
-                                    hintStyle: TextStyle(
-                                      fontSize: 16.fSize,
-                                      color: const Color(0xFF9CA3AF),
-                                      height: 1.45,
+                                _ToolbarAction(
+                                  icon: Icons.mic_rounded,
+                                  label: 'lbl_toolbar_voice'.tr,
+                                  iconColor: _speechListening
+                                      ? Theme.of(context).colorScheme.error
+                                      : AppDs.textOnDarkSecondary,
+                                  onPressed: () =>
+                                      _toggleSpeech(controller, lang),
+                                  semanticLabel: 'lbl_toolbar_voice'.tr,
+                                ),
+                                SizedBox(width: AppDs.space1.h),
+                                _ToolbarAction(
+                                  icon: Icons.content_paste_rounded,
+                                  label: 'lbl_toolbar_paste'.tr,
+                                  onPressed: () => _pasteAtCursor(controller),
+                                  semanticLabel: 'lbl_toolbar_paste'.tr,
+                                ),
+                                SizedBox(width: AppDs.space1.h),
+                                _ToolbarAction(
+                                  icon: Icons.delete_outline_rounded,
+                                  label: 'lbl_toolbar_clear'.tr,
+                                  onPressed: () => _clearField(controller),
+                                  semanticLabel: 'lbl_toolbar_clear'.tr,
+                                ),
+                                SizedBox(width: AppDs.space1.h),
+                                _ToolbarAction(
+                                  icon: Icons.auto_awesome_rounded,
+                                  label: 'lbl_text_editor_ai'.tr,
+                                  onPressed: _aiBusy
+                                      ? null
+                                      : () => _showAiSuggestions(
+                                            controller,
+                                            lang,
+                                          ),
+                                  semanticLabel: 'lbl_text_editor_ai'.tr,
+                                ),
+                                SizedBox(width: AppDs.space1.h),
+                                _ToolbarAction(
+                                  icon: Icons.auto_fix_high_rounded,
+                                  label: 'lbl_toolbar_beautify'.tr,
+                                  onPressed: _aiBusy
+                                      ? null
+                                      : () => _beautifyWithAi(controller, lang),
+                                  semanticLabel: 'lbl_toolbar_beautify'.tr,
+                                ),
+                                SizedBox(width: AppDs.space1.h),
+                                _ToolbarAction(
+                                  icon: Icons.translate_rounded,
+                                  label: 'lbl_text_editor_translate'.tr,
+                                  onPressed: _aiBusy
+                                      ? null
+                                      : () =>
+                                            _translateWithAi(controller, lang),
+                                  semanticLabel: 'lbl_text_editor_translate'.tr,
+                                ),
+                                SizedBox(width: AppDs.space1.h),
+                                _ToolbarAction(
+                                  icon: Icons.compress_rounded,
+                                  label: 'lbl_toolbar_shorten'.tr,
+                                  onPressed: _aiBusy
+                                      ? null
+                                      : () =>
+                                            _shortenWithAi(controller, lang),
+                                  semanticLabel: 'lbl_toolbar_shorten'.tr,
+                                ),
+                                SizedBox(width: AppDs.space1.h),
+                                _ToolbarAction(
+                                  icon: Icons.bolt_rounded,
+                                  label: 'lbl_toolbar_make_punchy'.tr,
+                                  onPressed: _aiBusy
+                                      ? null
+                                      : () =>
+                                            _makePunchyWithAi(controller, lang),
+                                  semanticLabel: 'lbl_toolbar_make_punchy'.tr,
+                                ),
+                                if (_aiBusy) ...[
+                                  SizedBox(width: AppDs.space2.h),
+                                  SizedBox(
+                                    width: 22.adaptSize,
+                                    height: 22.adaptSize,
+                                    child: const CircularProgressIndicator(
+                                      strokeWidth: 2,
                                     ),
-                                    counterText: '',
                                   ),
-                                  buildCounter: _addTextHideCounter,
-                                ),
-                                SizedBox(height: 8.v),
-                                ValueListenableBuilder<TextEditingValue>(
-                                  valueListenable: controller,
-                                  builder: (context, value, _) {
-                                    final len = value.text.length;
-                                    return Align(
-                                      alignment: isUrdu
-                                          ? Alignment.centerLeft
-                                          : Alignment.centerRight,
-                                      child: Text(
-                                        '$len/$kAddTextMaxLength',
-                                        style: TextStyle(
-                                          fontSize: 12.fSize,
-                                          color: muted,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
+                                ],
                               ],
                             ),
                           ),
                         ),
-                        SizedBox(height: 18.v),
-                        _ActionToolbarCard(
-                          cardFill: cardFill,
-                          border: border,
-                          children: [
-                            _ToolbarAction(
-                              icon: Icons.mic_rounded,
-                              label: 'lbl_toolbar_voice'.tr,
-                              iconColor: _speechListening
-                                  ? const Color(0xFFDC2626)
-                                  : const Color(0xFF374151),
-                              onPressed: () => _toggleSpeech(controller, lang),
-                              semanticLabel: 'lbl_toolbar_voice'.tr,
-                            ),
-                            _ToolbarAction(
-                              icon: Icons.content_paste_rounded,
-                              label: 'lbl_toolbar_paste'.tr,
-                              onPressed: () => _pasteAtCursor(controller),
-                              semanticLabel: 'lbl_toolbar_paste'.tr,
-                            ),
-                            _ToolbarAction(
-                              icon: Icons.delete_outline_rounded,
-                              label: 'lbl_toolbar_clear'.tr,
-                              onPressed: () => _clearField(controller),
-                              semanticLabel: 'lbl_toolbar_clear'.tr,
-                            ),
-                            _ToolbarAction(
-                              icon: Icons.auto_fix_high_rounded,
-                              label: 'lbl_toolbar_beautify'.tr,
-                              onPressed: () {
-                                final next = _beautify(controller.text, lang);
-                                controller.value = TextEditingValue(
-                                  text: next,
-                                  selection: TextSelection.collapsed(
-                                    offset: next.length,
-                                  ),
-                                );
-                              },
-                              semanticLabel: 'lbl_toolbar_beautify'.tr,
-                            ),
-                            _ToolbarAction(
-                              icon: Icons.translate_rounded,
-                              label: 'lbl_text_editor_translate'.tr,
-                              onPressed: () => _translate(controller, lang),
-                              semanticLabel: 'lbl_text_editor_translate'.tr,
-                            ),
-                          ],
-                        ),
                         if (isUrdu) ...[
-                          SizedBox(height: 20.v),
+                          SizedBox(height: AppDs.space4.v),
                           UrduMarksStrip(
                             controller: controller,
                             focusNode: _focusNode,
@@ -451,58 +463,37 @@ class _Screen4AddTextScaffoldState extends State<_Screen4AddTextScaffold> {
                 ),
               ),
               Material(
-                color: pageBg,
+                color: AppDs.surfaceBase,
                 elevation: 8,
                 shadowColor: Colors.black.withValues(alpha: 0.08),
                 child: SafeArea(
                   top: false,
                   child: Padding(
-                    padding: EdgeInsets.fromLTRB(20.h, 12.v, 20.h, 16.v),
+                    padding: EdgeInsets.fromLTRB(
+                      AppDs.space4.h,
+                      AppDs.space3.v,
+                      AppDs.space4.h,
+                      AppDs.space4.v,
+                    ),
                     child: ValueListenableBuilder<TextEditingValue>(
                       valueListenable: controller,
                       builder: (context, value, _) {
                         final hasText = value.text.trim().isNotEmpty;
-                        return SizedBox(
-                          width: double.infinity,
-                          height: 54.v,
-                          child: FilledButton(
-                            onPressed: hasText
-                                ? () {
-                                    if (Navigator.of(context).canPop()) {
-                                      Navigator.of(
-                                        context,
-                                      ).pop(value.text.trim());
-                                    } else {
-                                      NavigatorService.pushNamed(
-                                        AppRoutes.screen3AddNewScreen,
-                                      );
-                                    }
+                        return AppPrimaryButton(
+                          label: 'lbl_add_text_to_design'.tr,
+                          onPressed: hasText
+                              ? () {
+                                  if (Navigator.of(context).canPop()) {
+                                    Navigator.of(
+                                      context,
+                                    ).pop(value.text.trim());
+                                  } else {
+                                    NavigatorService.pushNamed(
+                                      AppRoutes.screen3AddNewScreen,
+                                    );
                                   }
-                                : null,
-                            style: FilledButton.styleFrom(
-                              elevation: 0,
-                              disabledBackgroundColor: ctaDisabledFill,
-                              disabledForegroundColor: ctaDisabledFg,
-                              backgroundColor: hasText
-                                  ? ctaActive
-                                  : ctaDisabledFill,
-                              foregroundColor: hasText
-                                  ? Colors.white
-                                  : ctaDisabledFg,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(
-                                  14.adaptSize,
-                                ),
-                              ),
-                            ),
-                            child: Text(
-                              'lbl_add_text_to_design'.tr,
-                              style: TextStyle(
-                                fontSize: 16.fSize,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
+                                }
+                              : null,
                         );
                       },
                     ),
@@ -525,23 +516,8 @@ class _LanguageToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const track = Color(0xFFF3F4F6);
-    const border = Color(0xFFE5E7EB);
-
-    return Container(
-      padding: EdgeInsets.all(4.adaptSize),
-      decoration: BoxDecoration(
-        color: track,
-        borderRadius: BorderRadius.circular(14.adaptSize),
-        border: Border.all(color: border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+    return AppCard(
+      padding: EdgeInsets.all(AppDs.space1.h),
       child: Row(
         children: [
           Expanded(
@@ -551,7 +527,7 @@ class _LanguageToggle extends StatelessWidget {
               onTap: () => onChanged(AddTextInputLanguage.english),
             ),
           ),
-          SizedBox(width: 8.h),
+          SizedBox(width: AppDs.space2.h),
           Expanded(
             child: _LangSegment(
               label: 'lbl_urdu'.tr,
@@ -581,20 +557,11 @@ class _LangSegment extends StatelessWidget {
     final primary = Theme.of(context).colorScheme.primary;
 
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 180),
+      duration: AppDs.motionFast,
       curve: Curves.easeOutCubic,
       decoration: BoxDecoration(
-        color: selected ? Colors.white : Colors.transparent,
-        borderRadius: BorderRadius.circular(12.adaptSize),
-        boxShadow: selected
-            ? [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.06),
-                  blurRadius: 10,
-                  offset: const Offset(0, 3),
-                ),
-              ]
-            : null,
+        color: selected ? AppDs.surfaceElevated : Colors.transparent,
+        borderRadius: BorderRadius.circular(AppDs.radiusMd.adaptSize),
         border: Border.all(
           color: selected
               ? primary.withValues(alpha: 0.35)
@@ -604,63 +571,18 @@ class _LangSegment extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(12.adaptSize),
+          borderRadius: BorderRadius.circular(AppDs.radiusMd.adaptSize),
           onTap: onTap,
           child: SizedBox(
-            height: 48.v,
+            height: AppDs.minTap.v,
             child: Center(
-              child: Text(
+              child: AppText(
                 label,
-                style: TextStyle(
-                  fontSize: 15.fSize,
-                  fontWeight: FontWeight.w700,
-                  color: selected ? primary : const Color(0xFF6B7280),
-                ),
+                variant: AppTextVariant.body,
+                color: selected ? primary : AppDs.textOnDarkSecondary,
               ),
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ActionToolbarCard extends StatelessWidget {
-  const _ActionToolbarCard({
-    required this.children,
-    required this.cardFill,
-    required this.border,
-  });
-
-  final List<Widget> children;
-  final Color cardFill;
-  final Color border;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.symmetric(vertical: 12.v, horizontal: 10.h),
-      decoration: BoxDecoration(
-        color: cardFill,
-        borderRadius: BorderRadius.circular(16.adaptSize),
-        border: Border.all(color: border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            for (var i = 0; i < children.length; i++) ...[
-              if (i > 0) SizedBox(width: 6.h),
-              children[i],
-            ],
-          ],
         ),
       ),
     );
@@ -673,58 +595,54 @@ class _ToolbarAction extends StatelessWidget {
     required this.label,
     required this.onPressed,
     required this.semanticLabel,
-    this.iconColor = const Color(0xFF374151),
+    this.iconColor = AppDs.textOnDarkSecondary,
   });
 
   final IconData icon;
   final String label;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
   final String semanticLabel;
   final Color iconColor;
 
   @override
   Widget build(BuildContext context) {
+    final enabled = onPressed != null;
+    final color = enabled ? iconColor : iconColor.withValues(alpha: 0.35);
+
     return Semantics(
-      button: true,
+      button: enabled,
       label: semanticLabel,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12.adaptSize),
-          border: Border.all(color: const Color(0xFFE8EAED)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
-            ),
-          ],
+          color: AppDs.surfaceElevated,
+          borderRadius: BorderRadius.circular(AppDs.radiusMd.adaptSize),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
         ),
         child: Material(
           color: Colors.transparent,
-          borderRadius: BorderRadius.circular(12.adaptSize),
+          borderRadius: BorderRadius.circular(AppDs.radiusMd.adaptSize),
           child: InkWell(
-            borderRadius: BorderRadius.circular(12.adaptSize),
+            borderRadius: BorderRadius.circular(AppDs.radiusMd.adaptSize),
             onTap: onPressed,
             child: SizedBox(
               width: 72.h,
               child: Padding(
-                padding: EdgeInsets.symmetric(vertical: 10.v, horizontal: 4.h),
+                padding: EdgeInsets.symmetric(
+                  vertical: AppDs.space2.v,
+                  horizontal: AppDs.space1.h,
+                ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(icon, size: 24.adaptSize, color: iconColor),
-                    SizedBox(height: 6.v),
-                    Text(
+                    Icon(icon, size: AppDs.iconMd.adaptSize, color: color),
+                    SizedBox(height: AppDs.space1.v),
+                    AppText(
                       label,
+                      variant: AppTextVariant.caption,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 11.fSize,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF4B5563),
-                      ),
+                      color: enabled ? null : AppDs.textOnDarkSecondary.withValues(alpha: 0.35),
                     ),
                   ],
                 ),

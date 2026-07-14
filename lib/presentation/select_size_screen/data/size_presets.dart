@@ -107,4 +107,3 @@ const List<SizePreset> kDesignSizePresets = [
     category: 'Print',
   ),
 ];
-

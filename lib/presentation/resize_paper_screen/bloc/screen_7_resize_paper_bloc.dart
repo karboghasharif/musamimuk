@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:equatable/equatable.dart';
 import '../../../core/app_export.dart';
 import '../../../data/models/selectionPopupModel/selection_popup_model.dart';
+import '../../../core/utils/canvas_unit_utils.dart';
 import '../models/screen_7_resize_paper_model.dart';
 part 'screen_7_resize_paper_event.dart';
 part 'screen_7_resize_paper_state.dart';
@@ -22,11 +23,15 @@ class Screen7ResizePaperBloc
   }
 
   List<SelectionPopupModel> fillDropdownItemList() {
-    return [
-      SelectionPopupModel(id: 1, title: 'lbl_pixels'.tr, isSelected: true),
-      SelectionPopupModel(id: 2, title: 'lbl_unit_centimeters'.tr),
-      SelectionPopupModel(id: 3, title: 'lbl_unit_inches'.tr),
-    ];
+    return CanvasUnitUtils.units
+        .map(
+          (unit) => SelectionPopupModel(
+            id: CanvasUnitUtils.units.indexOf(unit) + 1,
+            title: CanvasUnitUtils.unitLabelKey(unit).tr,
+            isSelected: unit == 'px',
+          ),
+        )
+        .toList();
   }
 
   void _onUnitSelected(

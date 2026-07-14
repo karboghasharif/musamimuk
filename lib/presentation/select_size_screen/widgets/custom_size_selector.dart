@@ -4,6 +4,7 @@ import 'package:toastification/toastification.dart';
 
 import '../../../core/app_export.dart';
 import '../../../core/utils/app_toast.dart';
+import '../../../core/utils/canvas_unit_utils.dart';
 
 class CustomSizeSelector extends StatefulWidget {
   const CustomSizeSelector({
@@ -13,7 +14,9 @@ class CustomSizeSelector extends StatefulWidget {
     required this.onCreate,
   });
 
+  /// Initial canvas width in pixels.
   final double initialWidth;
+  /// Initial canvas height in pixels.
   final double initialHeight;
   final void Function({
     required double width,
@@ -27,22 +30,20 @@ class CustomSizeSelector extends StatefulWidget {
 }
 
 class _CustomSizeSelectorState extends State<CustomSizeSelector> {
-  static const double _minDim = 1;
-
   late final TextEditingController _wCtrl;
   late final TextEditingController _hCtrl;
 
-  double _w = 500;
-  double _h = 500;
+  late double _w;
+  late double _h;
   String _unit = 'px';
 
   @override
   void initState() {
     super.initState();
-    _w = widget.initialWidth;
-    _h = widget.initialHeight;
-    _wCtrl = TextEditingController(text: _w.toInt().toString());
-    _hCtrl = TextEditingController(text: _h.toInt().toString());
+    _w = CanvasUnitUtils.fromPixels(widget.initialWidth, _unit);
+    _h = CanvasUnitUtils.fromPixels(widget.initialHeight, _unit);
+    _wCtrl = TextEditingController(text: CanvasUnitUtils.formatValue(_w, _unit));
+    _hCtrl = TextEditingController(text: CanvasUnitUtils.formatValue(_h, _unit));
   }
 
   @override
@@ -52,22 +53,95 @@ class _CustomSizeSelectorState extends State<CustomSizeSelector> {
     super.dispose();
   }
 
-  double _maxW(BuildContext context) => MediaQuery.sizeOf(context).width * 8;
-  double _maxH(BuildContext context) => MediaQuery.sizeOf(context).height * 8;
+  double _maxPxW(BuildContext context) => MediaQuery.sizeOf(context).width * 8;
+  double _maxPxH(BuildContext context) => MediaQuery.sizeOf(context).height * 8;
 
-  void _syncFromText() {
+  double _maxW(BuildContext context) =>
+      CanvasUnitUtils.fromPixels(_maxPxW(context), _unit);
+
+  double _maxH(BuildContext context) =>
+      CanvasUnitUtils.fromPixels(_maxPxH(context), _unit);
+
+  double _minDim() => CanvasUnitUtils.minValue(_unit);
+
+  List<TextInputFormatter> _inputFormatters() {
+    if (_unit == 'px') {
+      return [FilteringTextInputFormatter.digitsOnly];
+    }
+    return [
+      FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+    ];
+  }
+
+  void _clampLocalDimensions(BuildContext context) {
+    final min = _minDim();
+    final maxW = _maxW(context);
+    final maxH = _maxH(context);
+    _w = _w.clamp(min, maxW);
+    _h = _h.clamp(min, maxH);
+  }
+
+  void _syncFromText(BuildContext context) {
     final w = double.tryParse(_wCtrl.text.trim());
     final h = double.tryParse(_hCtrl.text.trim());
     if (w == null || h == null) return;
     setState(() {
-      _w = w.clamp(_minDim, _maxW(context));
-      _h = h.clamp(_minDim, _maxH(context));
+      _w = w;
+      _h = h;
+      _clampLocalDimensions(context);
     });
   }
 
   void _syncTextFromSliders() {
-    _wCtrl.text = _w.toInt().toString();
-    _hCtrl.text = _h.toInt().toString();
+    _wCtrl.text = CanvasUnitUtils.formatValue(_w, _unit);
+    _hCtrl.text = CanvasUnitUtils.formatValue(_h, _unit);
+  }
+
+  void _onUnitChanged(String? newUnit) {
+    if (newUnit == null || newUnit == _unit) return;
+    final wPx = CanvasUnitUtils.toPixels(_w, _unit);
+    final hPx = CanvasUnitUtils.toPixels(_h, _unit);
+    setState(() {
+      _unit = newUnit;
+      _w = CanvasUnitUtils.fromPixels(wPx, _unit);
+      _h = CanvasUnitUtils.fromPixels(hPx, _unit);
+      _clampLocalDimensions(context);
+      _syncTextFromSliders();
+    });
+  }
+
+  List<DropdownMenuItem<String>> _unitItems() {
+    return CanvasUnitUtils.units
+        .map(
+          (unit) => DropdownMenuItem<String>(
+            value: unit,
+            child: Text(
+              CanvasUnitUtils.unitLabelKey(unit).tr,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
+          ),
+        )
+        .toList();
+  }
+
+  Widget _unitDropdown(ThemeData theme, {bool expanded = false}) {
+    return DropdownButtonFormField<String>(
+      key: ValueKey(_unit),
+      isExpanded: expanded,
+      initialValue: _unit,
+      decoration: _fieldDeco(theme, label: 'lbl_unit'.tr),
+      items: _unitItems(),
+      onChanged: _onUnitChanged,
+    );
+  }
+
+  String _pixelPreview(BuildContext context) {
+    final wPx = CanvasUnitUtils.toPixels(_w, _unit).round();
+    final hPx = CanvasUnitUtils.toPixels(_h, _unit).round();
+    return 'msg_canvas_size_pixels'.tr
+        .replaceAll('@width', '$wPx')
+        .replaceAll('@height', '$hPx');
   }
 
   InputDecoration _fieldDeco(ThemeData theme, {required String label}) =>
@@ -95,6 +169,36 @@ class _CustomSizeSelectorState extends State<CustomSizeSelector> {
         ),
         contentPadding: EdgeInsets.symmetric(horizontal: 12.h, vertical: 14.v),
       );
+
+  void _submit(BuildContext context) {
+    final w = double.tryParse(_wCtrl.text.trim());
+    final h = double.tryParse(_hCtrl.text.trim());
+    final min = _minDim();
+    if (w == null || h == null || w < min || h < min) {
+      showAppToast(
+        'msg_invalid_custom_size'.tr,
+        type: ToastificationType.warning,
+      );
+      return;
+    }
+
+    final maxWPx = _maxPxW(context);
+    final maxHPx = _maxPxH(context);
+    final rawWPx = CanvasUnitUtils.toPixels(w, _unit).round();
+    final rawHPx = CanvasUnitUtils.toPixels(h, _unit).round();
+    final wPx = rawWPx.clamp(1, maxWPx);
+    final hPx = rawHPx.clamp(1, maxHPx);
+
+    if (rawWPx > maxWPx || rawHPx > maxHPx) {
+      showAppToast(
+        'msg_canvas_size_clamped'.tr,
+        type: ToastificationType.info,
+        autoCloseDuration: const Duration(seconds: 2),
+      );
+    }
+
+    widget.onCreate(width: wPx.toDouble(), height: hPx.toDouble(), unit: _unit);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -134,9 +238,11 @@ class _CustomSizeSelectorState extends State<CustomSizeSelector> {
                 Expanded(
                   child: TextField(
                     controller: _wCtrl,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    onChanged: (_) => _syncFromText(),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: _inputFormatters(),
+                    onChanged: (_) => _syncFromText(context),
                     decoration: _fieldDeco(theme, label: 'lbl_width'.tr),
                   ),
                 ),
@@ -144,38 +250,29 @@ class _CustomSizeSelectorState extends State<CustomSizeSelector> {
                 Expanded(
                   child: TextField(
                     controller: _hCtrl,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    onChanged: (_) => _syncFromText(),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: _inputFormatters(),
+                    onChanged: (_) => _syncFromText(context),
                     decoration: _fieldDeco(theme, label: 'lbl_height'.tr),
                   ),
                 ),
               ],
             ),
             SizedBox(height: 10.v),
-            SizedBox(
-              width: 160.h,
-              child: DropdownButtonFormField<String>(
-                initialValue: _unit,
-                decoration: _fieldDeco(theme, label: 'lbl_unit'.tr),
-                items: [
-                  DropdownMenuItem(value: 'px', child: Text('lbl_pixels'.tr)),
-                ],
-                onChanged: (v) {
-                  if (v == null) return;
-                  setState(() => _unit = v);
-                },
-              ),
-            ),
+            SizedBox(width: double.infinity, child: _unitDropdown(theme)),
           ] else ...[
             Row(
               children: [
                 Expanded(
                   child: TextField(
                     controller: _wCtrl,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    onChanged: (_) => _syncFromText(),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: _inputFormatters(),
+                    onChanged: (_) => _syncFromText(context),
                     decoration: _fieldDeco(theme, label: 'lbl_width'.tr),
                   ),
                 ),
@@ -183,38 +280,29 @@ class _CustomSizeSelectorState extends State<CustomSizeSelector> {
                 Expanded(
                   child: TextField(
                     controller: _hCtrl,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    onChanged: (_) => _syncFromText(),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: _inputFormatters(),
+                    onChanged: (_) => _syncFromText(context),
                     decoration: _fieldDeco(theme, label: 'lbl_height'.tr),
                   ),
                 ),
                 SizedBox(width: 10.h),
                 SizedBox(
-                  width: 92.h,
-                  child: DropdownButtonFormField<String>(
-                    isExpanded: true,
-                    initialValue: _unit,
-                    decoration: _fieldDeco(theme, label: 'lbl_unit'.tr),
-                    items: [
-                      DropdownMenuItem(
-                        value: 'px',
-                        child: Text(
-                          'lbl_pixels'.tr,
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
-                        ),
-                      ),
-                    ],
-                    onChanged: (v) {
-                      if (v == null) return;
-                      setState(() => _unit = v);
-                    },
-                  ),
+                  width: 148.h,
+                  child: _unitDropdown(theme, expanded: true),
                 ),
               ],
             ),
           ],
+          SizedBox(height: 8.v),
+          Text(
+            _pixelPreview(context),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onPrimary.withValues(alpha: 0.7),
+            ),
+          ),
           SizedBox(height: 16.v),
           _sliderRow(
             context,
@@ -239,22 +327,7 @@ class _CustomSizeSelectorState extends State<CustomSizeSelector> {
           ),
           SizedBox(height: 14.v),
           FilledButton(
-            onPressed: () {
-              final w = double.tryParse(_wCtrl.text.trim());
-              final h = double.tryParse(_hCtrl.text.trim());
-              if (w == null || h == null || w <= 0 || h <= 0) {
-                showAppToast(
-                  'msg_invalid_custom_size'.tr,
-                  type: ToastificationType.warning,
-                );
-                return;
-              }
-              widget.onCreate(
-                width: w.clamp(_minDim, maxW),
-                height: h.clamp(_minDim, maxH),
-                unit: _unit,
-              );
-            },
+            onPressed: () => _submit(context),
             style: FilledButton.styleFrom(
               backgroundColor: cs.primary,
               foregroundColor: cs.onPrimary,
@@ -284,6 +357,12 @@ class _CustomSizeSelectorState extends State<CustomSizeSelector> {
     required ValueChanged<double> onChanged,
   }) {
     final theme = Theme.of(context);
+    final min = _minDim();
+    final clamped = value.clamp(min, max);
+    final divisions = _unit == 'px'
+        ? (max - min).round().clamp(1, 200)
+        : 200;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -298,7 +377,7 @@ class _CustomSizeSelectorState extends State<CustomSizeSelector> {
               ),
             ),
             Text(
-              value.toInt().toString(),
+              '${CanvasUnitUtils.formatValue(clamped, _unit)} $_unit',
               style: theme.textTheme.labelMedium?.copyWith(
                 fontWeight: FontWeight.w700,
               ),
@@ -308,10 +387,10 @@ class _CustomSizeSelectorState extends State<CustomSizeSelector> {
         SliderTheme(
           data: SliderTheme.of(context).copyWith(trackHeight: 3),
           child: Slider(
-            min: _minDim,
+            min: min,
             max: max,
-            divisions: 200,
-            value: value.clamp(_minDim, max),
+            divisions: divisions,
+            value: clamped,
             onChanged: onChanged,
           ),
         ),

@@ -1,5 +1,3 @@
-import '../../../core/app_export.dart';
-
 class RectanglelistsectionItemModel {
   RectanglelistsectionItemModel({
     this.rectangle,
@@ -8,15 +6,25 @@ class RectanglelistsectionItemModel {
     this.isFeatured = false,
     this.tier,
     this.previewDetails,
-  }) {
-    rectangle = rectangle ?? ImageConstant.imgRectangle5582;
-    id = id ?? "";
-  }
+    this.categoryName,
+    this.downloadsCount,
+    this.trendingScore,
+    this.designDataRaw,
+    this.width,
+    this.height,
+  });
+
   String? rectangle;
   String? id;
   String? name;
   bool isFeatured;
   String? tier;
-  /// Full catalog details for the preview sheet (admin / rich API).
+  /// Compact details for the preview sheet.
   String? previewDetails;
+  String? categoryName;
+  int? downloadsCount;
+  int? trendingScore;
+  String? designDataRaw;
+  int? width;
+  int? height;
 }

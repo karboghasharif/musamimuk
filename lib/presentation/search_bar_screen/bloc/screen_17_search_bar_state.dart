@@ -1,17 +1,22 @@
 part of 'screen_17_search_bar_bloc.dart';
 
 class Screen17SearchBarState extends Equatable {
-  Screen17SearchBarState(
-      {this.searchController,
-      this.screen17SearchBarModelObj,
-      this.isLoading = false,
-      this.errorMessage,
-      this.results = const []});
+  Screen17SearchBarState({
+    this.searchController,
+    this.screen17SearchBarModelObj,
+    this.isLoading = false,
+    this.errorMessage,
+    this.results = const [],
+    this.contestResults = const [],
+  });
+
   final TextEditingController? searchController;
   final Screen17SearchBarModel? screen17SearchBarModelObj;
   final bool isLoading;
   final String? errorMessage;
   final List<MediaItem> results;
+  final List<ContestItem> contestResults;
+
   @override
   List<Object?> get props => [
         searchController,
@@ -19,13 +24,16 @@ class Screen17SearchBarState extends Equatable {
         isLoading,
         errorMessage,
         results,
+        contestResults,
       ];
+
   Screen17SearchBarState copyWith({
     TextEditingController? searchController,
     Screen17SearchBarModel? screen17SearchBarModelObj,
     bool? isLoading,
     String? errorMessage,
     List<MediaItem>? results,
+    List<ContestItem>? contestResults,
   }) {
     return Screen17SearchBarState(
       searchController: searchController ?? this.searchController,
@@ -34,6 +42,7 @@ class Screen17SearchBarState extends Equatable {
       isLoading: isLoading ?? this.isLoading,
       errorMessage: errorMessage,
       results: results ?? this.results,
+      contestResults: contestResults ?? this.contestResults,
     );
   }
 }

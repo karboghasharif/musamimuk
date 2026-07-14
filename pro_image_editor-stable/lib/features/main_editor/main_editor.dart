@@ -3003,7 +3003,10 @@ class ProImageEditorState extends State<ProImageEditor>
     Layer? layer = activeLayers[index];
 
     // Check if the layer allows selection
-    if (!layer.interaction.enableSelection) return null;
+    if (!layer.interaction.enableSelection ||
+        layer.meta?[kMusamiLayerLockedMetaKey] == true) {
+      return null;
+    }
 
     if (!enableMultiSelect) layerInteractionManager.clearSelectedLayers();
 
@@ -3016,7 +3019,11 @@ class ProImageEditorState extends State<ProImageEditor>
   void selectAllLayers() {
     layerInteractionManager.setSelectedLayers(
       activeLayers
-          .where((layer) => layer.interaction.enableSelection)
+          .where(
+            (layer) =>
+                layer.interaction.enableSelection &&
+                layer.meta?[kMusamiLayerLockedMetaKey] != true,
+          )
           .map((layer) => layer.id),
     );
     _controllers.uiLayerCtrl.add(null);

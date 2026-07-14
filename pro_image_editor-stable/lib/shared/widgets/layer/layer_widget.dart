@@ -94,8 +94,14 @@ class _LayerWidgetState extends State<LayerWidget>
   late final _layerInteractionManager = widget.layerInteractionManager;
 
   /// Indicates whether the layer is selected.
-  bool get _isSelected =>
-      _layerInteractionManager?.selectedLayerIds.contains(_layer.id) ?? false;
+  bool get _isLayerLocked => _layer.meta?[kMusamiLayerLockedMetaKey] == true;
+
+  /// Indicates whether the layer is selected.
+  bool get _isSelected {
+    if (_isLayerLocked) return false;
+    return _layerInteractionManager?.selectedLayerIds.contains(_layer.id) ??
+        false;
+  }
 
   /// Flag to control the display of a move cursor.
   final _showMoveCursor = ValueNotifier(false);
@@ -183,7 +189,7 @@ class _LayerWidgetState extends State<LayerWidget>
 
   /// Handles a pointer down event on the layer.
   void _onPointerDown(PointerDownEvent event) {
-    if (GestureManager.instance.isBlocked) return;
+    if (GestureManager.instance.isBlocked || _isLayerLocked) return;
     bool isLayerSelected = _isSelected;
 
     _lastDownEvent = event;
@@ -218,6 +224,7 @@ class _LayerWidgetState extends State<LayerWidget>
 
   /// Handles a pointer up event on the layer.
   void _onPointerUp(PointerUpEvent event) {
+    if (_isLayerLocked) return;
     _longPressTimer?.cancel();
     if (GestureManager.instance.isBlocked) return;
     // Notify optional onTapUp callback
@@ -362,6 +369,11 @@ class _LayerWidgetState extends State<LayerWidget>
           child: boundaryChild,
         ),
       );
+    } else if (_isLayerLocked) {
+      boundaryChild = IgnorePointer(
+        ignoring: true,
+        child: boundaryChild,
+      );
     }
 
     return Positioned(
@@ -373,6 +385,7 @@ class _LayerWidgetState extends State<LayerWidget>
 
   Widget _buildInteractionHandlers() {
     var interaction = _layer.interaction;
+    final locked = _isLayerLocked;
     return LayerInteractionHelperWidget(
       layer: _layer,
       configs: configs,
@@ -380,8 +393,8 @@ class _LayerWidgetState extends State<LayerWidget>
       selected: _isSelected,
       onEditLayer: () => _layersService?.handleEditTap(_layer),
       forceIgnoreGestures:
-          !(interaction.enableSelection || interaction.enableEdit),
-      isInteractive: widget.isInteractive,
+          locked || !(interaction.enableSelection || interaction.enableEdit),
+      isInteractive: widget.isInteractive && !locked,
       enableVisibleOverlay: _enableVisibleOverlay,
       onScaleRotateDown: (details) => _layersService?.handleScaleRotateDown(
         context.size ?? Size.zero,

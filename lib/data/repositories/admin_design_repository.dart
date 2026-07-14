@@ -38,7 +38,7 @@ class AdminDesignListMeta {
   final int total;
 
   static AdminDesignListMeta? fromResponse(Map<String, dynamic> root) {
-    final raw = root['meta'];
+    final raw = root['meta'] ?? root['pagination'];
     if (raw is! Map) return null;
     final m = raw.cast<String, dynamic>();
     return AdminDesignListMeta(
@@ -51,7 +51,7 @@ class AdminDesignListMeta {
   }
 }
 
-/// Admin catalog: `GET /admin/designs` (auth Bearer).
+/// Public design catalog: `GET /designs` (auth Bearer).
 class AdminDesignRepository {
   AdminDesignRepository() : _api = ApiClient();
 
@@ -65,7 +65,7 @@ class AdminDesignRepository {
   }) async {
     try {
       final response = await _api.dio.get<Map<String, dynamic>>(
-        'admin/designs',
+        'designs',
         queryParameters: <String, dynamic>{
           'per_page': perPage,
           'sort': sort,
@@ -74,7 +74,7 @@ class AdminDesignRepository {
       );
       final data = response.data;
       if (data == null) return AdminDesignListFailure('Empty response');
-      final list = apiExtractDbDataList(data).map(MediaItem.fromJson).toList();
+      final list = apiExtractDataList(data).map(MediaItem.fromJson).toList();
       final meta = AdminDesignListMeta.fromResponse(data.cast<String, dynamic>());
       return AdminDesignListSuccess(
         items: list,

@@ -75,10 +75,11 @@ class LayerWidgetTextItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final computedFontSize =
-        textEditorConfigs.initFontSize * layer.scale * layer.fontScale;
+    final baseFontSize = layer.textStyle?.fontSize ??
+        (textEditorConfigs.initFontSize * layer.fontScale);
+    final effectiveFontSize = baseFontSize * layer.scale;
     final baseStyle = TextStyle(
-      fontSize: computedFontSize,
+      fontSize: effectiveFontSize,
       color: layer.color,
       overflow: TextOverflow.ellipsis,
     );
@@ -87,12 +88,12 @@ class LayerWidgetTextItem extends StatelessWidget {
 
     // Merge layer style; keep decorations, highlight, etc. Outline is driven by
     // meta so it stacks with user shadows from [TextStyle.shadows].
-    // When [TextLayer.textStyle.fontSize] is set (e.g. size slider), use it;
-    // otherwise fall back to [initFontSize] × layer scale × [fontScale].
+    // [fontSize] always respects [layer.scale] so corner drag-resize works even
+    // when a fixed size was set via the size slider.
     TextStyle finalStyle;
     if (layer.textStyle != null) {
       finalStyle = layer.textStyle!.copyWith(
-        fontSize: layer.textStyle!.fontSize ?? computedFontSize,
+        fontSize: effectiveFontSize,
         fontWeight: layer.textStyle!.fontWeight ?? baseStyle.fontWeight,
         color: baseStyle.color,
         fontFamily: layer.textStyle!.fontFamily ?? baseStyle.fontFamily,

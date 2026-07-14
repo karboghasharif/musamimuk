@@ -17,27 +17,73 @@ import '../../data/repositories/design_repository.dart';
 import '../../data/repositories/media_repository.dart';
 import '../../theme/custom_button_style.dart';
 import '../../widgets/app_navigation_drawer.dart';
+import '../../widgets/advertisement_banner.dart';
 import '../../widgets/custom_elevated_button.dart';
 import '../../widgets/custom_icon_button.dart';
 import '../../widgets/custom_text_form_field.dart';
 import 'bloc/add_new_bloc.dart';
 import 'models/add_new_model.dart';
 import 'models/gridgallery_pic_item_model.dart';
-import 'widgets/gridgallery_pic_item_widget.dart';
+import 'widgets/add_new_bookmark_panel.dart';
 import 'widgets/api_asset_bottom_sheet.dart';
 import 'widgets/design_export_encode.dart';
+import 'widgets/design_save_destination_sheet.dart';
+import 'widgets/canvas_resize_size_panel.dart';
 import 'widgets/design_save_form_dialog.dart';
 import 'widgets/design_save_success_sheet.dart';
+import 'widgets/musami_text_layer_transform_overlay.dart';
 import 'widgets/musami_text_editor_widgets.dart';
 import 'widgets/musami_text_layer_style_sheet.dart';
-import 'widgets/shapes_bottom_sheet.dart';
 import 'widgets/editor_align_arrange_sheet.dart';
+import 'widgets/screen_color_picker_overlay.dart';
 import 'widgets/editor_contextual_toolbars.dart';
+import 'widgets/editor_ai_assistant.dart';
+import 'widgets/editor_ai_compose.dart';
+import '../../background_removal/background_removal_controller.dart';
+import '../../background_removal/background_removal_loading_dialog.dart';
+import '../../background_removal/background_removal_state.dart';
+import '../../data/models/background_removal_api_models.dart';
+import '../../core/utils/design_state_history.dart';
+import 'utils/musami_layer_raster_utils.dart';
+import 'package:pro_image_editor/features/crop_rotate_editor/utils/crop_aspect_ratios.dart';
+
+/// Raster/sticker tint on [WidgetLayer.meta], applied before tune/colour-matrix.
+const String kMusamiImageTintArgbMetaKey = 'musamiImageTintArgb';
+
+/// Rounded corners for gallery chrome and user border/shadow (painted above pixels).
+const double kMusamiImageLayerRoundedCorner = 16.0;
+
+Future<Size> _musamiDecodeImageSize(Uint8List bytes) async {
+  final codec = await ui.instantiateImageCodec(bytes);
+  final frame = await codec.getNextFrame();
+  return Size(frame.image.width.toDouble(), frame.image.height.toDouble());
+}
+
+/// Identifies composers so rebuild peels old shells correctly.
+const ValueKey<String> kMusamiComposeBorderOverlayStackKey = ValueKey<String>(
+  'musami.composeBorderOverlay',
+);
+const ValueKey<String> kMusamiComposeShadowDecoratorKey = ValueKey<String>(
+  'musami.composeShadowDecor',
+);
+const ValueKey<String> kMusamiTuneFilterRepaintKey = ValueKey<String>(
+  'musami.tuneFilterRepaint',
+);
+const ValueKey<String> kMusamiGalleryPickedChromeKey = ValueKey<String>(
+  'musami.galleryPickedChrome',
+);
+
+/// Multiply tint applies unless alpha is zero or RGB is opaque white (no-op).
+bool musamiLayerImageTintAppliesFilterArgb(int tintArgb) {
+  if (((tintArgb >> 24) & 0xFF) == 0) return false;
+  return tintArgb != 0xFFFFFFFF;
+}
 
 /// Same tune definitions as the main editor (for layer [ColorFiltered] matrix).
 List<TuneAdjustmentItem> musamiTuneItemsFromConfigs(ProImageEditorConfigs c) {
-  return c.tuneEditor.tuneAdjustmentOptions ??
-      tunePresets(icons: c.tuneEditor.icons, i18n: c.i18n.tuneEditor);
+  final options = c.tuneEditor.tuneAdjustmentOptions;
+  if (options != null && options.isNotEmpty) return options;
+  return tunePresets(icons: c.tuneEditor.icons, i18n: c.i18n.tuneEditor);
 }
 
 List<TuneAdjustmentItem> musamiTuneItemsFromEditor(ProImageEditorState editor) {
@@ -74,8 +120,12 @@ List<double> musamiLayerTuneColorMatrix(
   final matrices = <List<double>>[];
   for (final item in items) {
     final v = tuneMap[item.id];
-    final value = (v ?? 0.0).clamp(item.min, item.max);
+    if (v == null || v.abs() < 1e-6) continue;
+    final value = v.clamp(item.min, item.max);
     matrices.add(item.toMatrix(value));
+  }
+  if (matrices.isEmpty) {
+    return List<double>.from(identityMatrix);
   }
   return mergeColorMatrices(filterList: const [], tuneAdjustmentList: matrices);
 }
@@ -91,6 +141,153 @@ Widget _unwrapOuterOpacityWidgets(Widget widget) {
   return w;
 }
 
+/// Drops [musamiComposeImageLayerVisualCore] wrappers so rebuilds replace tint/tune
+/// instead of nesting duplicate shells on stale subtrees.
+///
+/// Peels compose [DecoratedBox] / keyed [Stack] / [ColorFiltered], and legacy
+/// gallery chrome ([kMusamiGalleryPickedChromeKey]).
+Widget _unwrapMusamiWidgetLayerBareCore(Widget widget) {
+  var w = _unwrapOuterOpacityWidgets(widget);
+
+  bool legacyFlatComposeDecor(DecoratedBox box) {
+    final deco = box.decoration;
+    if (deco is! BoxDecoration) return false;
+    final br = deco.borderRadius;
+    if (br != null && br != BorderRadius.zero) return false;
+    return deco.border != null ||
+        (deco.boxShadow != null && deco.boxShadow!.isNotEmpty);
+  }
+
+  bool roundedComposeShadowOnly(DecoratedBox box) {
+    if (box.key != kMusamiComposeShadowDecoratorKey) return false;
+    final deco = box.decoration;
+    return deco is BoxDecoration &&
+        deco.border == null &&
+        deco.boxShadow != null &&
+        deco.boxShadow!.isNotEmpty &&
+        deco.borderRadius ==
+            BorderRadius.circular(kMusamiImageLayerRoundedCorner);
+  }
+
+  for (;;) {
+    if (w is _MusamiImageDropShadow) {
+      w = w.foreground;
+      continue;
+    }
+
+    if (w is DecoratedBox) {
+      final innerDec = w.child;
+      if (innerDec != null) {
+        // Strip legacy default gallery chrome from older layers.
+        if (w.key == kMusamiGalleryPickedChromeKey) {
+          w = innerDec;
+          continue;
+        }
+        if (roundedComposeShadowOnly(w) || legacyFlatComposeDecor(w)) {
+          w = innerDec;
+          continue;
+        }
+      }
+    }
+
+    if (w is Stack && w.key == kMusamiComposeBorderOverlayStackKey) {
+      final ch = w.children;
+      if (ch.isEmpty) break;
+      w = ch.first;
+      continue;
+    }
+
+    if (w is RepaintBoundary &&
+        w.key == kMusamiTuneFilterRepaintKey &&
+        w.child != null) {
+      w = w.child!;
+      continue;
+    }
+
+    if (w is ColorFiltered && w.child != null) {
+      w = w.child!;
+      continue;
+    }
+
+    break;
+  }
+  return w;
+}
+
+/// Alpha-aware drop shadow that follows non-transparent pixels (PNG cut-outs).
+class _MusamiImageDropShadow extends StatelessWidget {
+  const _MusamiImageDropShadow({
+    super.key,
+    required this.foreground,
+    required this.shadowSource,
+    required this.blur,
+    required this.dx,
+    required this.dy,
+    required this.strength,
+  });
+
+  final Widget foreground;
+  final Widget shadowSource;
+  final double blur;
+  final double dx;
+  final double dy;
+  final double strength;
+
+  @override
+  Widget build(BuildContext context) {
+    final sigma = (blur / 2).clamp(0.0, 40.0);
+    final shadowColor = Colors.black.withValues(
+      alpha: strength.clamp(0.0, 1.0),
+    );
+    return Stack(
+      clipBehavior: Clip.none,
+      fit: StackFit.passthrough,
+      children: [
+        Transform.translate(
+          offset: Offset(dx, dy),
+          child: ImageFiltered(
+            imageFilter: ui.ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+            child: ColorFiltered(
+              colorFilter: ColorFilter.mode(shadowColor, BlendMode.srcIn),
+              child: shadowSource,
+            ),
+          ),
+        ),
+        foreground,
+      ],
+    );
+  }
+}
+
+Widget _musamiApplyImageLayerFilters(
+  Widget coreUnwrapped,
+  Map<String, dynamic> meta,
+  List<TuneAdjustmentItem> items,
+) {
+  Widget w = coreUnwrapped;
+  final tintArgb = meta[kMusamiImageTintArgbMetaKey] as int?;
+  if (tintArgb != null && musamiLayerImageTintAppliesFilterArgb(tintArgb)) {
+    w = ColorFiltered(
+      colorFilter: ColorFilter.mode(
+        musamiColorFromArgb32(tintArgb),
+        BlendMode.modulate,
+      ),
+      child: w,
+    );
+  }
+  final matrix = musamiLayerTuneColorMatrix(meta, items);
+  if (!musamiColorMatrixIsIdentity(matrix)) {
+    w = RepaintBoundary(
+      key: kMusamiTuneFilterRepaintKey,
+      child: ColorFiltered(
+        colorFilter: ColorFilter.matrix(matrix),
+        child: w,
+      ),
+    );
+  }
+  return w;
+}
+
 /// Border + drop shadow from [meta], applied around the unwrapped layer core.
 /// Optional [tuneAdjustmentItems] must match the editor config when set (layer tune in [meta]).
 Widget musamiComposeImageLayerVisualCore(
@@ -99,14 +296,13 @@ Widget musamiComposeImageLayerVisualCore(
   List<TuneAdjustmentItem>? tuneAdjustmentItems,
 }) {
   final items = tuneAdjustmentItems ?? musamiDefaultTuneAdjustmentItems();
-  Widget w = coreUnwrapped;
-  final matrix = musamiLayerTuneColorMatrix(meta, items);
-  if (!musamiColorMatrixIsIdentity(matrix)) {
-    w = ColorFiltered(colorFilter: ColorFilter.matrix(matrix), child: w);
-  }
 
   final borderW = (meta['musamiBorderW'] as num?)?.toDouble() ?? 0;
   final shadowBlur = (meta['musamiShadowBlur'] as num?)?.toDouble() ?? 0;
+  final shadowDx = (meta['musamiShadowDx'] as num?)?.toDouble() ?? 0;
+  final shadowDy = (meta['musamiShadowDy'] as num?)?.toDouble() ?? 8;
+  final shadowStrength =
+      (meta['musamiShadowStrength'] as num?)?.toDouble() ?? 0.35;
 
   Border? border;
   if (borderW > 0) {
@@ -117,26 +313,41 @@ Widget musamiComposeImageLayerVisualCore(
     );
   }
 
-  List<BoxShadow>? shadows;
-  if (shadowBlur > 0) {
-    final dy = (meta['musamiShadowDy'] as num?)?.toDouble() ?? 6;
-    final op = (meta['musamiShadowStrength'] as num?)?.toDouble() ?? 0.35;
-    shadows = [
-      BoxShadow(
-        color: Colors.black.withValues(alpha: op.clamp(0.0, 1.0)),
-        blurRadius: shadowBlur.clamp(0.0, 80.0),
-        offset: Offset(0, dy),
+  final hasShadow = shadowBlur > 0;
+  final hasPaintedBorder = border != null;
+
+  Widget content = _musamiApplyImageLayerFilters(coreUnwrapped, meta, items);
+
+  if (hasShadow) {
+    final filtered = _musamiApplyImageLayerFilters(coreUnwrapped, meta, items);
+    content = _MusamiImageDropShadow(
+      key: kMusamiComposeShadowDecoratorKey,
+      foreground: filtered,
+      shadowSource: _musamiApplyImageLayerFilters(coreUnwrapped, meta, items),
+      blur: shadowBlur,
+      dx: shadowDx,
+      dy: shadowDy,
+      strength: shadowStrength,
+    );
+  }
+
+  if (!hasPaintedBorder) return content;
+
+  final rCompose = BorderRadius.circular(kMusamiImageLayerRoundedCorner);
+  return Stack(
+    key: kMusamiComposeBorderOverlayStackKey,
+    fit: StackFit.passthrough,
+    clipBehavior: Clip.none,
+    children: [
+      content,
+      Positioned.fill(
+        child: IgnorePointer(
+          child: DecoratedBox(
+            decoration: BoxDecoration(borderRadius: rCompose, border: border),
+          ),
+        ),
       ),
-    ];
-  }
-
-  if (border == null && (shadows == null || shadows.isEmpty)) {
-    return w;
-  }
-
-  return DecoratedBox(
-    decoration: BoxDecoration(border: border, boxShadow: shadows),
-    child: w,
+    ],
   );
 }
 
@@ -145,7 +356,7 @@ WidgetLayer musamiRebuildWidgetLayerVisuals(
   Map<String, dynamic> meta, {
   List<TuneAdjustmentItem>? tuneAdjustmentItems,
 }) {
-  final core = _unwrapOuterOpacityWidgets(current.widget);
+  final core = _unwrapMusamiWidgetLayerBareCore(current.widget);
   final opacity =
       (meta['musamiOpacity'] as num?)?.toDouble().clamp(0.0, 1.0) ?? 1.0;
   final styled = musamiComposeImageLayerVisualCore(
@@ -164,6 +375,7 @@ WidgetLayer musamiRebuildWidgetLayerVisuals(
     flipX: current.flipX,
     flipY: current.flipY,
     interaction: current.interaction,
+    exportConfigs: current.exportConfigs,
     meta: meta,
     boxConstraints: current.boxConstraints,
     groupId: current.groupId,
@@ -175,6 +387,136 @@ WidgetLayer musamiRebuildWidgetLayerVisuals(
     exitCurve: current.exitCurve,
     transitionBuilder: current.transitionBuilder,
   );
+}
+
+/// Updates a widget layer without clearing the current selection (live preview).
+/// Pass [recordHistory: true] when the gesture ends so undo/redo stays correct.
+void musamiReplaceWidgetLayerOnEditor(
+  ProImageEditorState editor,
+  WidgetLayer updated, {
+  bool recordHistory = false,
+}) {
+  final idx = editor.activeLayers.indexWhere((l) => l.id == updated.id);
+  if (idx < 0) return;
+
+  if (recordHistory) {
+    final layerId = updated.id;
+    editor.replaceLayer(index: idx, layer: updated);
+    editor.layerInteractionManager.selectedLayerId = layerId;
+    return;
+  }
+
+  editor.activeLayers[idx] = updated;
+  editor.setState(() {});
+}
+
+Image? _musamiTryExtractBareImage(Widget bare) {
+  if (bare is Image) return bare;
+  if (bare is SizedBox && bare.child is Image) {
+    return bare.child as Image;
+  }
+  return null;
+}
+
+/// Re-wraps the bare widget core with explicit width/height for non-uniform stretch.
+Widget musamiResizeWidgetLayerCore(
+  Widget wrappedWidget, {
+  required double width,
+  required double aspect,
+}) {
+  final bare = _unwrapMusamiWidgetLayerBareCore(wrappedWidget);
+  final height = width * aspect;
+  final image = _musamiTryExtractBareImage(bare);
+  if (image != null) {
+    return SizedBox(
+      width: width,
+      height: height,
+      child: Image(
+        image: image.image,
+        fit: BoxFit.fill,
+        gaplessPlayback: image.gaplessPlayback,
+        errorBuilder:
+            image.errorBuilder ??
+            (_, _, _) => const Icon(Icons.broken_image, size: 48),
+      ),
+    );
+  }
+  return SizedBox(
+    width: width,
+    height: height,
+    child: FittedBox(fit: BoxFit.fill, child: bare),
+  );
+}
+
+double musamiWidgetLayerAspect(WidgetLayer layer) {
+  return (layer.meta?['musamiAspect'] as num?)?.toDouble() ?? 1.0;
+}
+
+  /// Applies width / aspect / scale / offset to a widget layer in place (live drag).
+  void musamiMutateWidgetLayerGeometry(
+  ProImageEditorState editor,
+  WidgetLayer layer, {
+  required double width,
+  required double aspect,
+  required double scale,
+  required Offset offset,
+}) {
+  final meta = layer.meta == null
+      ? <String, dynamic>{'musamiAspect': aspect}
+      : (Map<String, dynamic>.from(layer.meta!)..['musamiAspect'] = aspect);
+
+  final core = musamiResizeWidgetLayerCore(
+    layer.widget,
+    width: width,
+    aspect: aspect,
+  );
+  final preliminary = layer.copyWith(
+    widget: core,
+    width: width,
+    scale: scale,
+    offset: offset,
+    meta: meta,
+  );
+  final rebuilt = musamiRebuildWidgetLayerVisuals(
+    preliminary,
+    meta,
+    tuneAdjustmentItems: musamiTuneItemsFromEditor(editor),
+  );
+
+  layer
+    ..widget = rebuilt.widget
+    ..width = rebuilt.width
+    ..scale = rebuilt.scale
+    ..offset = rebuilt.offset
+    ..meta = rebuilt.meta;
+}
+
+/// Applies width / aspect / scale / offset to a widget layer and rebuilds visuals.
+void musamiApplyWidgetLayerGeometry(
+  ProImageEditorState editor,
+  WidgetLayer layer, {
+  required double width,
+  required double aspect,
+  required double scale,
+  required Offset offset,
+  bool recordHistory = false,
+}) {
+  musamiMutateWidgetLayerGeometry(
+    editor,
+    layer,
+    width: width,
+    aspect: aspect,
+    scale: scale,
+    offset: offset,
+  );
+  if (recordHistory) {
+    final layerId = layer.id;
+    final idx = editor.activeLayers.indexWhere((l) => l.id == layerId);
+    if (idx >= 0) {
+      editor.replaceLayer(index: idx, layer: layer);
+      editor.layerInteractionManager.selectedLayerId = layerId;
+    }
+  }
 }
 
 /// Always-visible brush / line width control + default paint mode tools.
@@ -257,9 +599,7 @@ Widget _musamiPaintBrushSizeRow(
             child: SliderTheme(
               data: SliderTheme.of(context).copyWith(
                 trackHeight: 3,
-                thumbShape: const RoundSliderThumbShape(
-                  enabledThumbRadius: 8,
-                ),
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
               ),
               child: Slider(
                 value: editor.strokeWidth.clamp(
@@ -342,7 +682,7 @@ class _MusamiImageAdjustContextPanelState
     }
   }
 
-  void _apply() {
+  void _apply({bool recordHistory = false}) {
     final current = _layer();
     if (current == null) return;
     final meta = current.meta == null
@@ -363,14 +703,11 @@ class _MusamiImageAdjustContextPanelState
       meta,
       tuneAdjustmentItems: _items,
     );
-    final idx = widget.editor.activeLayers.indexWhere(
-      (l) => l.id == current.id,
+    musamiReplaceWidgetLayerOnEditor(
+      widget.editor,
+      updated,
+      recordHistory: recordHistory,
     );
-    if (idx >= 0) {
-      widget.editor.replaceLayer(index: idx, layer: updated);
-      widget.editor.layerInteractionManager.selectedLayerId = updated.id;
-      widget.editor.setState(() {});
-    }
   }
 
   void _reset() {
@@ -378,7 +715,7 @@ class _MusamiImageAdjustContextPanelState
       _values[item.id] = 0.0;
     }
     setState(() {});
-    _apply();
+    _apply(recordHistory: true);
   }
 
   @override
@@ -465,8 +802,9 @@ class _MusamiImageAdjustContextPanelState
                         divisions: item.divisions > 0 ? item.divisions : null,
                         onChanged: (nv) {
                           setState(() => _values[item.id] = nv);
-                          _apply();
+                          _apply(recordHistory: false);
                         },
+                        onChangeEnd: (_) => _apply(recordHistory: true),
                       ),
                     ),
                   ],
@@ -501,11 +839,20 @@ class AddNewScreen extends StatefulWidget {
     final width = arguments?['width'] as double? ?? 400.0;
     final unit = arguments?['unit'] as String? ?? 'px';
     final presetName = arguments?['presetName'] as String? ?? 'Custom Size';
+    final backgroundImageBytes =
+        arguments?['backgroundImageBytes'] as Uint8List?;
+    final designHistoryJson = arguments?['designHistoryJson'] as String?;
 
     return BlocProvider<AddNewBloc>(
       create: (context) =>
           AddNewBloc(AddNewState(screen3AddNewModelObj: AddNewModel()))
-            ..add(Screen3AddNewInitialEvent(height: height, width: width)),
+            ..add(Screen3AddNewInitialEvent(
+              height: height,
+              width: width,
+              unit: unit,
+              backgroundImageBytes: backgroundImageBytes,
+              designHistoryJson: designHistoryJson,
+            )),
       child: AddNewScreen(
         height: height,
         width: width,
@@ -521,6 +868,16 @@ class AddNewScreen extends StatefulWidget {
 
 class _AddNewScreenState extends State<AddNewScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  final GlobalKey _editorRepaintKey = GlobalKey();
+  final BackgroundRemovalController _backgroundRemovalController =
+      BackgroundRemovalController();
+  final EditorAiAssistant _editorAiAssistant = EditorAiAssistant();
+  final EditorAiCompose _editorAiCompose = EditorAiCompose();
+  @override
+  void dispose() {
+    _backgroundRemovalController.dispose();
+    super.dispose();
+  }
 
   static const int _doubleTapThresholdMs = 320;
   String? _lastTapLayerId;
@@ -536,38 +893,10 @@ class _AddNewScreenState extends State<AddNewScreen> {
     return ok;
   }
 
-  static const double _kStickerLayerSize = 180.0;
-  static const double _kStickerCornerRadius = 16.0;
+  /// Default scale for images added from device gallery (% of intrinsic size).
+  static const double _kGalleryLayerDefaultScale = 0.2;
 
-  Widget _wrapAsStickerChrome(BuildContext context, Widget child) {
-    final cs = Theme.of(context).colorScheme;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(_kStickerCornerRadius),
-        border: Border.all(
-          color: cs.onSurface.withValues(alpha: 0.14),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.18),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(_kStickerCornerRadius),
-        child: child,
-      ),
-    );
-  }
-
-  Future<Size> _decodeImageSize(Uint8List bytes) async {
-    final codec = await ui.instantiateImageCodec(bytes);
-    final frame = await codec.getNextFrame();
-    return Size(frame.image.width.toDouble(), frame.image.height.toDouble());
-  }
+  Future<Size> _decodeImageSize(Uint8List bytes) => _musamiDecodeImageSize(bytes);
 
   String _musamiImageLayerKind(WidgetLayer layer) {
     final raw = layer.meta?['musamiLayerKind'] as String?;
@@ -623,18 +952,11 @@ class _AddNewScreenState extends State<AddNewScreen> {
     GlobalKey<ProImageEditorState>? editorKey,
     MediaType type,
   ) {
-    return showModalBottomSheet<WidgetLayer>(
+    return showApiAssetBottomSheet<WidgetLayer>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => SizedBox(
-        height: MediaQuery.sizeOf(ctx).height * 0.75,
-        child: ApiAssetBottomSheet(
-          editorKey: editorKey,
-          type: type,
-          pickOnly: true,
-        ),
-      ),
+      editorKey: editorKey,
+      type: type,
+      pickOnly: true,
     );
   }
 
@@ -646,6 +968,7 @@ class _AddNewScreenState extends State<AddNewScreen> {
     final opacity =
         (existing.meta?['musamiOpacity'] as num?)?.toDouble() ?? 1.0;
     final meta = Map<String, dynamic>.from(picked.meta ?? {});
+    meta.removeWhere((k, _) => musamiIsCropMetaKey(k));
     meta['musamiOpacity'] = opacity;
     final kind = picked.meta?['musamiLayerKind'] as String?;
     meta['musamiLayerKind'] = (kind != null && kind.isNotEmpty)
@@ -657,26 +980,31 @@ class _AddNewScreenState extends State<AddNewScreen> {
         'musamiBorderW',
         'musamiBorderArgb',
         'musamiShadowBlur',
+        'musamiShadowDx',
         'musamiShadowDy',
         'musamiShadowStrength',
+        kMusamiImageTintArgbMetaKey,
       ]) {
         if (ex.containsKey(k)) meta[k] = ex[k];
       }
     }
 
-    final core = _unwrapOuterOpacityWidgets(picked.widget);
+    final core = _unwrapMusamiWidgetLayerBareCore(picked.widget);
     final styled = musamiComposeImageLayerVisualCore(core, meta);
     final updated = WidgetLayer(
       id: existing.id,
       key: existing.key,
       widget: Opacity(opacity: opacity.clamp(0.0, 1.0), child: styled),
-      width: existing.width,
+      width: picked.width ?? existing.width,
       offset: existing.offset,
       rotation: existing.rotation,
-      scale: existing.scale,
+      scale: picked.width != null ? picked.scale : existing.scale,
       flipX: existing.flipX,
       flipY: existing.flipY,
       interaction: existing.interaction,
+      exportConfigs: picked.exportConfigs.hasParameter
+          ? picked.exportConfigs
+          : existing.exportConfigs,
       meta: meta,
       boxConstraints: existing.boxConstraints,
       groupId: existing.groupId,
@@ -976,17 +1304,11 @@ class _AddNewScreenState extends State<AddNewScreen> {
     return SizedBox(
       width: width,
       height: height,
-      child: _wrapAsStickerChrome(
-        context,
-        ColoredBox(
-          color: Colors.transparent,
-          child: Image(
-            image: image,
-            fit: BoxFit.contain,
-            gaplessPlayback: true,
-            errorBuilder: (_, _, _) => const Icon(Icons.broken_image, size: 48),
-          ),
-        ),
+      child: Image(
+        image: image,
+        fit: BoxFit.fill,
+        gaplessPlayback: true,
+        errorBuilder: (_, _, _) => const Icon(Icons.broken_image, size: 48),
       ),
     );
   }
@@ -1002,12 +1324,15 @@ class _AddNewScreenState extends State<AddNewScreen> {
               final width = widget.width;
               final height = widget.height;
               if (state.transparentBytes == null) {
-                // Show a loading indicator or handle the null state
-                return const CircularProgressIndicator();
+                return Scaffold(
+                  backgroundColor: appTheme.blueGray90007,
+                  body: const AppLoadingBlock(),
+                );
               }
 
               return Scaffold(
                 key: _scaffoldKey,
+                backgroundColor: appTheme.blueGray90007,
                 drawer: AppNavigationDrawer(
                   key: ValueKey<Object>(
                     Object.hash(
@@ -1019,118 +1344,131 @@ class _AddNewScreenState extends State<AddNewScreen> {
                 ),
                 body: Stack(
                   children: [
-                    ProImageEditor.memory(
-                      key: state.editorKey,
-                      state.transparentBytes!,
-                      callbacks: ProImageEditorCallbacks(
-                        onImageEditingComplete: (Uint8List bytes) async {
-                          // Dismiss ProImageEditor loading overlay before any await.
-                          // Otherwise the modal barrier blocks the save dialog
-                          // until the entire save pipeline finishes (or a debug tap).
-                          LoadingDialog.instance.hide();
-                          if (!context.mounted) return;
-                          final w = state.selectedwidth ?? width;
-                          final h = state.selectedheight ?? height;
-                          await _runPostExportSavePipeline(
-                            context: context,
-                            imageBytes: bytes,
-                            width: w.toInt(),
-                            height: h.toInt(),
+                    RepaintBoundary(
+                      key: _editorRepaintKey,
+                      child: Stack(
+                        children: [
+                          Positioned.fill(
+                            child: _buildEditorWithTransparencyPreview(
+                              context: context,
+                              state: state,
+                              width: width,
+                              height: height,
+                            ),
+                          ),
+                          if (!state.isScreenColorPicking &&
+                              state.showbottomContainer == '1')
+                            _buildColumnBookmark(context, state),
+                          if (!state.isScreenColorPicking &&
+                              state.showbottomContainer == '2')
+                            _buildColumnSelectSize(context, state),
+                          if (!state.isScreenColorPicking &&
+                              state.showbottomContainer == '4')
+                            _buildBgColorOverlay(context, state),
+                          if (!state.isScreenColorPicking &&
+                              state.showbottomContainer == '2')
+                            CustomImageView(
+                              imagePath: ImageConstant.imgPolygon1,
+                              height: 47.v,
+                              width: 103.h,
+                              alignment: Alignment.bottomLeft,
+                              margin: EdgeInsets.only(left: 106.h),
+                              fit: BoxFit.cover,
+                            ),
+                          if (!state.isScreenColorPicking &&
+                              state.showbottomContainer == '1')
+                            CustomImageView(
+                              imagePath: ImageConstant.imgPolygon1,
+                              height: 47.v,
+                              width: 103.h,
+                              alignment: Alignment.bottomLeft,
+                              margin: EdgeInsets.only(left: 26.h),
+                              fit: BoxFit.cover,
+                            ),
+                          if (!state.isScreenColorPicking &&
+                              state.showbottomContainer == '4')
+                            CustomImageView(
+                              imagePath: ImageConstant.imgPolygon1,
+                              height: 47.v,
+                              width: 103.h,
+                              alignment: Alignment.bottomLeft,
+                              margin: EdgeInsets.only(left: 290.h),
+                              fit: BoxFit.cover,
+                            ),
+                        ],
+                      ),
+                    ),
+                    if (state.isScreenColorPicking)
+                      ScreenColorPickerOverlay(
+                        repaintBoundaryKey: _editorRepaintKey,
+                        onColorPicked: (color) {
+                          context.read<AddNewBloc>().add(
+                            SetBgColorEvent(color: color),
+                          );
+                          context.read<AddNewBloc>().add(
+                            EndScreenColorPickEvent(),
                           );
                         },
-                        mainEditorCallbacks: MainEditorCallbacks(
-                          onSelectedLayerChanged: (id) {
+                        onCancel: () {
+                          context.read<AddNewBloc>().add(
+                            EndScreenColorPickEvent(),
+                          );
+                        },
+                      ),
+                    if (!state.isScreenColorPicking &&
+                        state.showbottomContainer == '0' &&
+                        state.activeToolbarMode == 'default')
+                      Positioned(
+                        right: 16.h,
+                        bottom: 88.v,
+                        child: FloatingActionButton.extended(
+                          heroTag: 'editor_ai_compose_fab',
+                          backgroundColor:
+                              Theme.of(context).colorScheme.primary,
+                          foregroundColor: Colors.black,
+                          onPressed: () {
                             final editor = state.editorKey?.currentState;
                             if (editor == null) return;
-                            final selectedId = id.trim();
-                            if (selectedId.isEmpty) {
-                              context.read<AddNewBloc>().add(
-                                EditorClearSelectionEvent(),
-                              );
-                              return;
-                            }
-                            final Layer? layer = editor.activeLayers
-                                .cast<Layer?>()
-                                .firstWhere(
-                                  (l) => l?.id == selectedId,
-                                  orElse: () => null,
-                                );
-                            final type = switch (layer) {
-                              TextLayer() => 'text',
-                              WidgetLayer() => 'image',
-                              PaintLayer() => 'shape',
-                              _ => null,
-                            };
-                            context.read<AddNewBloc>().add(
-                              EditorSelectionChangedEvent(
-                                selectedElementId: selectedId,
-                                selectedElementType: type,
-                              ),
-                            );
+                            _openEditorAiCompose(context, editor);
                           },
-                          onLayerTapUp: (layer) {
-                            if (layer is! TextLayer) return;
-                            final editor = state.editorKey?.currentState;
-                            if (editor == null) return;
-
-                            final isDoubleTap = _isDoubleTapOnSameLayer(
-                              layer.id,
-                            );
-
-                            if (!isDoubleTap) return;
-                            editor.editTextLayer(layer);
-                          },
+                          icon: Icon(
+                            Icons.draw_rounded,
+                            size: AppDs.iconSm.adaptSize,
+                          ),
+                          label: Text(
+                            'lbl_ai_compose'.tr,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12.fSize,
+                            ),
+                          ),
                         ),
                       ),
-                      configs: _musamiProImageEditorConfigs(context),
-                    ),
-
-                    state.showbottomContainer == '1'
-                        ? _buildColumnBookmark(context, state)
-                        : const SizedBox(),
-                    state.showbottomContainer == '2'
-                        ? _buildColumnSelectSize(context, state)
-                        : const SizedBox(),
-                    state.showbottomContainer == '4'
-                        ? _buildBgColorOverlay(context, state)
-                        : const SizedBox(),
-                    state.showbottomContainer == '2'
-                        ? CustomImageView(
-                            imagePath: ImageConstant.imgPolygon1,
-                            height: 47.v,
-                            width: 103.h,
-                            alignment: Alignment.bottomLeft,
-                            margin: EdgeInsets.only(left: 106.h),
-                            fit: BoxFit.cover,
-                          )
-                        : const SizedBox(),
-                    state.showbottomContainer == '1'
-                        ? CustomImageView(
-                            imagePath: ImageConstant.imgPolygon1,
-                            height: 47.v,
-                            width: 103.h,
-                            alignment: Alignment.bottomLeft,
-                            margin: EdgeInsets.only(left: 26.h),
-                            fit: BoxFit.cover,
-                          )
-                        : const SizedBox(),
-                    state.showbottomContainer == '4'
-                        ? CustomImageView(
-                            imagePath: ImageConstant.imgPolygon1,
-                            height: 47.v,
-                            width: 103.h,
-                            alignment: Alignment.bottomLeft,
-                            margin: EdgeInsets.only(left: 290.h),
-                            fit: BoxFit.cover,
-                          )
-                        : const SizedBox(),
                   ],
                 ),
                 bottomNavigationBar: state.activeToolbarMode == 'text'
                     ? _buildTextContextBottomBar(context, state)
                     : state.activeToolbarMode == 'image'
                     ? _buildImageContextBottomBar(context, state)
-                    : Padding(
+                    : Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Visibility(
+                            visible: state.showbottomContainer == '0',
+                            maintainState: true,
+                            maintainAnimation: true,
+                            child: Padding(
+                              padding: EdgeInsets.fromLTRB(16.h, 4.v, 16.h, 0),
+                              child: AdvertisementBanner(
+                                key: const ValueKey('design_editor_ad_banner'),
+                                placement: 'design_editor',
+                                limit: 3,
+                                height: 48.v,
+                                autoAdvanceSeconds: 8,
+                              ),
+                            ),
+                          ),
+                          Padding(
                         padding: EdgeInsets.symmetric(
                           horizontal: 49.h,
                           vertical: 10.v,
@@ -1292,6 +1630,8 @@ class _AddNewScreenState extends State<AddNewScreen> {
                           ),
                         ),
                       ),
+                        ],
+                      ),
               );
             },
           ),
@@ -1303,6 +1643,14 @@ class _AddNewScreenState extends State<AddNewScreen> {
   Widget _buildTextContextBottomBar(BuildContext context, AddNewState state) {
     final editor = state.editorKey?.currentState;
     if (editor == null) return const SizedBox.shrink();
+
+    final selectedId = state.selectedElementId;
+    if (selectedId != null) {
+      final layer = _editorFindLayer(editor, selectedId);
+      if (layer != null && _editorLayerInteractionBlocked(layer)) {
+        return const SizedBox.shrink();
+      }
+    }
 
     TextLayer? selectedTextLayer() {
       final id = state.selectedElementId;
@@ -1609,11 +1957,14 @@ class _AddNewScreenState extends State<AddNewScreen> {
     }
 
     void pickTextColor() {
-      musamiShowColorPickerGrid(
+      final layer = selectedTextLayer();
+      if (layer == null) return;
+      final initial = layer.textStyle?.color ?? layer.color;
+      musamiShowLayerTextColorPicker(
         context,
         title: 'lbl_pick_text_color'.tr,
-        palette: kMusamiTextColorPalette,
-        onPick: (c) {
+        initialColor: initial,
+        onColorChanged: (c) {
           final l = selectedTextLayer();
           if (l == null) return;
           applyTextStyle(
@@ -1626,21 +1977,33 @@ class _AddNewScreenState extends State<AddNewScreen> {
     }
 
     void pickTextBackgroundColor() {
-      final palette = <Color>[
-        Colors.transparent,
-        ...kMusamiTextBackgroundPalette,
-      ];
-      musamiShowColorPickerGrid(
+      final layer = selectedTextLayer();
+      if (layer == null) return;
+      musamiShowLayerTextBackgroundPicker(
         context,
         title: 'lbl_pick_text_background'.tr,
-        palette: palette,
-        onPick: (c) {
+        currentBackground: layer.textStyle?.backgroundColor,
+        onBackgroundChanged: (bg) {
           final l = selectedTextLayer();
           if (l == null) return;
-          final bg = c.a <= 0.01 ? null : c;
-          applyTextStyle(
+          // [TextStyle.copyWith(backgroundColor: null)] does not clear — use an
+          // explicit alpha-zero colour. [RoundedBackgroundText] also reads
+          // [TextLayer.background] for the box behind the text, so clear both.
+          final fill = bg ?? Colors.transparent;
+          final clear = fill.a < 0.01;
+          final nextStyle = (l.textStyle ?? const TextStyle()).copyWith(
+            backgroundColor: clear ? Colors.transparent : fill,
+          );
+          editor.applyTextLayerChanges(
             l,
-            (l.textStyle ?? const TextStyle()).copyWith(backgroundColor: bg),
+            l.copyWith(
+              textStyle: nextStyle,
+              color: nextStyle.color ?? l.color,
+              background: clear ? Colors.transparent : fill,
+              colorMode: clear
+                  ? LayerBackgroundMode.onlyColor
+                  : LayerBackgroundMode.backgroundAndColor,
+            ),
           );
           editor.setState(() {});
         },
@@ -1648,15 +2011,17 @@ class _AddNewScreenState extends State<AddNewScreen> {
     }
 
     void pickOutlineColor() {
-      musamiShowColorPickerGrid(
+      final layer = selectedTextLayer();
+      if (layer == null) return;
+      if (state.textContextSecondaryPanel != 'stroke') {
+        setTextSecondaryPanel('stroke');
+      }
+      musamiShowLayerTextColorPicker(
         context,
-        title: 'Outline color',
-        palette: kMusamiTextColorPalette,
-        onPick: (c) {
+        title: 'Outline colour',
+        initialColor: currentStrokeColor(layer) ?? const Color(0xFF000000),
+        onColorChanged: (c) {
           applyStrokeColor(c);
-          if (state.textContextSecondaryPanel != 'stroke') {
-            setTextSecondaryPanel('stroke');
-          }
         },
       );
     }
@@ -1756,29 +2121,399 @@ class _AddNewScreenState extends State<AddNewScreen> {
           copyTextLayer: _copyTextLayer,
         );
       },
-      onColor: () {
-        final layer = selectedTextLayer();
-        if (layer == null) return;
-        musamiShowColorPickerGrid(
-          context,
-          title: 'lbl_pick_text_color'.tr,
-          palette: kMusamiTextColorPalette,
-          onPick: (c) {
-            final live = selectedTextLayer();
-            if (live == null) return;
-            applyTextStyle(
-              live,
-              (live.textStyle ?? const TextStyle()).copyWith(color: c),
-            );
-          },
-        );
-      },
+      onColor: pickTextColor,
     );
+  }
+
+  /// Opens the bundled [CropRotateEditor] on the selected layer's raster bytes.
+  /// Cancel/back closes the route without mutating the layer; Done replaces the
+  /// in-memory bitmap (destructive) while preserving transform, z-order, and
+  /// Musami meta-driven styling (opacity, border, shadow, tune matrix).
+  Future<void> _openWidgetLayerCropRaster(
+    BuildContext context,
+    ProImageEditorState editor,
+    WidgetLayer layer,
+  ) async {
+    final raw = musamiTryExtractMemoryImageBytes(layer.widget);
+    if (raw == null || raw.isEmpty) {
+      if (context.mounted) {
+        showAppToast(
+          'This layer cannot be cropped.',
+          type: ToastificationType.warning,
+        );
+      }
+      return;
+    }
+
+    final theme = Theme.of(context);
+    final cropRotateOnly = ProImageEditorConfigs(
+      i18n: I18n(
+        doneLoadingMsg: 'msg_saving_your_design'.tr,
+        cropRotateEditor: const I18nCropRotateEditor(
+          bottomNavigationBarText: 'Crop and rotate',
+          done: 'Done',
+          cancel: 'Cancel',
+          back: 'Back',
+          reset: 'Reset',
+          undo: 'Undo',
+          redo: 'Redo',
+          rotate: 'Rotate',
+          flip: 'Flip',
+          ratio: 'Ratio',
+        ),
+      ),
+      cropRotateEditor: CropRotateEditorConfigs(
+        enableProvideImageInfos: true,
+        initAspectRatio: CropAspectRatios.custom,
+        showLayers: false,
+        enableTransformLayers: false,
+        aspectRatios: const [
+          AspectRatioItem(text: 'Free', value: -1),
+          AspectRatioItem(text: 'Original', value: 0.0),
+          AspectRatioItem(text: '1:1', value: 1.0),
+          AspectRatioItem(text: '4:5', value: 4.0 / 5.0),
+          AspectRatioItem(text: '16:9', value: 16.0 / 9.0),
+        ],
+        tools: const [
+          CropRotateTool.rotate,
+          CropRotateTool.flip,
+          CropRotateTool.aspectRatio,
+          CropRotateTool.reset,
+        ],
+      ),
+    );
+
+    await Navigator.of(context, rootNavigator: true).push<void>(
+      MaterialPageRoute<void>(
+        builder: (routeContext) => CropRotateEditor.memory(
+          raw,
+          initConfigs: CropRotateEditorInitConfigs(
+            theme: theme,
+            configs: cropRotateOnly,
+            convertToUint8List: true,
+            enableCloseButton: true,
+            enablePopWhenDone: false,
+            callbacks: ProImageEditorCallbacks(
+              onImageEditingComplete: (Uint8List outBytes) async {
+                if (outBytes.isEmpty) return;
+                final stableContext = this.context;
+                if (!stableContext.mounted) return;
+
+                final tuneItems = musamiTuneItemsFromEditor(editor);
+                final decodedSize = await _decodeImageSize(outBytes);
+                if (!stableContext.mounted) return;
+
+                final provider = MemoryImage(outBytes);
+                await precacheImage(provider, stableContext);
+                if (!stableContext.mounted) return;
+
+                final meta = layer.meta == null
+                    ? <String, dynamic>{}
+                    : Map<String, dynamic>.from(layer.meta!);
+                meta.removeWhere((k, _) => musamiIsCropMetaKey(k));
+                if (decodedSize.width > 0 && decodedSize.height > 0) {
+                  meta['musamiAspect'] = decodedSize.height / decodedSize.width;
+                }
+
+                final newCore = _buildGalleryStickerWidget(
+                  stableContext,
+                  image: provider,
+                  width: decodedSize.width,
+                  height: decodedSize.height,
+                );
+
+                final preliminary = layer.copyWith(
+                  widget: newCore,
+                  width: decodedSize.width,
+                  meta: meta,
+                );
+                final updated = musamiRebuildWidgetLayerVisuals(
+                  preliminary,
+                  meta,
+                  tuneAdjustmentItems: tuneItems,
+                );
+
+                final idx = editor.activeLayers.indexWhere(
+                  (l) => l.id == layer.id,
+                );
+                if (idx >= 0) {
+                  editor.replaceLayer(index: idx, layer: updated);
+                  editor.layerInteractionManager.selectedLayerId = updated.id;
+                  editor.setState(() {});
+                }
+              },
+              onCloseEditor: (_) {
+                if (Navigator.of(routeContext).canPop()) {
+                  Navigator.of(routeContext).pop();
+                }
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _applyBackgroundRemovedToWidgetLayer({
+    required BuildContext context,
+    required ProImageEditorState editor,
+    required WidgetLayer layer,
+    required Uint8List bytes,
+  }) async {
+    if (bytes.isEmpty || !context.mounted) return;
+
+    final tuneItems = musamiTuneItemsFromEditor(editor);
+    final provider = MemoryImage(bytes);
+    await precacheImage(provider, context);
+    if (!context.mounted) return;
+
+    final meta = layer.meta == null
+        ? <String, dynamic>{}
+        : Map<String, dynamic>.from(layer.meta!);
+    meta.removeWhere((k, _) => musamiIsCropMetaKey(k));
+
+    final displayWidth = layer.width ?? 200.0;
+    final aspect = musamiWidgetLayerAspect(layer);
+
+    final newCore = _buildGalleryStickerWidget(
+      context,
+      image: provider,
+      width: displayWidth,
+      height: displayWidth * aspect,
+    );
+
+    final preliminary = layer.copyWith(
+      widget: newCore,
+      width: displayWidth,
+      offset: layer.offset,
+      rotation: layer.rotation,
+      scale: layer.scale,
+      flipX: layer.flipX,
+      flipY: layer.flipY,
+      meta: meta,
+    );
+    final updated = musamiRebuildWidgetLayerVisuals(
+      preliminary,
+      meta,
+      tuneAdjustmentItems: tuneItems,
+    );
+
+    final idx = editor.activeLayers.indexWhere((l) => l.id == layer.id);
+    if (idx >= 0) {
+      editor.replaceLayer(index: idx, layer: updated);
+      editor.layerInteractionManager.selectedLayerId = updated.id;
+      editor.setState(() {});
+    }
+  }
+
+  String _localizedBackgroundRemovalError(BackgroundRemovalState state) {
+    switch (state.errorKind) {
+      case BackgroundRemovalErrorKind.invalidFormat:
+        return 'msg_bg_removal_invalid_format'.tr;
+      case BackgroundRemovalErrorKind.fileTooLarge:
+        return 'msg_bg_removal_file_too_large'.tr;
+      case BackgroundRemovalErrorKind.timeout:
+        return 'msg_bg_removal_timeout'.tr;
+      case BackgroundRemovalErrorKind.network:
+        return 'msg_bg_removal_network_error'.tr;
+      case BackgroundRemovalErrorKind.apiFailure:
+      case null:
+        return 'msg_bg_removal_api_failure'.tr;
+    }
+  }
+
+  String _editorAiLanguageLabel() {
+    switch (appLocaleNotifier.languageCode) {
+      case 'ar':
+        return 'Arabic';
+      case 'ur':
+        return 'Urdu';
+      default:
+        return 'English';
+    }
+  }
+
+  String _describeEditorBackground(AddNewState state) {
+    if (state.pickedImage != null) {
+      return 'user image background';
+    }
+    if (state.isBackgroundTransparent) {
+      return 'transparent / checkerboard';
+    }
+    final color = state.selectedBgColor;
+    if (color == null) return 'default background';
+    if ((color.a) == 0) return 'transparent';
+    final hex =
+        '#${color.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}';
+    return 'solid color $hex';
+  }
+
+  Future<void> _openEditorAiCompose(
+    BuildContext context,
+    ProImageEditorState editor,
+  ) async {
+    await _editorAiCompose.openCompose(
+      context: context,
+      editor: editor,
+    );
+  }
+
+  Future<void> _openEditorAiAssist(
+    BuildContext context,
+    ProImageEditorState editor,
+  ) async {
+    final state = context.read<AddNewBloc>().state;
+    final lang = appLocaleNotifier.languageCode;
+    final rtl = lang == 'ar' || lang == 'ur';
+    await _editorAiAssistant.openAssist(
+      context: context,
+      editor: editor,
+      presetName: widget.presetName,
+      width: widget.width.round(),
+      height: widget.height.round(),
+      bgDescription: _describeEditorBackground(state),
+      languageLabel: _editorAiLanguageLabel(),
+      rtl: rtl,
+      onRemoveBackground: (layer) => _runEditorBackgroundRemoval(
+        context: context,
+        editor: editor,
+        layer: layer,
+      ),
+    );
+  }
+
+  Future<void> _runEditorBackgroundRemoval({
+    required BuildContext context,
+    required ProImageEditorState editor,
+    required WidgetLayer layer,
+  }) async {
+    if (_backgroundRemovalController.isBusy) return;
+
+    final bytes = await musamiResolveRasterBytesForBackgroundRemoval(
+      layer.widget,
+    );
+    if (!context.mounted) return;
+
+    if (bytes == null || bytes.isEmpty) {
+      showAppToast(
+        'msg_background_removal_unsupported_image'.tr,
+        type: ToastificationType.warning,
+      );
+      return;
+    }
+
+    final networkUrl = musamiTryExtractNetworkImageUrl(layer.widget);
+    final sourceFilename = networkUrl != null
+        ? Uri.tryParse(networkUrl)?.pathSegments.lastOrNull
+        : null;
+
+    BackgroundRemovalLoadingDialog.show(
+      context,
+      previewBytes: bytes,
+      controller: _backgroundRemovalController,
+    );
+    await WidgetsBinding.instance.endOfFrame;
+
+    Uint8List? resultBytes;
+    try {
+      resultBytes = await _backgroundRemovalController.removeBackground(
+        bytes,
+        sourceFilename: sourceFilename,
+      );
+    } finally {
+      if (context.mounted) {
+        BackgroundRemovalLoadingDialog.hide(context);
+      }
+    }
+    if (!context.mounted) return;
+
+    if (resultBytes != null) {
+      await _applyBackgroundRemovedToWidgetLayer(
+        context: context,
+        editor: editor,
+        layer: layer,
+        bytes: resultBytes,
+      );
+      if (!context.mounted) return;
+      showAppToast(
+        'msg_bg_removal_success'.tr,
+        type: ToastificationType.success,
+      );
+      _backgroundRemovalController.reset();
+      return;
+    }
+
+    final errorMessage = _localizedBackgroundRemovalError(
+      _backgroundRemovalController.state,
+    );
+    showAppToast(
+      errorMessage,
+      type: ToastificationType.error,
+    );
+    _backgroundRemovalController.reset();
+  }
+
+  Future<void> _applyRasterBytesToWidgetLayer({
+    required BuildContext context,
+    required ProImageEditorState editor,
+    required WidgetLayer layer,
+    required Uint8List bytes,
+  }) async {
+    if (bytes.isEmpty || !context.mounted) return;
+
+    final tuneItems = musamiTuneItemsFromEditor(editor);
+    final decodedSize = await _decodeImageSize(bytes);
+    if (!context.mounted) return;
+
+    final provider = MemoryImage(bytes);
+    await precacheImage(provider, context);
+    if (!context.mounted) return;
+
+    final meta = layer.meta == null
+        ? <String, dynamic>{}
+        : Map<String, dynamic>.from(layer.meta!);
+    meta.removeWhere((k, _) => musamiIsCropMetaKey(k));
+    if (decodedSize.width > 0 && decodedSize.height > 0) {
+      meta['musamiAspect'] = decodedSize.height / decodedSize.width;
+    }
+
+    final newCore = _buildGalleryStickerWidget(
+      context,
+      image: provider,
+      width: decodedSize.width,
+      height: decodedSize.height,
+    );
+
+    final preliminary = layer.copyWith(
+      widget: newCore,
+      width: decodedSize.width,
+      meta: meta,
+    );
+    final updated = musamiRebuildWidgetLayerVisuals(
+      preliminary,
+      meta,
+      tuneAdjustmentItems: tuneItems,
+    );
+
+    final idx = editor.activeLayers.indexWhere((l) => l.id == layer.id);
+    if (idx >= 0) {
+      editor.replaceLayer(index: idx, layer: updated);
+      editor.layerInteractionManager.selectedLayerId = updated.id;
+      editor.setState(() {});
+    }
   }
 
   Widget _buildImageContextBottomBar(BuildContext context, AddNewState state) {
     final editor = state.editorKey?.currentState;
     if (editor == null) return const SizedBox.shrink();
+
+    final selectedId = state.selectedElementId;
+    if (selectedId != null) {
+      final layer = _editorFindLayer(editor, selectedId);
+      if (layer != null && _editorLayerInteractionBlocked(layer)) {
+        return const SizedBox.shrink();
+      }
+    }
 
     WidgetLayer? selectedWidgetLayer() {
       final id = state.selectedElementId;
@@ -1818,6 +2553,7 @@ class _AddNewScreenState extends State<AddNewScreen> {
         flipX: layer.flipX,
         flipY: layer.flipY,
         interaction: layer.interaction,
+        exportConfigs: layer.exportConfigs,
         meta: layer.meta == null
             ? null
             : Map<String, dynamic>.from(layer.meta!),
@@ -1896,6 +2632,8 @@ class _AddNewScreenState extends State<AddNewScreen> {
           if (!context.mounted) return;
           await applyPicked(
             WidgetLayer(
+              width: decodedSize.width,
+              scale: _kGalleryLayerDefaultScale,
               widget: _buildGalleryStickerWidget(
                 context,
                 image: imageProvider,
@@ -2118,6 +2856,7 @@ class _AddNewScreenState extends State<AddNewScreen> {
           ? <String, dynamic>{}
           : Map<String, dynamic>.from(layer.meta!);
       final blur0 = (m['musamiShadowBlur'] as num?)?.toDouble() ?? 0;
+      final dx0 = (m['musamiShadowDx'] as num?)?.toDouble() ?? 0;
       final dy0 = (m['musamiShadowDy'] as num?)?.toDouble() ?? 8;
       final st0 = (m['musamiShadowStrength'] as num?)?.toDouble() ?? 0.35;
 
@@ -2126,6 +2865,7 @@ class _AddNewScreenState extends State<AddNewScreen> {
         builder: (ctx) {
           final sheetTheme = Theme.of(ctx);
           double blur = blur0;
+          double dx = dx0;
           double dy = dy0;
           double strength = st0.clamp(0.0, 1.0);
           return AppDarkSheetTheme(
@@ -2140,10 +2880,12 @@ class _AddNewScreenState extends State<AddNewScreen> {
                         : Map<String, dynamic>.from(current.meta!);
                     if (blur <= 0.5) {
                       meta.remove('musamiShadowBlur');
+                      meta.remove('musamiShadowDx');
                       meta.remove('musamiShadowDy');
                       meta.remove('musamiShadowStrength');
                     } else {
                       meta['musamiShadowBlur'] = blur;
+                      meta['musamiShadowDx'] = dx;
                       meta['musamiShadowDy'] = dy;
                       meta['musamiShadowStrength'] = strength;
                     }
@@ -2184,22 +2926,43 @@ class _AddNewScreenState extends State<AddNewScreen> {
                         min: 0,
                         max: 48,
                         divisions: 48,
+                        label: blur <= 0.05
+                            ? 'Off'
+                            : '${blur.toStringAsFixed(0)} px',
                         onChanged: (nv) {
                           setState(() => blur = nv);
                           applyToEditor();
                         },
                       ),
                       Text(
-                        'Offset Y',
+                        'lbl_shadow_offset_x'.tr,
                         style: sheetTheme.textTheme.bodySmall?.copyWith(
                           color: Colors.white70,
                         ),
                       ),
                       Slider(
-                        value: dy.clamp(0, 24),
-                        min: 0,
-                        max: 24,
-                        divisions: 48,
+                        value: dx.clamp(-32, 32),
+                        min: -32,
+                        max: 32,
+                        divisions: 64,
+                        label: '${dx.toStringAsFixed(0)} px',
+                        onChanged: (nv) {
+                          setState(() => dx = nv);
+                          applyToEditor();
+                        },
+                      ),
+                      Text(
+                        'lbl_shadow_offset_y'.tr,
+                        style: sheetTheme.textTheme.bodySmall?.copyWith(
+                          color: Colors.white70,
+                        ),
+                      ),
+                      Slider(
+                        value: dy.clamp(-32, 32),
+                        min: -32,
+                        max: 32,
+                        divisions: 64,
+                        label: '${dy.toStringAsFixed(0)} px',
                         onChanged: (nv) {
                           setState(() => dy = nv);
                           applyToEditor();
@@ -2316,21 +3079,76 @@ class _AddNewScreenState extends State<AddNewScreen> {
       );
     }
 
+    void pickImageLayerTintColor() {
+      final layer = selectedWidgetLayer();
+      if (layer == null) return;
+      final meta0 = layer.meta == null
+          ? <String, dynamic>{}
+          : Map<String, dynamic>.from(layer.meta!);
+      final existingArgb = meta0[kMusamiImageTintArgbMetaKey] as int?;
+      final initial = existingArgb != null
+          ? musamiColorFromArgb32(existingArgb)
+          : Colors.white;
+
+      musamiShowLayerTextColorPicker(
+        context,
+        title: 'lbl_pick_image_color'.tr,
+        initialColor: initial,
+        enableAlpha: true,
+        onColorChanged: (c) {
+          final current = selectedWidgetLayer();
+          if (current == null) return;
+          final meta = current.meta == null
+              ? <String, dynamic>{}
+              : Map<String, dynamic>.from(current.meta!);
+          if (!musamiLayerImageTintAppliesFilterArgb(musamiColorToArgb32(c))) {
+            meta.remove(kMusamiImageTintArgbMetaKey);
+          } else {
+            meta[kMusamiImageTintArgbMetaKey] = musamiColorToArgb32(c);
+          }
+          final updated = musamiRebuildWidgetLayerVisuals(
+            current,
+            meta,
+            tuneAdjustmentItems: musamiTuneItemsFromEditor(editor),
+          );
+          final idx = editor.activeLayers.indexWhere((l) => l.id == current.id);
+          if (idx >= 0) {
+            editor.replaceLayer(index: idx, layer: updated);
+            editor.layerInteractionManager.selectedLayerId = updated.id;
+            editor.setState(() {});
+          }
+        },
+      );
+    }
+
+    final selectedForCrop = selectedWidgetLayer();
+
     return ImageContextToolbar(
       theme: Theme.of(context),
       secondaryPanel: state.imageContextSecondaryPanel,
       onDeselect: deselect,
       onDelete: delete,
       onResize: showResizeSheet,
+      onCrop:
+          selectedForCrop != null &&
+              musamiWidgetLayerHasRasterCropSource(selectedForCrop.widget)
+          ? () => _openWidgetLayerCropRaster(context, editor, selectedForCrop)
+          : null,
       onBorder: showBorderSheet,
       onShadow: showShadowSheet,
       onDuplicate: duplicate,
       onOpacity: showOpacitySheet,
       onReplace: () => replace(),
       onAiRemoveBg: () {
-        NavigatorService.pushNamed(AppRoutes.enhancedRemoveBackgroundScreen);
+        final layer = selectedForCrop;
+        if (layer == null) return;
+        _runEditorBackgroundRemoval(
+          context: context,
+          editor: editor,
+          layer: layer,
+        );
       },
-      onColor: editor.openFilterEditor,
+      onColor: pickImageLayerTintColor,
       onAdjust: () {
         final next = state.imageContextSecondaryPanel == 'adjust'
             ? 'default'
@@ -2355,18 +3173,175 @@ class _AddNewScreenState extends State<AddNewScreen> {
     );
   }
 
-  ProImageEditorConfigs _musamiProImageEditorConfigs(BuildContext context) {
+  Widget _buildEditorWithTransparencyPreview({
+    required BuildContext context,
+    required AddNewState state,
+    required double width,
+    required double height,
+  }) {
+    final editor = ProImageEditor.memory(
+      key: state.editorKey,
+      state.transparentBytes!,
+      callbacks: ProImageEditorCallbacks(
+        onImageEditingComplete: (Uint8List bytes) async {
+          // Dismiss ProImageEditor loading overlay before any await.
+          // Otherwise the modal barrier blocks the save dialog
+          // until the entire save pipeline finishes (or a debug tap).
+          LoadingDialog.instance.hide();
+          if (!context.mounted) return;
+          final w = state.selectedwidth ?? width;
+          final h = state.selectedheight ?? height;
+          final wi = w.toInt();
+          final hi = h.toInt();
+          final destination = await showDesignSaveDestinationSheet(context);
+          if (!context.mounted) return;
+          switch (destination) {
+            case null:
+              return;
+            case DesignSaveDestination.workspace:
+              await _runPostExportSavePipeline(
+                context: context,
+                imageBytes: bytes,
+                width: wi,
+                height: hi,
+              );
+            case DesignSaveDestination.gallery:
+              await _runGalleryOnlyRasterExport(
+                context: context,
+                imageBytes: bytes,
+                width: wi,
+                height: hi,
+              );
+            case DesignSaveDestination.share:
+              await _runShareExportedRaster(
+                context: context,
+                imageBytes: bytes,
+                width: wi,
+                height: hi,
+              );
+          }
+        },
+        mainEditorCallbacks: MainEditorCallbacks(
+          onSelectedLayerChanged: (id) {
+            final editor = state.editorKey?.currentState;
+            if (editor == null) return;
+            final selectedId = id.trim();
+            if (selectedId.isEmpty) {
+              // replaceLayer() briefly clears selection before it is restored;
+              // keep the adjust panel open during that transient state.
+              if (context.read<AddNewBloc>().state.imageContextSecondaryPanel ==
+                  'adjust') {
+                return;
+              }
+              context.read<AddNewBloc>().add(
+                EditorClearSelectionEvent(),
+              );
+              return;
+            }
+            final Layer? layer = editor.activeLayers.cast<Layer?>().firstWhere(
+              (l) => l?.id == selectedId,
+              orElse: () => null,
+            );
+            if (layer != null && _editorLayerInteractionBlocked(layer)) {
+              editor.layerInteractionManager.removeSelectedLayer(selectedId);
+              context.read<AddNewBloc>().add(
+                EditorClearSelectionEvent(),
+              );
+              return;
+            }
+            final type = switch (layer) {
+              TextLayer() => 'text',
+              WidgetLayer() => 'image',
+              PaintLayer() => 'shape',
+              _ => null,
+            };
+            context.read<AddNewBloc>().add(
+              EditorSelectionChangedEvent(
+                selectedElementId: selectedId,
+                selectedElementType: type,
+              ),
+            );
+          },
+          onLayerTapDown: (layer) {
+            if (_editorLayerInteractionBlocked(layer)) return;
+          },
+          onLayerTapUp: (layer) {
+            if (_editorLayerInteractionBlocked(layer)) return;
+            if (layer is! TextLayer) return;
+            final editor = state.editorKey?.currentState;
+            if (editor == null) return;
+
+            final isDoubleTap = _isDoubleTapOnSameLayer(layer.id);
+
+            if (!isDoubleTap) return;
+            editor.editTextLayer(layer);
+          },
+          onImportHistoryEnd: (editor, _) {
+            _ensureImportedLayersSelectable(editor);
+            if (context.mounted) {
+              context.read<AddNewBloc>().add(ClearPendingDesignHistoryEvent());
+            }
+          },
+        ),
+      ),
+      configs: _musamiProImageEditorConfigs(context, state),
+    );
+    return editor;
+  }
+
+  /// Restores selection/transform for layers that were not intentionally locked.
+  void _ensureImportedLayersSelectable(ProImageEditorState editor) {
+    for (final layer in editor.activeLayers) {
+      if (_editorLayerTransformLocked(layer)) continue;
+      layer.interaction = layer.interaction.copyWith(
+        enableMove: true,
+        enableScale: true,
+        enableRotate: true,
+        enableSelection: true,
+        enableEdit: _editorDefaultEnableEditForLayer(layer),
+      );
+    }
+    editor.setState(() {});
+  }
+
+  /// Paints the full editor workspace (checkerboard) behind the canvas so
+  /// letterboxed areas are not an empty black void.
+  Widget _musamiEditorWorkspaceBackground({required Widget child}) {
+    return CustomPaint(
+      painter: const _CheckerboardPainter(cellSize: 12),
+      child: SizedBox.expand(child: child),
+    );
+  }
+
+  ProImageEditorConfigs _musamiProImageEditorConfigs(
+    BuildContext context,
+    AddNewState state,
+  ) {
     final theme = Theme.of(context);
     final lang = appLocaleNotifier.languageCode;
     final initialRtl = lang == 'ar' || lang == 'ur';
+    final redesignImport = musamiTryParseDesignImportHistory(
+      state.pendingDesignHistoryJson,
+    );
 
     return ProImageEditorConfigs(
       i18n: I18n(
         doneLoadingMsg: 'msg_saving_your_design'.tr,
+        importStateHistoryMsg: redesignImport != null
+            ? 'msg_importing_design_layers'.tr
+            : '',
         textEditor: I18nTextEditor(
           inputHintText: 'lbl_text_editor_hint_ltr'.tr,
         ),
       ),
+      stateHistory: StateHistoryConfigs(
+        initStateHistory: redesignImport,
+      ),
+      imageGeneration: redesignImport != null
+          ? const ImageGenerationConfigs(
+              enableUseOriginalBytes: false,
+            )
+          : const ImageGenerationConfigs(),
       mainEditor: MainEditorConfigs(
         enableCloseButton: false,
         // Required so [doneEditing] calls [onImageEditingComplete] with captured bytes.
@@ -2374,6 +3349,13 @@ class _AddNewScreenState extends State<AddNewScreen> {
         // Hide ProImageEditor built-in bottom toolbar (paint/crop/tune/filter/blur/etc.)
         // because we render our own "Add New Design" tool grid.
         tools: const [],
+        // Outer [SafeArea] + scaffold [bottomNavigationBar] already handle insets.
+        safeArea: const EditorSafeArea(
+          top: false,
+          bottom: false,
+          left: false,
+          right: false,
+        ),
         widgets: MainEditorWidgets(
           appBar: (editor, rebuildStream) {
             final topPad = MediaQuery.paddingOf(context).top;
@@ -2383,12 +3365,34 @@ class _AddNewScreenState extends State<AddNewScreen> {
               builder: (ctx) => _buildSimplifiedEditorAppBar(ctx, editor),
             );
           },
+          // Built-in bottom bar still reserves ~56px even when [tools] is empty.
+          bottomBar: (editor, rebuildStream, key) {
+            return ReactiveWidget(
+              stream: rebuildStream,
+              builder: (_) => SizedBox(key: key, height: 0),
+            );
+          },
+          wrapBody: (editor, rebuildStream, content) {
+            return ReactiveWidget(
+              stream: rebuildStream,
+              builder: (_) => _musamiEditorWorkspaceBackground(child: content),
+            );
+          },
+        ),
+        style: MainEditorStyle(
+          background: Colors.transparent,
         ),
       ),
       layerInteraction: LayerInteractionConfigs(
         // On mobile, default "auto" makes layers NOT selectable, which causes
         // single-tap to edit text layers. Force selectable so single-tap selects.
         selectable: LayerInteractionSelectable.enabled,
+        style: LayerInteractionStyle(
+          borderColor: theme.colorScheme.primary,
+          strokeWidth: 1.5,
+          // Tight selection bounds — default 24px padding inflates the overlay.
+          overlayPadding: EdgeInsets.zero,
+        ),
         widgets: LayerInteractionWidgets(
           // Disable the built-in edit button so single-tap won't open edit.
           // Editing is triggered by double-tap on the layer.
@@ -2396,45 +3400,112 @@ class _AddNewScreenState extends State<AddNewScreen> {
             stream: rebuildStream,
             builder: (_) => const SizedBox.shrink(),
           ),
+          rotateScaleButton: (rebuildStream, onScaleRotateDown, onScaleRotateUp,
+                  rotation) =>
+              ReactiveWidget(
+            stream: rebuildStream,
+            builder: (_) => const SizedBox.shrink(),
+          ),
+          overlayChildBuilder: (rebuildStream, info, layer, interactions) {
+            final strokeColor = theme.colorScheme.primary;
+            final editorKey = state.editorKey!;
+            if (layer is TextLayer &&
+                layer.interaction.enableScale &&
+                layer.meta?[kMusamiLayerLockedMetaKey] != true) {
+              return ReactiveWidget(
+                stream: rebuildStream,
+                builder: (_) => MusamiTextLayerTransformOverlay(
+                  info: info,
+                  layer: layer,
+                  editorKey: editorKey,
+                  strokeColor: strokeColor,
+                ),
+              );
+            }
+            if (layer is WidgetLayer &&
+                layer.interaction.enableScale &&
+                layer.meta?[kMusamiLayerLockedMetaKey] != true) {
+              return ReactiveWidget(
+                stream: rebuildStream,
+                builder: (_) => MusamiWidgetLayerTransformOverlay(
+                  key: ValueKey(layer.id),
+                  info: info,
+                  layer: layer,
+                  editorKey: editorKey,
+                  strokeColor: strokeColor,
+                  onApplyGeometry: (
+                    updatedLayer, {
+                    required width,
+                    required aspect,
+                    required scale,
+                    required offset,
+                  }) {
+                    final editor = editorKey.currentState;
+                    if (editor == null) return;
+                    musamiMutateWidgetLayerGeometry(
+                      editor,
+                      updatedLayer,
+                      width: width,
+                      aspect: aspect,
+                      scale: scale,
+                      offset: offset,
+                    );
+                  },
+                ),
+              );
+            }
+            return ReactiveWidget(
+              stream: rebuildStream,
+              builder: (_) => MusamiDefaultLayerTransformOverlay(
+                info: info,
+                layer: layer,
+                interactions: interactions,
+                strokeColor: strokeColor,
+              ),
+            );
+          },
         ),
       ),
       stickerEditor: StickerEditorConfigs(builder: _buildStickerSelector),
       textEditor: TextEditorConfigs(
+        initFontSize: 32,
         initialInputTextDirection: initialRtl
             ? TextDirection.rtl
             : TextDirection.ltr,
         initialTextAlign: initialRtl ? TextAlign.right : TextAlign.left,
         arabicScriptInputHint: 'lbl_text_editor_hint_rtl'.tr,
-        // Default new text: no background (transparent).
+        initialPrimaryColor: const Color(0xFF000000),
+        initialSecondaryColor: const Color(0x00000000),
+        // New text: black glyphs, no box fill (transparent). Colours editable on canvas.
         initialBackgroundColorMode: LayerBackgroundMode.onlyColor,
         enableTapOutsideToSave: false,
         showTextAlignButton: false,
         showFontScaleButton: false,
         showBackgroundModeButton: false,
-        inputTextFieldAlign: Alignment.topCenter,
+        inputTextFieldAlign: Alignment.center,
+        enableAutoOverflow: true,
+        resizeToAvoidBottomInset: true,
         style: TextEditorStyle(
           background: appTheme.blueGray90004,
           appBarBackground: appTheme.blueGray90004,
           appBarColor: theme.colorScheme.onPrimary,
           inputHintColor: theme.colorScheme.onPrimary.withValues(alpha: 0.55),
           inputTextFieldBackground: appTheme.gray90002,
-          inputTextFieldBorderColor: theme.colorScheme.onPrimary.withValues(
-            alpha: 0.12,
+          inputTextFieldBorderColor: theme.colorScheme.primary.withValues(
+            alpha: 0.4,
           ),
-          // inputTextFieldBorderRadius: BorderRadius.all(
-          //   Radius.circular(16.adaptSize),
-          // ),
-          // inputTextFieldPadding: EdgeInsets.symmetric(
-          //   horizontal: 140.h,
-          //   vertical: 150.v,
-          // ),
-          textFieldMargin: EdgeInsets.only(
-            // left: 14.h,
-            // right: 14.h,
-            top: 12.v,
-            // // Smaller bottom margin -> taller visible input area.
-            // bottom: 200.v,
+          inputTextFieldBorderWidth: 1.5,
+          inputTextFieldMinHeight: 180,
+          inputTextFieldBorderRadius: BorderRadius.circular(16.adaptSize),
+          inputTextFieldPadding: EdgeInsets.symmetric(
+            horizontal: 18.h,
+            vertical: 22.v,
           ),
+          textFieldPadding: EdgeInsets.symmetric(horizontal: 16.h),
+          textFieldMargin: EdgeInsets.only(bottom: 200.v),
+          textFieldKeyboardBottomInset: kMusamiTextEditorChromeHeightLtr,
+          inputCursorColor: theme.colorScheme.primary,
+          textHeight: 1.35,
         ),
         widgets: TextEditorWidgets(
           appBar: (editor, stream) => musamiTextEditorAppBar(
@@ -2460,10 +3531,32 @@ class _AddNewScreenState extends State<AddNewScreen> {
       ),
       paintEditor: PaintEditorConfigs(
         showLineWidthAdjustmentButton: true,
+        style: PaintEditorStyle(
+          background: state.isBackgroundTransparent
+              ? Colors.transparent
+              : const Color(0xFF161616),
+        ),
+        tools: const [
+          PaintMode.freeStyle,
+          PaintMode.arrow,
+          PaintMode.line,
+          PaintMode.rect,
+          PaintMode.circle,
+          PaintMode.dashLine,
+          PaintMode.dashDotLine,
+          PaintMode.hexagon,
+          PaintMode.polygon,
+          PaintMode.pixelate,
+          PaintMode.blur,
+          PaintMode.eraser,
+        ],
         widgets: PaintEditorWidgets(
           bottomBar: (editor, stream) =>
               musamiPaintEditorBottomBar(editor, stream),
         ),
+      ),
+      tuneEditor: TuneEditorConfigs(
+        tuneAdjustmentOptions: musamiDefaultTuneAdjustmentItems(),
       ),
     );
   }
@@ -2505,181 +3598,6 @@ class _AddNewScreenState extends State<AddNewScreen> {
     );
   }
 
-  void _showTopBarBlendOpacity(
-    BuildContext context,
-    ProImageEditorState editor,
-    String? selectedId,
-  ) {
-    if (selectedId == null || selectedId.trim().isEmpty) {
-      showAppToast('msg_editor_select_for_blend'.tr);
-      return;
-    }
-    Layer? hit;
-    for (final l in editor.activeLayers) {
-      if (l.id == selectedId) {
-        hit = l;
-        break;
-      }
-    }
-    if (hit is TextLayer) {
-      _showTopBarTextOpacitySheet(context, editor, hit);
-    } else if (hit is WidgetLayer) {
-      _showTopBarWidgetOpacitySheet(context, editor, hit);
-    } else {
-      showAppToast('msg_editor_blend_unsupported'.tr);
-    }
-  }
-
-  void _showTopBarTextOpacitySheet(
-    BuildContext context,
-    ProImageEditorState editor,
-    TextLayer layer,
-  ) {
-    final baseColor = (layer.textStyle?.color) ?? layer.color;
-    var v = baseColor.a.clamp(0.0, 1.0);
-
-    showAppModalBottomSheet<void>(
-      context: context,
-      builder: (ctx) {
-        final t = Theme.of(context);
-        return AppDarkSheetTheme(
-          child: AppSheetPagePadding(
-            child: StatefulBuilder(
-              builder: (ctx, setSheet) {
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'lbl_editor_blend'.tr,
-                            style: AppDs.sheetTitle(t, color: Colors.white),
-                          ),
-                        ),
-                        Text(
-                          '${(v * 100).round()}%',
-                          style: AppDs.sheetTitle(t, color: Colors.white),
-                        ),
-                      ],
-                    ),
-                    Slider(
-                      value: v,
-                      min: 0,
-                      max: 1,
-                      divisions: 100,
-                      onChanged: (nv) {
-                        setSheet(() => v = nv);
-                        final idx = editor.activeLayers.indexWhere(
-                          (l) => l.id == layer.id,
-                        );
-                        if (idx < 0) return;
-                        final live = editor.activeLayers[idx] as TextLayer;
-                        final rgb = baseColor.withValues(alpha: 1.0);
-                        final nextColor = rgb.withValues(alpha: nv);
-                        final next = live.copyWith(
-                          textStyle: (live.textStyle ?? const TextStyle())
-                              .copyWith(color: nextColor),
-                          color: nextColor,
-                        );
-                        editor.applyTextLayerChanges(live, next);
-                        editor.setState(() {});
-                      },
-                    ),
-                    SizedBox(height: AppDs.space2.v),
-                    AppSecondaryButton(
-                      label: 'lbl_apply'.tr,
-                      onPressed: () => Navigator.pop(ctx),
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  void _showTopBarWidgetOpacitySheet(
-    BuildContext context,
-    ProImageEditorState editor,
-    WidgetLayer layer,
-  ) {
-    final initial =
-        (layer.meta?['musamiOpacity'] as num?)?.toDouble().clamp(0.0, 1.0) ??
-        1.0;
-    var v = initial;
-
-    showAppModalBottomSheet<void>(
-      context: context,
-      builder: (ctx) {
-        final t = Theme.of(context);
-        return AppDarkSheetTheme(
-          child: AppSheetPagePadding(
-            child: StatefulBuilder(
-              builder: (ctx, setSheet) {
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'lbl_editor_blend'.tr,
-                            style: AppDs.sheetTitle(t, color: Colors.white),
-                          ),
-                        ),
-                        Text(
-                          '${(v * 100).round()}%',
-                          style: AppDs.sheetTitle(t, color: Colors.white),
-                        ),
-                      ],
-                    ),
-                    Slider(
-                      value: v,
-                      min: 0,
-                      max: 1,
-                      divisions: 100,
-                      onChanged: (nv) {
-                        setSheet(() => v = nv);
-                        final idx = editor.activeLayers.indexWhere(
-                          (l) => l.id == layer.id,
-                        );
-                        if (idx < 0) return;
-                        final current = editor.activeLayers[idx] as WidgetLayer;
-                        final meta = current.meta == null
-                            ? <String, dynamic>{}
-                            : Map<String, dynamic>.from(current.meta!);
-                        meta['musamiOpacity'] = nv;
-                        final updated = musamiRebuildWidgetLayerVisuals(
-                          current,
-                          meta,
-                          tuneAdjustmentItems: musamiTuneItemsFromEditor(
-                            editor,
-                          ),
-                        );
-                        editor.replaceLayer(index: idx, layer: updated);
-                        editor.layerInteractionManager.selectedLayerId =
-                            updated.id;
-                        editor.setState(() {});
-                      },
-                    ),
-                    SizedBox(height: AppDs.space2.v),
-                    AppSecondaryButton(
-                      label: 'lbl_apply'.tr,
-                      onPressed: () => Navigator.pop(ctx),
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   /// Reference-style top bar: light strip, icon+label row, red Save block.
   PreferredSizeWidget _buildSimplifiedEditorAppBar(
     BuildContext context,
@@ -2701,20 +3619,8 @@ class _AddNewScreenState extends State<AddNewScreen> {
       return null;
     }
 
-    void onMoveTap() {
-      final layer = selectedLayer();
-      if (layer == null) {
-        showAppToast('msg_editor_select_to_move'.tr);
-        return;
-      }
-      if (_editorLayerTransformLocked(layer)) {
-        _editorToggleLayerTransformLock(editor, layer);
-      }
-      showAppToast('msg_editor_drag_to_move'.tr);
-    }
-
-    final topInset = MediaQuery.paddingOf(context).top;
     final sel = selectedLayer();
+    final topInset = MediaQuery.paddingOf(context).top;
 
     return PreferredSize(
       preferredSize: Size.fromHeight(topInset + 3 + 56),
@@ -2759,30 +3665,18 @@ class _AddNewScreenState extends State<AddNewScreen> {
                                 _showEditorLayersSheet(context, editor),
                           ),
                           _editorTopBarLabeledAction(
-                            icon: Icons.blur_on_rounded,
-                            label: 'lbl_editor_blend'.tr,
-                            onPressed: () => _showTopBarBlendOpacity(
-                              context,
-                              editor,
-                              selectedId,
-                            ),
-                          ),
-                          _editorTopBarLabeledAction(
                             icon: Icons.filter_center_focus,
                             label: 'lbl_editor_align'.tr,
-                            onPressed: sel != null
+                            onPressed: sel != null &&
+                                    !_editorLayerInteractionBlocked(sel)
                                 ? () => showEditorAlignArrangeSheet(
                                     context: context,
                                     editor: editor,
                                     layer: sel,
                                   )
                                 : null,
-                            enabled: sel != null,
-                          ),
-                          _editorTopBarLabeledAction(
-                            icon: Icons.open_with_rounded,
-                            label: 'lbl_editor_move'.tr,
-                            onPressed: onMoveTap,
+                            enabled:
+                                sel != null && !_editorLayerInteractionBlocked(sel),
                           ),
                           _editorTopBarLabeledAction(
                             icon: Icons.undo_rounded,
@@ -2795,6 +3689,12 @@ class _AddNewScreenState extends State<AddNewScreen> {
                             label: 'lbl_redo'.tr,
                             onPressed: canRedo ? editor.redoAction : null,
                             enabled: canRedo,
+                          ),
+                          _editorTopBarLabeledAction(
+                            icon: Icons.auto_awesome_rounded,
+                            label: 'lbl_ai_assist'.tr,
+                            onPressed: () =>
+                                _openEditorAiAssist(context, editor),
                           ),
                         ],
                       ),
@@ -2852,9 +3752,95 @@ class _AddNewScreenState extends State<AddNewScreen> {
   }
 
   bool _editorLayerTransformLocked(Layer layer) {
-    return !layer.interaction.enableMove &&
-        !layer.interaction.enableScale &&
-        !layer.interaction.enableRotate;
+    return layer.meta?[kMusamiLayerLockedMetaKey] == true;
+  }
+
+  /// True when the user must not select or edit this layer on the canvas.
+  bool _editorLayerInteractionBlocked(Layer layer) {
+    return _editorLayerTransformLocked(layer);
+  }
+
+  Layer? _editorFindLayer(ProImageEditorState editor, String id) {
+    for (final layer in editor.activeLayers) {
+      if (layer.id == id) return layer;
+    }
+    return null;
+  }
+
+  bool _editorDefaultEnableEditForLayer(Layer layer) {
+    if (layer is WidgetLayer && layer.meta?['musamiLayerKind'] == 'gallery') {
+      return false;
+    }
+    return true;
+  }
+
+  void _editorApplyLayerLock(Layer target, bool locked) {
+    final meta = Map<String, dynamic>.from(target.meta ?? {});
+    if (locked) {
+      meta[kMusamiLayerLockedMetaKey] = true;
+      target.interaction = target.interaction.copyWith(
+        enableMove: false,
+        enableScale: false,
+        enableRotate: false,
+        enableSelection: false,
+        enableEdit: false,
+      );
+    } else {
+      meta.remove(kMusamiLayerLockedMetaKey);
+      target.interaction = target.interaction.copyWith(
+        enableMove: true,
+        enableScale: true,
+        enableRotate: true,
+        enableSelection: true,
+        enableEdit: _editorDefaultEnableEditForLayer(target),
+      );
+    }
+    target.meta = meta;
+  }
+
+  void _editorPurgeLockedLayersFromSelection(ProImageEditorState editor) {
+    final mgr = editor.layerInteractionManager;
+    final lockedIds = editor.activeLayers
+        .where(_editorLayerTransformLocked)
+        .map((layer) => layer.id)
+        .toSet();
+    if (lockedIds.isEmpty) return;
+
+    final staleIds = mgr.selectedLayerIds
+        .where((id) => lockedIds.contains(id))
+        .toList(growable: false);
+    if (staleIds.isEmpty) return;
+
+    for (final id in staleIds) {
+      mgr.removeSelectedLayer(id);
+    }
+    if (mgr.selectedLayerIds.isEmpty && mounted) {
+      context.read<AddNewBloc>().add(EditorClearSelectionEvent());
+    }
+    editor.setState(() {});
+  }
+
+  void _editorClearLayerFromSelection(
+    ProImageEditorState editor,
+    String layerId,
+  ) {
+    final mgr = editor.layerInteractionManager;
+    if (!mgr.selectedLayerIds.contains(layerId)) return;
+    mgr.removeSelectedLayer(layerId);
+    if (mgr.selectedLayerIds.isEmpty && mounted) {
+      context.read<AddNewBloc>().add(EditorClearSelectionEvent());
+    }
+    editor.setState(() {});
+  }
+
+  void _editorClearAllSelection(ProImageEditorState editor) {
+    final mgr = editor.layerInteractionManager;
+    if (mgr.selectedLayerIds.isEmpty) return;
+    mgr.clearSelectedLayers();
+    if (mounted) {
+      context.read<AddNewBloc>().add(EditorClearSelectionEvent());
+    }
+    editor.setState(() {});
   }
 
   /// [activeLayers] order is back → front; the sheet lists front → back.
@@ -2881,12 +3867,13 @@ class _AddNewScreenState extends State<AddNewScreen> {
     final ti = list.indexWhere((l) => l.id == layer.id);
     if (ti < 0) return;
     final target = list[ti];
-    target.interaction = target.interaction.copyWith(
-      enableMove: !locked,
-      enableScale: !locked,
-      enableRotate: !locked,
-    );
+    _editorApplyLayerLock(target, locked);
+    _editorPurgeLockedLayersFromSelection(editor);
+    if (locked) {
+      _editorClearLayerFromSelection(editor, layer.id);
+    }
     editor.addHistory(layers: list);
+    editor.setState(() {});
   }
 
   void _editorToggleLayerHidden(ProImageEditorState editor, Layer layer) {
@@ -2903,16 +3890,17 @@ class _AddNewScreenState extends State<AddNewScreen> {
     final allLocked =
         editor.activeLayers.isNotEmpty &&
         editor.activeLayers.every(_editorLayerTransformLocked);
-    final enable = allLocked;
+    final lockNow = !allLocked;
     final list = List<Layer>.from(editor.activeLayers);
     for (final layer in list) {
-      layer.interaction = layer.interaction.copyWith(
-        enableMove: enable,
-        enableScale: enable,
-        enableRotate: enable,
-      );
+      _editorApplyLayerLock(layer, lockNow);
+    }
+    _editorPurgeLockedLayersFromSelection(editor);
+    if (lockNow) {
+      _editorClearAllSelection(editor);
     }
     editor.addHistory(layers: list);
+    editor.setState(() {});
   }
 
   void _editorToggleHideAllLayers(ProImageEditorState editor) {
@@ -2926,12 +3914,16 @@ class _AddNewScreenState extends State<AddNewScreen> {
   }
 
   void _editorToggleSelectAllLayers(ProImageEditorState editor) {
-    final ids = editor.activeLayers.map((l) => l.id).toSet();
+    final unlockedIds = editor.activeLayers
+        .where((layer) => !_editorLayerInteractionBlocked(layer))
+        .map((layer) => layer.id)
+        .toSet();
     final mgr = editor.layerInteractionManager;
-    if (mgr.selectedLayerIds.length == ids.length && ids.isNotEmpty) {
+    if (mgr.selectedLayerIds.length == unlockedIds.length &&
+        unlockedIds.isNotEmpty) {
       mgr.clearSelectedLayers();
     } else {
-      mgr.setSelectedLayers(ids);
+      mgr.setSelectedLayers(unlockedIds);
     }
     editor.setState(() {});
   }
@@ -3205,6 +4197,10 @@ class _AddNewScreenState extends State<AddNewScreen> {
                               clipBehavior: Clip.antiAlias,
                               child: InkWell(
                                 onTap: () {
+                                  if (_editorLayerInteractionBlocked(layer)) {
+                                    showAppToast('msg_layer_locked'.tr);
+                                    return;
+                                  }
                                   editor
                                           .layerInteractionManager
                                           .selectedLayerId =
@@ -3332,8 +4328,16 @@ class _AddNewScreenState extends State<AddNewScreen> {
                                         },
                                       ),
                                       Checkbox(
-                                        value: selected,
-                                        onChanged: (_) {
+                                        value: selected &&
+                                            !_editorLayerInteractionBlocked(
+                                              layer,
+                                            ),
+                                        onChanged:
+                                            _editorLayerInteractionBlocked(
+                                              layer,
+                                            )
+                                                ? null
+                                                : (_) {
                                           final mgr =
                                               editor.layerInteractionManager;
                                           if (selected) {
@@ -3363,7 +4367,7 @@ class _AddNewScreenState extends State<AddNewScreen> {
     );
   }
 
-  /// Export finished → save dialog (name, format, size, quality, visibility) → upload → success.
+  /// Export finished → save dialog (name + visibility + format) → upload → success.
   Future<void> _runPostExportSavePipeline({
     required BuildContext context,
     required Uint8List imageBytes,
@@ -3375,6 +4379,15 @@ class _AddNewScreenState extends State<AddNewScreen> {
       showAppToast('msg_export_failed'.tr, type: ToastificationType.error);
       return;
     }
+
+    // Pro Image Editor exportStateHistory → design_data for redesign.
+    String? designData;
+    final editor = context.read<AddNewBloc>().state.editorKey?.currentState;
+    if (editor != null) {
+      designData = await musamiExportDesignStateHistory(editor);
+    }
+    if (!context.mounted) return;
+
     final suggestedName = widget.presetName.trim().isNotEmpty
         ? widget.presetName.trim()
         : null;
@@ -3384,6 +4397,7 @@ class _AddNewScreenState extends State<AddNewScreen> {
       initialHeight: height,
       suggestedName: suggestedName,
       showVisibility: true,
+      showFileType: true,
     );
     if (!context.mounted || form == null) return;
 
@@ -3442,6 +4456,7 @@ class _AddNewScreenState extends State<AddNewScreen> {
         title: form.title,
         visibility: form.visibility,
         filename: form.fileType.uploadFilename,
+        designData: designData,
       );
     } catch (e, _) {
       result = SaveDesignFailure(e.toString());
@@ -3459,6 +4474,7 @@ class _AddNewScreenState extends State<AddNewScreen> {
             context,
             bytes: encoded,
             exportFileType: form.fileType,
+            preferredBaseName: form.title,
             quietSuccess: true,
           );
         }
@@ -3469,16 +4485,130 @@ class _AddNewScreenState extends State<AddNewScreen> {
     }
   }
 
+  /// Device gallery / files: name + PNG/JPG/PDF (no visibility).
+  Future<void> _runGalleryOnlyRasterExport({
+    required BuildContext context,
+    required Uint8List imageBytes,
+    required int width,
+    required int height,
+  }) async {
+    if (!context.mounted) return;
+    if (imageBytes.isEmpty) {
+      showAppToast('msg_export_failed'.tr, type: ToastificationType.error);
+      return;
+    }
+    final suggestedName = widget.presetName.trim().isNotEmpty
+        ? widget.presetName.trim()
+        : null;
+    final form = await showDesignSaveFormDialog(
+      context,
+      initialWidth: width,
+      initialHeight: height,
+      suggestedName: suggestedName,
+      showVisibility: false,
+      showFileType: true,
+      allowedFileTypes: const [
+        DesignExportFileType.png,
+        DesignExportFileType.jpg,
+        DesignExportFileType.pdf,
+      ],
+    );
+    if (!context.mounted || form == null) return;
+
+    final encoded = await encodeDesignForUpload(
+      imageBytes,
+      width: form.width,
+      height: form.height,
+      type: form.fileType,
+      jpgQuality: form.quality,
+    );
+    if (!context.mounted) return;
+    if (encoded == null) {
+      showAppToast('msg_export_failed'.tr, type: ToastificationType.error);
+      return;
+    }
+    await saveExportedDesignToGallery(
+      context,
+      bytes: encoded,
+      exportFileType: form.fileType,
+      preferredBaseName: form.title,
+    );
+  }
+
+  /// Encode at canvas size and open the platform share sheet.
+  Future<void> _runShareExportedRaster({
+    required BuildContext context,
+    required Uint8List imageBytes,
+    required int width,
+    required int height,
+  }) async {
+    if (!context.mounted) return;
+    if (imageBytes.isEmpty) {
+      showAppToast('msg_export_failed'.tr, type: ToastificationType.error);
+      return;
+    }
+    final suggestedName = widget.presetName.trim().isNotEmpty
+        ? widget.presetName.trim()
+        : null;
+    final form = await showDesignSaveFormDialog(
+      context,
+      initialWidth: width,
+      initialHeight: height,
+      suggestedName: suggestedName,
+      showVisibility: false,
+      showFileType: true,
+    );
+    if (!context.mounted || form == null) return;
+
+    final encoded = await encodeDesignForUpload(
+      imageBytes,
+      width: form.width,
+      height: form.height,
+      type: form.fileType,
+      jpgQuality: form.quality,
+    );
+    if (!context.mounted) return;
+    if (encoded == null) {
+      showAppToast('msg_export_failed'.tr, type: ToastificationType.error);
+      return;
+    }
+    await shareExportedDesignBytes(
+      context,
+      bytes: encoded,
+      exportFileType: form.fileType,
+      preferredBaseName: form.title,
+    );
+  }
+
   Widget _buildColumnSelectSize(BuildContext context, AddNewState state) {
     final screenSize = MediaQuery.sizeOf(context);
     return Align(
       alignment: Alignment.bottomCenter,
-      child: _ResizeOverlayContent(
-        state: state,
-        maxWidth: screenSize.width,
-        maxHeight: screenSize.height,
-        editorWidth: state.selectedwidth ?? widget.width,
-        editorHeight: state.selectedheight ?? widget.height,
+      child: CanvasResizeSizePanel(
+        editorWidthPx: state.selectedwidth ?? widget.width,
+        editorHeightPx: state.selectedheight ?? widget.height,
+        maxWidthPx: screenSize.width,
+        maxHeightPx: screenSize.height,
+        initialUnit: state.canvasUnit ?? widget.unit,
+        onApply: (width, height, unit) {
+          context.read<AddNewBloc>().add(
+                ApplyCustomSizeEvent(
+                  width: width,
+                  height: height,
+                  unit: unit,
+                ),
+              );
+        },
+        onHeightSliderEnd: (width, height) {
+          context.read<AddNewBloc>().add(
+                SliderHeightValueChangedEvent(width: width, height: height),
+              );
+        },
+        onWidthSliderEnd: (width, height) {
+          context.read<AddNewBloc>().add(
+                SliderwidthtValueChangedEvent(width: width, height: height),
+              );
+        },
       ),
     );
   }
@@ -3533,11 +4663,12 @@ class _AddNewScreenState extends State<AddNewScreen> {
   }
 
   Widget _buildBgColorOverlayHeader(BuildContext context, AddNewState state) {
-    final isWheel = state.bgColorToolMode == 'wheel';
+    final showsColorPreview =
+        state.bgColorToolMode == 'wheel' || state.bgColorToolMode == 'picker';
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        if (isWheel)
+        if (showsColorPreview)
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -3582,6 +4713,8 @@ class _AddNewScreenState extends State<AddNewScreen> {
 
   Widget _buildBgColorOverlayContent(BuildContext context, AddNewState state) {
     switch (state.bgColorToolMode) {
+      case 'picker':
+        return _ScreenColorPickerContent(state: state);
       case 'wheel':
         return _WheelColorPickerContent(state: state);
       case 'swatch':
@@ -3590,7 +4723,6 @@ class _AddNewScreenState extends State<AddNewScreen> {
         return _TransparencySliderContent(state: state);
       case 'recent':
         return _RecentColorsGridContent(state: state);
-      case 'picker':
       default:
         return _WheelColorPickerContent(state: state);
     }
@@ -3610,9 +4742,11 @@ class _AddNewScreenState extends State<AddNewScreen> {
         final isActive = state.bgColorToolMode == t.$1;
         return GestureDetector(
           onTap: () {
-            BlocProvider.of<AddNewBloc>(
-              context,
-            ).add(SetBgColorToolModeEvent(mode: t.$1));
+            final bloc = context.read<AddNewBloc>();
+            bloc.add(SetBgColorToolModeEvent(mode: t.$1));
+            if (t.$1 == 'picker') {
+              bloc.add(StartScreenColorPickEvent());
+            }
           },
           child: Container(
             padding: EdgeInsets.symmetric(horizontal: 10.h, vertical: 8.v),
@@ -3653,7 +4787,10 @@ class _AddNewScreenState extends State<AddNewScreen> {
         separatorBuilder: (_, __) => SizedBox(width: 10.h),
         itemBuilder: (context, index) {
           final c = _swatchColors[index];
-          final isSelected = state.selectedBgColor == c;
+          final isSelected = c == null
+              ? state.isBackgroundTransparent &&
+                  (state.selectedBgColor?.a ?? 0) == 0
+              : state.selectedBgColor == c;
           return GestureDetector(
             onTap: () {
               if (c == null) {
@@ -3702,116 +4839,56 @@ class _AddNewScreenState extends State<AddNewScreen> {
         decoration: AppDecoration.fillYellow.copyWith(
           borderRadius: BorderRadiusStyle.roundedBorder33,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(height: 25.v),
-            Padding(
-              padding: EdgeInsets.only(right: 1.h),
-              child: BlocSelector<AddNewBloc, AddNewState, AddNewModel?>(
-                selector: (state) => state.screen3AddNewModelObj,
-                builder: (context, screen3AddNewModelObj) {
-                  return GridView.builder(
-                    shrinkWrap: true,
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      mainAxisExtent: 93.v,
-                      crossAxisCount: 3,
-                      mainAxisSpacing: 15.h,
-                      crossAxisSpacing: 15.h,
-                    ),
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount:
-                        screen3AddNewModelObj?.gridgalleryPicItemList.length ??
-                        0,
-                    itemBuilder: (context, index) {
-                      GridgalleryPicItemModel model =
-                          screen3AddNewModelObj
-                              ?.gridgalleryPicItemList[index] ??
-                          GridgalleryPicItemModel();
-                      return GridgalleryPicItemWidget(
-                        model,
-                        onTapColumngallery: () async {
-                          final editor = state.editorKey?.currentState;
-                          if (editor == null) return;
-
-                          // Close the popup for all actions.
-                          BlocProvider.of<AddNewBloc>(
-                            context,
-                          ).add(ShowContainerEvent(ishow: '0'));
-
-                          if (model.gallerypic == 'Add Text') {
-                            // Text editor
-                            editor.openTextEditor();
-                          } else if (model.gallerypic == 'Shapes') {
-                            // Shapes: show bottom sheet with shapes from API
-                            showModalBottomSheet<void>(
-                              context: context,
-                              isScrollControlled: true,
-                              backgroundColor: Colors.transparent,
-                              builder: (ctx) => SizedBox(
-                                height:
-                                    MediaQuery.of(context).size.height * 0.75,
-                                child: ShapesBottomSheet(
-                                  editorKey: state.editorKey,
-                                ),
-                              ),
-                            );
-                          } else if (model.gallerypic == 'PNG Images') {
-                            showModalBottomSheet<void>(
-                              context: context,
-                              isScrollControlled: true,
-                              backgroundColor: Colors.transparent,
-                              builder: (ctx) => SizedBox(
-                                height:
-                                    MediaQuery.of(context).size.height * 0.75,
-                                child: ApiAssetBottomSheet(
-                                  editorKey: state.editorKey,
-                                  type: MediaType.png,
-                                ),
-                              ),
-                            );
-                          } else if (model.gallerypic == 'Logos') {
-                            showModalBottomSheet<void>(
-                              context: context,
-                              isScrollControlled: true,
-                              backgroundColor: Colors.transparent,
-                              builder: (ctx) => SizedBox(
-                                height:
-                                    MediaQuery.of(context).size.height * 0.75,
-                                child: ApiAssetBottomSheet(
-                                  editorKey: state.editorKey,
-                                  type: MediaType.logo,
-                                ),
-                              ),
-                            );
-                          } else if (model.gallerypic == 'Paint') {
-                            editor.openPaintEditor();
-                          } else if (model.gallerypic == 'Crop& Rotate') {
-                            editor.openCropRotateEditor();
-                          } else if (model.gallerypic == 'Tune') {
-                            editor.openTuneEditor();
-                          } else if (model.gallerypic == 'Filter') {
-                            editor.openFilterEditor();
-                          } else if (model.gallerypic == 'Blur') {
-                            editor.openBlurEditor();
-                          } else {
-                            // Gallery: pick from device and add as editor layer
-                            final key = state.editorKey;
-                            if (key != null) {
-                              await _pickFromGalleryAndAddAsLayer(context, key);
-                            }
-                          }
-                        },
-                      );
-                    },
-                  );
-                },
-              ),
-            ),
-          ],
+        child: BlocSelector<AddNewBloc, AddNewState, AddNewModel?>(
+          selector: (state) => state.screen3AddNewModelObj,
+          builder: (context, screen3AddNewModelObj) {
+            return AddNewBookmarkPanel(
+              editorKey: state.editorKey,
+              baseGridItems:
+                  screen3AddNewModelObj?.gridgalleryPicItemList ?? const [],
+              onAssetAdded: () {
+                BlocProvider.of<AddNewBloc>(
+                  context,
+                ).add(ShowContainerEvent(ishow: '0'));
+              },
+              onToolTap: (model) => _handleAddNewToolTap(context, state, model),
+            );
+          },
         ),
       ),
     );
+  }
+
+  Future<void> _handleAddNewToolTap(
+    BuildContext context,
+    AddNewState state,
+    GridgalleryPicItemModel model,
+  ) async {
+    final editor = state.editorKey?.currentState;
+    if (editor == null) return;
+
+    BlocProvider.of<AddNewBloc>(context).add(ShowContainerEvent(ishow: '0'));
+
+    if (model.gallerypic == 'Add Text') {
+      editor.openTextEditor();
+    }
+    // else if (model.gallerypic == 'Paint') {
+    //   editor.openPaintEditor();
+    // } else if (model.gallerypic == 'Crop& Rotate') {
+    //   editor.openCropRotateEditor();
+    // } else if (model.gallerypic == 'Tune') {
+    //   editor.openTuneEditor();
+    // } else if (model.gallerypic == 'Filter') {
+    //   editor.openFilterEditor();
+    // } else if (model.gallerypic == 'Blur') {
+    //   editor.openBlurEditor();
+    // }
+    else {
+      final key = state.editorKey;
+      if (key != null) {
+        await _pickFromGalleryAndAddAsLayer(context, key);
+      }
+    }
   }
 
   Future<void> _pickFromGalleryAndAddAsLayer(
@@ -3856,12 +4933,14 @@ class _AddNewScreenState extends State<AddNewScreen> {
         final center = Offset(canvasSize.width / 2, canvasSize.height / 2);
         final layerW = decodedSize.width;
         final layerH = decodedSize.height;
+        final s = _kGalleryLayerDefaultScale;
         editor.addLayer(
           WidgetLayer(
             width: layerW,
+            scale: s,
             // Allow user to zoom/resize the sticker (don't lock max size).
             boxConstraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-            offset: center - Offset(layerW / 2, layerH / 2),
+            offset: center - Offset(layerW * s / 2, layerH * s / 2),
             interaction: LayerInteraction(enableEdit: false),
             widget: _buildGalleryStickerWidget(
               stableContext,
@@ -4024,14 +5103,16 @@ class _FullScreenStickerSelectorState
                     if (image == null || !mounted) return;
                     final bytes = await image.readAsBytes();
                     if (!mounted) return;
+                    final decodedSize = await _musamiDecodeImageSize(bytes);
+                    if (!mounted) return;
                     final provider = MemoryImage(bytes);
                     await precacheImage(provider, context);
                     if (!mounted) return;
 
                     widget.setLayer(
                       WidgetLayer(
-                        // Allow zoom/resize like a sticker.
-                        width: _AddNewScreenState._kStickerLayerSize,
+                        width: decodedSize.width,
+                        scale: _AddNewScreenState._kGalleryLayerDefaultScale,
                         boxConstraints: const BoxConstraints(
                           minWidth: 48,
                           minHeight: 48,
@@ -4041,11 +5122,11 @@ class _FullScreenStickerSelectorState
                           'musamiLayerKind': 'gallery',
                         },
                         widget: SizedBox(
-                          width: _AddNewScreenState._kStickerLayerSize,
-                          height: _AddNewScreenState._kStickerLayerSize,
+                          width: decodedSize.width,
+                          height: decodedSize.height,
                           child: Image(
                             image: provider,
-                            fit: BoxFit.contain,
+                            fit: BoxFit.fill,
                             gaplessPlayback: true,
                           ),
                         ),
@@ -4186,14 +5267,19 @@ class _FullScreenStickerSelectorState
               final item = items[index];
               return GestureDetector(
                 onTap: () {
+                  final stickerType = item['type'] as String;
+                  final stickerIndex = item['index'] as int;
                   setLayer(
                     WidgetLayer(
+                      exportConfigs: WidgetLayerExportConfigs(
+                        id: musamiStickerExportId(stickerType, stickerIndex),
+                      ),
                       meta: const <String, dynamic>{
                         'musamiLayerKind': 'sticker',
                       },
                       widget: _buildStickerWidget(
-                        item['type'] as String,
-                        item['index'] as int,
+                        stickerType,
+                        stickerIndex,
                       ),
                     ),
                   );
@@ -4370,7 +5456,94 @@ class _FullScreenStickerSelectorState
   }
 }
 
-// --- BG Color overlay content widgets (Wheel, Swatch, Transparency, Recent) ---
+// --- BG Color overlay content widgets (Picker, Wheel, Swatch, Transparency, Recent) ---
+
+/// Eyedropper panel: sample colors from the live canvas via screen capture.
+class _ScreenColorPickerContent extends StatelessWidget {
+  const _ScreenColorPickerContent({required this.state});
+  final AddNewState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final preview = state.selectedBgColor ?? Colors.white;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: EdgeInsets.symmetric(horizontal: 14.h, vertical: 16.v),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.55),
+            borderRadius: BorderRadius.circular(12.adaptSize),
+            border: Border.all(color: Colors.black12),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44.adaptSize,
+                height: 44.adaptSize,
+                decoration: BoxDecoration(
+                  color: preview,
+                  borderRadius: BorderRadius.circular(10.adaptSize),
+                  border: Border.all(color: Colors.black26),
+                ),
+              ),
+              SizedBox(width: 12.h),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'lbl_pick_color_from_screen'.tr,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        color: Colors.black87,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    SizedBox(height: 4.v),
+                    Text(
+                      'msg_screen_color_picker_hint'.tr,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: Colors.black54,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(height: 14.v),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: () {
+              context.read<AddNewBloc>().add(StartScreenColorPickEvent());
+            },
+            style: FilledButton.styleFrom(
+              backgroundColor: appTheme.blueGray90004,
+              foregroundColor: appTheme.yellow500,
+              padding: EdgeInsets.symmetric(vertical: 14.v),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12.adaptSize),
+              ),
+            ),
+            icon: Icon(Icons.colorize, size: 22.adaptSize),
+            label: Text(
+              'lbl_start_color_pick'.tr,
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 14.fSize,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 /// Wheel mode: saturation/value gradient, hue slider, transparency slider, hex + opacity (ref 1).
 class _WheelColorPickerContent extends StatefulWidget {
@@ -4407,7 +5580,7 @@ class _WheelColorPickerContentState extends State<_WheelColorPickerContent> {
     _hue = hsv.hue;
     _saturation = hsv.saturation;
     _value = hsv.value;
-    _alpha = c.opacity;
+    _alpha = c.a.clamp(0.0, 1.0);
   }
 
   void _applyColor() {
@@ -4669,7 +5842,7 @@ class _SwatchPaletteContent extends StatelessWidget {
   }
 }
 
-/// Transparency mode: opacity slider at top + value display (ref 3).
+/// Transparency mode: opacity slider with live checkerboard-backed preview.
 class _TransparencySliderContent extends StatefulWidget {
   const _TransparencySliderContent({required this.state});
   final AddNewState state;
@@ -4681,20 +5854,41 @@ class _TransparencySliderContent extends StatefulWidget {
 
 class _TransparencySliderContentState
     extends State<_TransparencySliderContent> {
+  late Color _baseRgb;
   late double _opacity;
+
+  static Color _opaqueRgb(Color color) {
+    return Color.fromARGB(255, color.red, color.green, color.blue);
+  }
+
+  void _syncFromSelectedColor(Color? color) {
+    final resolved = color ?? Colors.red;
+    _baseRgb = _opaqueRgb(resolved);
+    _opacity = resolved.a.clamp(0.0, 1.0);
+  }
 
   @override
   void initState() {
     super.initState();
-    _opacity = widget.state.selectedBgColor?.opacity ?? 1.0;
+    _syncFromSelectedColor(widget.state.selectedBgColor);
   }
 
   @override
   void didUpdateWidget(covariant _TransparencySliderContent oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.state.selectedBgColor != widget.state.selectedBgColor) {
-      _opacity = widget.state.selectedBgColor?.opacity ?? 1.0;
+      _syncFromSelectedColor(widget.state.selectedBgColor);
     }
+  }
+
+  Color get _previewColor => _baseRgb.withValues(alpha: _opacity);
+
+  void _applyOpacity(double value) {
+    final opacity = value.clamp(0.0, 1.0);
+    setState(() => _opacity = opacity);
+    context.read<AddNewBloc>().add(
+      SetBgColorEvent(color: _baseRgb.withValues(alpha: opacity)),
+    );
   }
 
   @override
@@ -4702,6 +5896,20 @@ class _TransparencySliderContentState
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        SizedBox(
+          height: 56.v,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12.adaptSize),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                const CustomPaint(painter: _CheckerboardPainter(cellSize: 10)),
+                ColoredBox(color: _previewColor),
+              ],
+            ),
+          ),
+        ),
+        SizedBox(height: 12.v),
         Row(
           children: [
             Expanded(
@@ -4717,15 +5925,7 @@ class _TransparencySliderContentState
                   value: _opacity,
                   min: 0,
                   max: 1,
-                  onChanged: (v) {
-                    setState(() => _opacity = v);
-                    BlocProvider.of<AddNewBloc>(context).add(
-                      SetBgColorEvent(
-                        color: (widget.state.selectedBgColor ?? Colors.grey)
-                            .withOpacity(v),
-                      ),
-                    );
-                  },
+                  onChanged: _applyOpacity,
                 ),
               ),
             ),
@@ -4738,7 +5938,7 @@ class _TransparencySliderContentState
               ),
               alignment: Alignment.center,
               child: Text(
-                '${(_opacity * 100).round()}',
+                '${(_opacity * 100).round()}%',
                 style: const TextStyle(color: Colors.white, fontSize: 14),
               ),
             ),
@@ -4798,303 +5998,6 @@ class _RecentColorsGridContent extends StatelessWidget {
   }
 }
 
-/// Resize overlay with custom size fields (limited to screen) and sliders that update on drag end.
-class _ResizeOverlayContent extends StatefulWidget {
-  const _ResizeOverlayContent({
-    required this.state,
-    required this.maxWidth,
-    required this.maxHeight,
-    required this.editorWidth,
-    required this.editorHeight,
-  });
-
-  final AddNewState state;
-  final double maxWidth;
-  final double maxHeight;
-  final double editorWidth;
-  final double editorHeight;
-
-  @override
-  State<_ResizeOverlayContent> createState() => _ResizeOverlayContentState();
-}
-
-class _ResizeOverlayContentState extends State<_ResizeOverlayContent> {
-  late double _localHeight;
-  late double _localWidth;
-
-  @override
-  void initState() {
-    super.initState();
-    _localHeight = widget.editorHeight;
-    _localWidth = widget.editorWidth;
-  }
-
-  @override
-  void didUpdateWidget(covariant _ResizeOverlayContent oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.state.selectedheight != widget.state.selectedheight ||
-        oldWidget.state.selectedwidth != widget.state.selectedwidth) {
-      _localHeight = widget.state.selectedheight ?? widget.editorHeight;
-      _localWidth = widget.state.selectedwidth ?? widget.editorWidth;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final state = widget.state;
-    final maxW = widget.maxWidth;
-    final maxH = widget.maxHeight;
-    const minDim = 50.0;
-
-    return Container(
-      margin: EdgeInsets.only(bottom: 45.v),
-      padding: EdgeInsets.symmetric(horizontal: 24.h, vertical: 20.v),
-      decoration: AppDecoration.fillPrimary.copyWith(
-        borderRadius: BorderRadiusStyle.roundedBorder33,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            "lbl_select_size2".tr,
-            style: CustomTextStyles.titleMediumPoppinsBluegray90004,
-          ),
-          SizedBox(height: 12.v),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Padding(
-              padding: EdgeInsets.only(left: 16.h),
-              child: Text(
-                "lbl_custom_size".tr,
-                style: CustomTextStyles.bodySmallBluegray90004,
-              ),
-            ),
-          ),
-          SizedBox(height: 10.v),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              if (state.valueoneController != null)
-                CustomTextFormField(
-                  width: 115.h,
-                  controller: state.valueoneController!,
-                  hintText: "lbl_200".tr,
-                  textStyle: CustomTextStyles.bodySmallBluegray90004,
-                  textInputAction: TextInputAction.done,
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: 30.h,
-                    vertical: 14.v,
-                  ),
-                  borderDecoration: TextFormFieldStyleHelper.fillYellow,
-                  fillColor: appTheme.yellow500,
-                )
-              else
-                SizedBox(width: 115.h, height: 49.v),
-              Padding(
-                padding: EdgeInsets.only(top: 17.v, bottom: 14.v),
-                child: Text(
-                  "lbl_x".tr,
-                  style: CustomTextStyles.bodySmallBluegray90004,
-                ),
-              ),
-              if (state.valueTwoController != null)
-                CustomTextFormField(
-                  width: 115.h,
-                  controller: state.valueTwoController!,
-                  textStyle: CustomTextStyles.bodySmallBluegray90004,
-                  hintText: "lbl_200".tr,
-                  textInputAction: TextInputAction.done,
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: 30.h,
-                    vertical: 14.v,
-                  ),
-                  borderDecoration: TextFormFieldStyleHelper.fillYellow,
-                  fillColor: appTheme.yellow500,
-                )
-              else
-                SizedBox(width: 115.h, height: 49.v),
-              SizedBox(width: 8.h),
-              CustomElevatedButton(
-                height: 49.v,
-                width: 80.h,
-                text: "Apply",
-                buttonStyle: CustomButtonStyles.fillYellow,
-                buttonTextStyle: CustomTextStyles.bodySmallBluegray90004,
-                onPressed: () {
-                  final wText = state.valueoneController?.text ?? '';
-                  final hText = state.valueTwoController?.text ?? '';
-                  final parsedW = double.tryParse(wText);
-                  final parsedH = double.tryParse(hText);
-                  if (parsedW == null || parsedH == null) return;
-                  final clampedW = parsedW.clamp(1.0, maxW);
-                  final clampedH = parsedH.clamp(1.0, maxH);
-                  final wasOver = parsedW > maxW || parsedH > maxH;
-                  if (wasOver) {
-                    showAppToast(
-                      'Limit to screen size',
-                      autoCloseDuration: const Duration(seconds: 2),
-                    );
-                  }
-                  BlocProvider.of<AddNewBloc>(context).add(
-                    ApplyCustomSizeEvent(width: clampedW, height: clampedH),
-                  );
-                  setState(() {
-                    _localWidth = clampedW;
-                    _localHeight = clampedH;
-                  });
-                },
-              ),
-            ],
-          ),
-          if (state.valueTwoController != null)
-            Padding(
-              padding: EdgeInsets.only(top: 8.v),
-              child: Text(
-                'Max: ${maxW.toInt()} x ${maxH.toInt()}',
-                style: CustomTextStyles.bodySmallBluegray90004.copyWith(
-                  fontSize: 11.0,
-                ),
-              ),
-            ),
-          SizedBox(height: 14.v),
-          Container(
-            padding: EdgeInsets.all(15.h),
-            decoration: AppDecoration.fillYellow.copyWith(
-              borderRadius: BorderRadiusStyle.roundedBorder10,
-            ),
-            child: Column(
-              children: [
-                const Text('Height', style: TextStyle(color: Colors.black)),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CustomImageView(
-                      imagePath: ImageConstant.imgArrowDownGray900,
-                      height: 18.adaptSize,
-                      width: 18.adaptSize,
-                    ),
-                    Expanded(
-                      child: Padding(
-                        padding: EdgeInsets.only(
-                          left: 12.h,
-                          top: 3.v,
-                          bottom: 3.v,
-                        ),
-                        child: SliderTheme(
-                          data: SliderThemeData(
-                            trackShape: const RoundedRectSliderTrackShape(),
-                            overlayShape: const RoundSliderOverlayShape(),
-                            activeTrackColor: appTheme.blueGray90004,
-                            inactiveTrackColor: appTheme.black900.withOpacity(
-                              0.08,
-                            ),
-                            thumbColor: appTheme.blueGray90004,
-                            thumbShape: const RoundSliderThumbShape(),
-                          ),
-                          child: Slider(
-                            value: _localHeight.clamp(minDim, maxH),
-                            min: minDim,
-                            max: maxH,
-                            onChanged: (value) {
-                              setState(() => _localHeight = value);
-                            },
-                            onChangeEnd: (value) {
-                              BlocProvider.of<AddNewBloc>(context).add(
-                                SliderHeightValueChangedEvent(
-                                  width: _localWidth,
-                                  height: value,
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-                    ),
-                    CustomImageView(
-                      imagePath: ImageConstant.imgArrowLeft,
-                      height: 17.adaptSize,
-                      width: 17.adaptSize,
-                      margin: EdgeInsets.only(left: 11.h),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          SizedBox(height: 10.v),
-          Container(
-            padding: EdgeInsets.all(15.h),
-            decoration: AppDecoration.fillYellow.copyWith(
-              borderRadius: BorderRadiusStyle.roundedBorder10,
-            ),
-            child: Column(
-              children: [
-                const Text('Width', style: TextStyle(color: Colors.black)),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CustomImageView(
-                      imagePath: ImageConstant.imgArrowDownGray900,
-                      height: 18.adaptSize,
-                      width: 18.adaptSize,
-                    ),
-                    Expanded(
-                      child: Padding(
-                        padding: EdgeInsets.only(
-                          left: 12.h,
-                          top: 3.v,
-                          bottom: 3.v,
-                        ),
-                        child: SliderTheme(
-                          data: SliderThemeData(
-                            trackShape: const RoundedRectSliderTrackShape(),
-                            overlayShape: const RoundSliderOverlayShape(),
-                            activeTrackColor: appTheme.blueGray90004,
-                            inactiveTrackColor: appTheme.black900.withOpacity(
-                              0.08,
-                            ),
-                            thumbColor: appTheme.blueGray90004,
-                            thumbShape: const RoundSliderThumbShape(
-                              enabledThumbRadius: 6,
-                            ),
-                          ),
-                          child: Slider(
-                            value: _localWidth.clamp(minDim, maxW),
-                            min: minDim,
-                            max: maxW,
-                            onChanged: (value) {
-                              setState(() => _localWidth = value);
-                            },
-                            onChangeEnd: (value) {
-                              BlocProvider.of<AddNewBloc>(context).add(
-                                SliderwidthtValueChangedEvent(
-                                  width: value,
-                                  height: _localHeight,
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-                    ),
-                    CustomImageView(
-                      imagePath: ImageConstant.imgArrowLeft,
-                      height: 17.adaptSize,
-                      width: 17.adaptSize,
-                      margin: EdgeInsets.only(left: 11.h),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          SizedBox(height: 68.v),
-        ],
-      ),
-    );
-  }
-}
-
 /// Custom painter for blob shapes
 class _BlobPainter extends CustomPainter {
   @override
@@ -5138,11 +6041,14 @@ class _BlobPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-/// Checkerboard pattern for transparency swatch
+/// Checkerboard pattern for transparency preview
 class _CheckerboardPainter extends CustomPainter {
+  const _CheckerboardPainter({this.cellSize = 6});
+
+  final double cellSize;
+
   @override
   void paint(Canvas canvas, Size size) {
-    const cellSize = 6.0;
     final white = Paint()..color = Colors.white;
     final gray = Paint()..color = Colors.grey.shade400;
     for (var y = 0.0; y < size.height; y += cellSize) {
@@ -5157,5 +6063,7 @@ class _CheckerboardPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _CheckerboardPainter oldDelegate) {
+    return oldDelegate.cellSize != cellSize;
+  }
 }

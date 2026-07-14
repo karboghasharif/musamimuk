@@ -142,50 +142,83 @@ class _TextEditorInputState extends State<TextEditorInput> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final viewInsets = MediaQuery.viewInsetsOf(context);
+    final keyboardOpen = viewInsets.bottom > 0;
+    final horizontalInset = widget.configs.style.textFieldPadding.horizontal;
+    final fieldMaxWidth = widget.configs.enableAutoOverflow
+        ? (screenWidth - horizontalInset - 8)
+            .clamp(200.0, widget.maxWidth)
+        : widget.maxWidth;
+
+    final keyboardBottomInset =
+        widget.configs.style.textFieldKeyboardBottomInset;
+    final scrollPadding = keyboardOpen && keyboardBottomInset > 0
+        ? EdgeInsets.only(
+            top: 12,
+            bottom: keyboardBottomInset,
+          )
+        : widget.configs.style.textFieldMargin;
+
+    final minFieldHeight = keyboardOpen
+        ? (widget.configs.style.inputTextFieldMinHeight * 0.55)
+            .clamp(80.0, widget.configs.style.inputTextFieldMinHeight)
+        : widget.configs.style.inputTextFieldMinHeight;
+
+    final fieldChild = ConstrainedBox(
+      constraints: BoxConstraints(
+        maxWidth: fieldMaxWidth,
+        minWidth: widget.configs.enableAutoOverflow ? fieldMaxWidth : 0,
+        minHeight: minFieldHeight,
+      ),
+      child: _buildInputField(fieldMaxWidth),
+    );
+
+    final scrollChild = widget.configs.enableAutoOverflow
+        ? fieldChild
+        : IntrinsicWidth(child: fieldChild);
+
+    final alignment = keyboardOpen
+        ? Alignment.topCenter
+        : widget.configs.inputTextFieldAlign;
+
     return Align(
-      alignment: widget.configs.inputTextFieldAlign,
+      alignment: alignment,
       child: Padding(
         padding: widget.configs.style.textFieldPadding,
         child: SingleChildScrollView(
           clipBehavior: Clip.none,
-          scrollDirection: Axis.horizontal,
-          padding: widget.configs.style.textFieldMargin,
-          child: IntrinsicWidth(
-            child: SingleChildScrollView(
-              clipBehavior: Clip.none,
-              padding: widget.configs.enableAutoOverflow
-                  ? null
-                  : const EdgeInsets.symmetric(horizontal: 16.0),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: widget.maxWidth),
-                child: _buildInputField(),
-              ),
-            ),
+          child: SingleChildScrollView(
+            clipBehavior: Clip.none,
+            scrollDirection: Axis.horizontal,
+            padding: scrollPadding,
+            child: scrollChild,
           ),
         ),
       ),
     );
   }
 
-  Widget _buildInputField() {
+  Widget _buildInputField(double fieldMaxWidth) {
     return Transform.scale(
       scale: widget.scaleFactor,
       child: Hero(
         flightShuttleBuilder: _flightShuttleBuilder,
         tag: widget.heroTag ?? 'Text-Image-Editor-Empty-Hero',
         child: Container(
+          width: widget.configs.enableAutoOverflow ? double.infinity : null,
           padding: widget.configs.style.inputTextFieldPadding,
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: widget.configs.style.inputTextFieldBackground,
             border: Border.all(
               color: widget.configs.style.inputTextFieldBorderColor,
-              width: 10,
+              width: widget.configs.style.inputTextFieldBorderWidth,
             ),
             borderRadius: widget.configs.style.inputTextFieldBorderRadius,
           ),
           child: RoundedBackgroundTextField(
             key: const ValueKey('rounded-background-text-editor-field'),
-            maxTextWidth: widget.maxWidth,
+            maxTextWidth: fieldMaxWidth,
             controller: widget.textCtrl,
             focusNode: widget.focusNode,
             onChanged: (value) {

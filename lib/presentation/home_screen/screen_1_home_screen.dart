@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:toastification/toastification.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -7,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/app_export.dart';
 import '../../core/utils/app_toast.dart';
 import '../../widgets/app_navigation_drawer.dart';
+import '../../widgets/advertisement_banner.dart';
 import '../../widgets/custom_icon_button.dart';
 import 'bloc/screen_1_home_bloc.dart';
 import 'models/screen_1_home_model.dart';
@@ -64,6 +63,7 @@ class Screen1HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isGuest = PrefUtils().isGuestAccount();
     return ListenableBuilder(
       listenable: appLocaleNotifier,
       builder: (context, _) {
@@ -83,222 +83,98 @@ class Screen1HomeScreen extends StatelessWidget {
                 return Container(
                   width: double.maxFinite,
                   padding: EdgeInsets.symmetric(
-                    horizontal: 27.h,
-                    vertical: 46.v,
+                    horizontal: AppDs.space4.h,
+                    vertical: AppDs.space6.v,
                   ),
                   child: SingleChildScrollView(
                     child: Column(
-                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        SizedBox(height: 3.v),
                         _buildRowView(context),
-                        SizedBox(height: 5.v),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: Padding(
-                            padding: EdgeInsets.only(right: 24.h),
-                            child: SizedBox(
-                              width: 480.h,
-                              height: 151.v,
-                              child: const _HomeAdvertisingSlider(),
+                        SizedBox(height: AppDs.space4.v),
+                        AdvertisementBanner(
+                          placement: 'home_banner',
+                          limit: 5,
+                          height: 120.v,
+                        ),
+                        SizedBox(height: AppDs.space6.v),
+                        _buildFeaturedDesigns(context),
+                        SizedBox(height: AppDs.space8.v),
+                        // AppSectionHeader(
+                        //   title: 'lbl_new_design'.tr,
+                        //   subtitle: 'msg_choose_from_below'.tr,
+                        // ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            AppQuickActionTile(
+                              imagePath: ImageConstant.imgPlus,
+                              label: 'lbl_new_design'.tr,
+                              highlighted: true,
+                              onTap: () => onTapBtnPlusone(context),
+                            ),
+                            AppQuickActionTile(
+                              imagePath: ImageConstant.imgAppsAdd1,
+                              label: 'lbl_online_designs'.tr,
+                              onTap: () => onTapImgAppsaddoneone(context),
+                            ),
+                            isGuest
+                                ? AppQuickActionTile(
+                                    icon: Icons.login,
+                                    label: 'lbl_sign_in'.tr,
+                                    onTap: () => NavigatorService.pushNamed(
+                                      AppRoutes.screen0LoginScreen,
+                                    ),
+                                  )
+                                : AppQuickActionTile(
+                                    imagePath: ImageConstant.imgAppsAdd2,
+                                    label: 'lbl_my_designs'.tr,
+                                    onTap: () => onTapEyeImage(context),
+                                  ),
+                          ],
+                        ),
+                        SizedBox(height: AppDs.space8.v),
+                        // AppSectionHeader(title: 'lbl_help'.tr),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            AppQuickActionTile(
+                              imagePath: ImageConstant.imgOverflowMenu,
+                              label: 'lbl_tutorials'.tr,
+                              onTap: () => _openTutorialsYoutube(context),
+                            ),
+                            AppQuickActionTile(
+                              imagePath: ImageConstant.imgQrCodeSvgrepoCom,
+                              label: 'msg_generate_qr_code'.tr,
+                              onTap: () => NavigatorService.pushNamed(
+                                AppRoutes.enhancedQrGeneratorScreen,
+                              ),
+                            ),
+                            AppQuickActionTile(
+                              imagePath: ImageConstant.imgEyeOnprimarycontainer,
+                              label: 'msg_remove_background'.tr,
+                              onTap: () => onTapEyeImage1(context),
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: AppDs.space8.v),
+                        Center(
+                          child: AppQuickActionTile(
+                            imagePath: ImageConstant.imgCupStarSvgrepoCom,
+                            label: 'lbl_contest'.tr,
+                            highlighted: true,
+                            onTap: () => NavigatorService.pushNamed(
+                              AppRoutes.screenContestScreen,
                             ),
                           ),
                         ),
-                        SizedBox(height: 60.v),
-                        Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 23.h),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Padding(
-                                padding: EdgeInsets.only(bottom: 1.v),
-                                child: _buildColumnEyeOne(
-                                  context,
-                                  eyeImage: ImageConstant.imgPlus,
-                                  removeText: "lbl_new_design".tr,
-                                  onTap: () {
-                                    onTapBtnPlusone(context);
-                                  },
-                                ),
-                              ),
-                            // Column(
-                            //   children: [
-                            //     CustomIconButton(
-                            //       height: 31.adaptSize,
-                            //       width: 31.adaptSize,
-                            //       decoration:
-                            //           IconButtonStyleHelper.fillOnPrimaryContainer,
-                            //       onTap: () {
-                            //         onTapBtnPlusone(context);
-                            //       },
-                            //       child: CustomImageView(
-                            //         imagePath: ImageConstant.imgPlus,
-                            //       ),
-                            //     ),
-                            //     SizedBox(height: 19.v),
-                            //     GestureDetector(
-                            //       onTap: () {
-                            //         onTapTxtNewdesign(context);
-                            //       },
-                            //       child: Text(
-                            //         "lbl_new_design".tr,
-                            //         style: CustomTextStyles.bodySmallInter,
-                            //       ),
-                            //     )
-                            //   ],
-                            // ),
-                              Padding(
-                                padding: EdgeInsets.only(bottom: 1.v),
-                                child: Column(
-                                  children: [
-                                    CustomImageView(
-                                      imagePath: ImageConstant.imgAppsAdd1,
-                                      height: 34.adaptSize,
-                                      width: 34.adaptSize,
-                                      onTap: () {
-                                        onTapImgAppsaddoneone(context);
-                                      },
-                                    ),
-                                    SizedBox(height: 17.v),
-                                    GestureDetector(
-                                      onTap: () {
-                                        onTapTxtOnlinedesigns(context);
-                                      },
-                                      child: Text(
-                                        "lbl_online_designs".tr,
-                                        style: CustomTextStyles.bodySmallInter,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Padding(
-                                padding: EdgeInsets.only(bottom: 1.v),
-                                child: _buildColumnEyeOne(
-                                  context,
-                                  eyeImage: ImageConstant.imgAppsAdd2,
-                                  removeText: "lbl_my_designs".tr,
-                                  onTap: () {
-                                    onTapEyeImage(context);
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        SizedBox(height: 41.v),
-                        Padding(
-                          padding: EdgeInsets.only(left: 31.h, right: 22.h),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Padding(
-                                padding: EdgeInsets.only(bottom: 13.v),
-                                child: Column(
-                                  children: [
-                                    CustomIconButton(
-                                      height: 38.v,
-                                      width: 40.h,
-                                      padding: EdgeInsets.all(3.h),
-                                      onTap: () =>
-                                          _openTutorialsYoutube(context),
-                                      child: CustomImageView(
-                                        imagePath:
-                                            ImageConstant.imgOverflowMenu,
-                                      ),
-                                    ),
-                                    SizedBox(height: 13.v),
-                                    GestureDetector(
-                                      onTap: () =>
-                                          _openTutorialsYoutube(context),
-                                      child: Text(
-                                        "lbl_tutorials".tr,
-                                        style: CustomTextStyles.bodySmallInter,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const Spacer(flex: 53),
-                              InkWell(
-                                onTap: () {
-                                  NavigatorService.pushNamed(
-                                    AppRoutes.enhancedQrGeneratorScreen,
-                                  );
-                                },
-                                child: Column(
-                                  children: [
-                                    CustomImageView(
-                                      imagePath:
-                                          ImageConstant.imgQrCodeSvgrepoCom,
-                                      height: 33.adaptSize,
-                                      width: 33.adaptSize,
-                                    ),
-                                    SizedBox(height: 13.v),
-                                    SizedBox(
-                                      width: 73.h,
-                                      child: Text(
-                                        "msg_generate_qr_code".tr,
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                        textAlign: TextAlign.center,
-                                        style: CustomTextStyles.bodySmallInter,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const Spacer(flex: 46),
-                              Padding(
-                                padding: EdgeInsets.only(bottom: 1.v),
-                                child: _buildColumnEyeOne(
-                                  context,
-                                  eyeImage:
-                                      ImageConstant.imgEyeOnprimarycontainer,
-                                  removeText: "msg_remove_background".tr,
-                                  onTap: () {
-                                    onTapEyeImage1(context);
-                                  },
-                                ),
-                              ),
-                            // Expanded(
-                            //   child: _buildColumnEyeOne(
-                            //     context,
-                            //     eyeImage: ImageConstant.imgEyeOnprimarycontainer,
-                            //     removeText: "msg_remove_background".tr,
-                            //     onTapEyeImage: () {
-                            //       onTapEyeImage1(context);
-                            //     },
-                            //     onTapRemoveText: () {
-                            //       onTapTxtRemoveText1(context);
-                            //     },
-                            //   ),
-                            // )
-                            ],
-                          ),
-                        ),
-                        SizedBox(height: 35.v),
-                        InkWell(
-                          onTap: () {
-                            NavigatorService.pushNamed(
-                              AppRoutes.screenContestScreen,
-                            );
-                          },
-                          child: CustomImageView(
-                            imagePath: ImageConstant.imgCupStarSvgrepoCom,
-                            height: 35.adaptSize,
-                            width: 35.adaptSize,
-                          ),
-                        ),
-                        SizedBox(height: 10.v),
-                        Text(
-                          "lbl_contest".tr,
-                          style: CustomTextStyles.bodySmallInter,
-                        ),
-                        SizedBox(height: 24.v),
-                        _buildRowPremiumPlan(context),
-                        SizedBox(height: 17.v),
+                        SizedBox(height: AppDs.space8.v),
+                        if (!isGuest) ...[
+                          _buildRowPremiumPlan(context),
+                          SizedBox(height: AppDs.space4.v),
+                        ],
                         _buildRowSettingsAndHelp(context),
+                        SizedBox(height: AppDs.space4.v),
                       ],
                     ),
                   ),
@@ -306,6 +182,53 @@ class Screen1HomeScreen extends StatelessWidget {
               },
             ),
           ),
+        );
+      },
+    );
+  }
+
+  Widget _buildFeaturedDesigns(BuildContext context) {
+    return BlocBuilder<Screen1HomeBloc, Screen1HomeState>(
+      builder: (context, state) {
+        if (state.isLoadingFeatured) {
+          return const AppHorizontalListSkeleton();
+        }
+        if (state.featuredDesigns.isEmpty) {
+          return const SizedBox.shrink();
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            AppSectionHeader(title: 'lbl_featured'.tr),
+            SizedBox(height: AppDs.space3.v),
+            SizedBox(
+              height: 120.v,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: state.featuredDesigns.length,
+                separatorBuilder: (_, _) => SizedBox(width: AppDs.space3.h),
+                itemBuilder: (context, index) {
+                  final item = state.featuredDesigns[index];
+                  return InkWell(
+                    onTap: () => NavigatorService.pushNamed(
+                      AppRoutes.screen16OnlineDesignsScreen,
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(
+                        AppDs.radiusMd.adaptSize,
+                      ),
+                      child: CustomImageView(
+                        imagePath: item.fileUrl,
+                        width: 120.h,
+                        height: 120.v,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
         );
       },
     );
@@ -382,104 +305,65 @@ class Screen1HomeScreen extends StatelessWidget {
     final onPrimary = theme.colorScheme.onPrimary;
     final isPro = _homeUserIsPro();
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => onTapRowPremiumPlan(context),
-        borderRadius: BorderRadius.circular(12.adaptSize),
-        child: Ink(
-          padding: EdgeInsets.symmetric(horizontal: 16.h, vertical: 14.v),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12.adaptSize),
-            gradient: LinearGradient(
-              colors: [
-                appTheme.blueGray90001,
-                appTheme.blueGray90001.withValues(alpha: 0.92),
-              ],
-            ),
-            border: Border.all(
-              color: primary.withValues(alpha: 0.45),
-              width: 1.2,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: primary.withValues(alpha: 0.12),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
+    return AppCard(
+      elevated: true,
+      onTap: () => onTapRowPremiumPlan(context),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          CustomImageView(
+            imagePath: ImageConstant.imgStarCircleSvgrepoCom,
+            height: 46.adaptSize,
+            width: 46.adaptSize,
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              CustomImageView(
-                imagePath: ImageConstant.imgStarCircleSvgrepoCom,
-                height: 46.adaptSize,
-                width: 46.adaptSize,
-              ),
-              SizedBox(width: 14.h),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          SizedBox(width: AppDs.space3.h),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            "lbl_premium_plan".tr,
-                            style: CustomTextStyles.titleSmallVisbyRoundCF
-                                .copyWith(fontWeight: FontWeight.w700),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        SizedBox(width: 8.h),
-                        Container(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 10.h,
-                            vertical: 5.v,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isPro
-                                ? primary
-                                : Colors.white.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(20.adaptSize),
-                          ),
-                          child: Text(
-                            isPro ? 'lbl_pro'.tr : 'lbl_free'.tr,
-                            style: CustomTextStyles.bodySmallInter.copyWith(
-                              color: isPro ? onPrimary : Colors.white,
-                              fontWeight: FontWeight.w800,
-                              fontSize: 11.fSize,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: 6.v),
-                    Text(
-                      "msg_upgrade_to_access".tr,
-                      style: CustomTextStyles.bodySmallInter.copyWith(
-                        color: theme.colorScheme.onPrimaryContainer
-                            .withValues(alpha: 0.85),
-                        height: 1.3,
+                    Expanded(
+                      child: AppText(
+                        'lbl_premium_plan'.tr,
+                        variant: AppTextVariant.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: AppDs.space2.h,
+                        vertical: AppDs.space1.v,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isPro
+                            ? primary
+                            : Colors.white.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(
+                          AppDs.radiusFull.adaptSize,
+                        ),
+                      ),
+                      child: AppText(
+                        isPro ? 'lbl_pro'.tr : 'lbl_free'.tr,
+                        variant: AppTextVariant.caption,
+                        color: isPro ? onPrimary : AppDs.textOnDarkPrimary,
+                      ),
                     ),
                   ],
                 ),
-              ),
-              SizedBox(width: 8.h),
-              Icon(
-                Icons.chevron_right_rounded,
-                color: primary,
-                size: 28.adaptSize,
-              ),
-            ],
+                SizedBox(height: AppDs.space1.v),
+                AppText(
+                  'msg_upgrade_to_access'.tr,
+                  variant: AppTextVariant.secondary,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
           ),
-        ),
+          Icon(Icons.chevron_right_rounded, color: primary, size: 28.adaptSize),
+        ],
       ),
     );
   }
@@ -496,54 +380,16 @@ class Screen1HomeScreen extends StatelessWidget {
             onTap: () => Scaffold.of(context).openDrawer(),
           ),
         ),
-        SizedBox(width: 12.h),
+        SizedBox(width: AppDs.space3.h),
         Expanded(
           child: _HomeFooterActionCard(
             icon: Icons.help_outline_rounded,
             title: 'lbl_help'.tr,
             subtitle: 'msg_home_help_subtitle'.tr,
-            onTap: () =>
-                NavigatorService.pushNamed(AppRoutes.aboutUsScreen),
+            onTap: () => NavigatorService.pushNamed(AppRoutes.aboutUsScreen),
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildColumnEyeOne(
-    BuildContext context, {
-    required String eyeImage,
-    required String removeText,
-    Function? onTap,
-  }) {
-    return InkWell(
-      onTap: () {
-        onTap?.call();
-      },
-      child: Column(
-        children: [
-          CustomImageView(
-            imagePath: eyeImage,
-            height: 34.adaptSize,
-            width: 34.adaptSize,
-          ),
-          SizedBox(height: 11.v),
-          GestureDetector(
-            child: SizedBox(
-              width: 75.h,
-              child: Text(
-                removeText,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: CustomTextStyles.bodySmallInter.copyWith(
-                  color: theme.colorScheme.onPrimaryContainer.withOpacity(1),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -600,171 +446,37 @@ class _HomeFooterActionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final primary = theme.colorScheme.primary;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12.adaptSize),
-        child: Ink(
-          padding: EdgeInsets.symmetric(horizontal: 14.h, vertical: 14.v),
-          decoration: BoxDecoration(
-            color: appTheme.blueGray90001,
-            borderRadius: BorderRadius.circular(12.adaptSize),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+    return AppCard(
+      onTap: onTap,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: EdgeInsets.all(AppDs.space2.adaptSize),
+            decoration: BoxDecoration(
+              color: primary.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(AppDs.radiusMd.adaptSize),
+            ),
+            child: Icon(icon, color: primary, size: 22.adaptSize),
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: EdgeInsets.all(10.adaptSize),
-                decoration: BoxDecoration(
-                  color: primary.withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(12.adaptSize),
+          SizedBox(width: AppDs.space3.h),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                AppText(title, variant: AppTextVariant.title, maxLines: 1),
+                SizedBox(height: AppDs.space1.v),
+                AppText(
+                  subtitle,
+                  variant: AppTextVariant.secondary,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                child: Icon(icon, color: primary, size: 22.adaptSize),
-              ),
-              SizedBox(width: 12.h),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: CustomTextStyles.titleSmallVisbyRoundCF.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    SizedBox(height: 4.v),
-                    Text(
-                      subtitle,
-                      style: CustomTextStyles.bodySmallInter.copyWith(
-                        color: theme.colorScheme.onPrimaryContainer
-                            .withValues(alpha: 0.75),
-                        height: 1.25,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Auto-advancing promo strip for the home header (text slides; swap copy or load from API later).
-class _HomeAdvertisingSlider extends StatefulWidget {
-  const _HomeAdvertisingSlider();
-
-  @override
-  State<_HomeAdvertisingSlider> createState() => _HomeAdvertisingSliderState();
-}
-
-class _HomeAdvertisingSliderState extends State<_HomeAdvertisingSlider> {
-  static const List<String> _slideMessages = [
-    'Advertise your ad here',
-    'Promote your business to our community',
-    'Show your offer — this space is yours',
-    'Partner with us — get in touch today',
-  ];
-
-  late final PageController _pageController;
-  Timer? _autoAdvance;
-  int _index = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _pageController = PageController();
-    _autoAdvance = Timer.periodic(const Duration(seconds: 4), (_) {
-      if (!mounted || !_pageController.hasClients) return;
-      final next = (_index + 1) % _slideMessages.length;
-      _pageController.animateToPage(
-        next,
-        duration: const Duration(milliseconds: 420),
-        curve: Curves.easeInOut,
-      );
-    });
-  }
-
-  @override
-  void dispose() {
-    _autoAdvance?.cancel();
-    _pageController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
-    return Column(
-      children: [
-        Expanded(
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(14.adaptSize),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
-                border: Border.all(
-                  color: cs.outlineVariant.withValues(alpha: 0.5),
-                ),
-              ),
-              child: PageView.builder(
-                controller: _pageController,
-                itemCount: _slideMessages.length,
-                onPageChanged: (i) => setState(() => _index = i),
-                itemBuilder: (context, i) {
-                  return Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: 14.h,
-                      vertical: 12.v,
-                    ),
-                    child: Center(
-                      child: Text(
-                        _slideMessages[i],
-                        textAlign: TextAlign.center,
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: cs.onSurface,
-                              height: 1.25,
-                            ),
-                      ),
-                    ),
-                  );
-                },
-              ),
+              ],
             ),
           ),
-        ),
-        SizedBox(height: 8.v),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: List.generate(_slideMessages.length, (i) {
-            final active = i == _index;
-            return AnimatedContainer(
-              duration: const Duration(milliseconds: 220),
-              margin: EdgeInsets.symmetric(horizontal: 3.h),
-              width: active ? 18.h : 6.h,
-              height: 6.v,
-              decoration: BoxDecoration(
-                color: active
-                    ? cs.primary
-                    : cs.onSurface.withValues(alpha: 0.22),
-                borderRadius: BorderRadius.circular(999),
-              ),
-            );
-          }),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

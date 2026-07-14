@@ -1,21 +1,36 @@
 part of 'screen_contest_bloc.dart';
 
-/// Abstract class for all events that can be dispatched from the///ScreenContest widget.////// Events must be immutable and implement the [Equatable] interface.
 class ScreenContestEvent extends Equatable {
   @override
   List<Object?> get props => [];
 }
 
-/// Event that is dispatched when the ScreenContest widget is first created.
-class ScreenContestInitialEvent extends ScreenContestEvent {
+class ScreenContestInitialEvent extends ScreenContestEvent {}
+
+class ScreenContestLoadEvent extends ScreenContestEvent {
+  ScreenContestLoadEvent({
+    this.forceRefresh = false,
+    this.loadMore = false,
+  });
+  final bool forceRefresh;
+  final bool loadMore;
   @override
-  List<Object?> get props => [];
+  List<Object?> get props => [forceRefresh, loadMore];
 }
 
-/// Loads contest list from API.
-class ScreenContestLoadEvent extends ScreenContestEvent {
-  ScreenContestLoadEvent({this.forceRefresh = false});
-  final bool forceRefresh;
+class ScreenContestFilterEvent extends ScreenContestEvent {
+  ScreenContestFilterEvent({
+    this.categoryId,
+    this.updateCategory = false,
+    this.status,
+    this.updateStatus = false,
+    this.search,
+  });
+  final int? categoryId;
+  final bool updateCategory;
+  final String? status;
+  final bool updateStatus;
+  final String? search;
   @override
-  List<Object?> get props => [forceRefresh];
+  List<Object?> get props => [categoryId, updateCategory, status, updateStatus, search];
 }

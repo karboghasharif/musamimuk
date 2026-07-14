@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import '../core/design_system/app_design_tokens.dart';
+
 extension ImageTypeExtension on String {
   ImageType get imageType {
     if (startsWith('http') || startsWith('https')) {
@@ -89,14 +91,15 @@ class CustomImageView extends StatelessWidget {
   }
 
   Widget _buildImageView() {
-    if (imagePath != null) {
-      switch (imagePath!.imageType) {
+    final path = imagePath?.trim();
+    if (path != null && path.isNotEmpty) {
+      switch (path.imageType) {
         case ImageType.svg:
           return SizedBox(
             height: height,
             width: width,
             child: SvgPicture.asset(
-              imagePath!,
+              path,
               height: height,
               width: width,
               fit: fit ?? BoxFit.contain,
@@ -108,7 +111,7 @@ class CustomImageView extends StatelessWidget {
           );
         case ImageType.file:
           return Image.file(
-            File(imagePath!),
+            File(path),
             height: height,
             width: width,
             fit: fit ?? BoxFit.cover,
@@ -119,14 +122,23 @@ class CustomImageView extends StatelessWidget {
             height: height,
             width: width,
             fit: fit,
-            imageUrl: imagePath!,
+            imageUrl: path,
             color: color,
-            placeholder: (context, url) => SizedBox(
-              height: 30,
-              width: 30,
-              child: LinearProgressIndicator(
-                color: Colors.grey.shade200,
-                backgroundColor: Colors.grey.shade100,
+            fadeInDuration: AppDs.motionNormal,
+            fadeOutDuration: AppDs.motionFast,
+            placeholder: (context, url) => Container(
+              height: height,
+              width: width,
+              color: AppDs.surfaceElevated,
+              child: Center(
+                child: SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white.withValues(alpha: 0.35),
+                  ),
+                ),
               ),
             ),
             errorWidget: (context, url, error) => Image.asset(
@@ -139,7 +151,7 @@ class CustomImageView extends StatelessWidget {
         case ImageType.png:
         default:
           return Image.asset(
-            imagePath!,
+            path,
             height: height,
             width: width,
             fit: fit ?? BoxFit.cover,

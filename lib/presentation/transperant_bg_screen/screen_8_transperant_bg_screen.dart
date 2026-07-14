@@ -22,11 +22,12 @@ class Screen8TransperantBgScreen extends StatelessWidget {
       builder: (context, state) {
         return SafeArea(
           child: Scaffold(
+            backgroundColor: AppDs.surfaceBase,
             body: Container(
               width: double.maxFinite,
               padding: EdgeInsets.symmetric(
-                horizontal: 9.h,
-                vertical: 43.v,
+                horizontal: AppDs.space2.h,
+                vertical: AppDs.space6.v,
               ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -40,7 +41,7 @@ class Screen8TransperantBgScreen extends StatelessWidget {
                   ),
                   const Spacer(),
                   Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 40.h),
+                    padding: EdgeInsets.symmetric(horizontal: AppDs.space6.h),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -145,10 +146,7 @@ class Screen8TransperantBgScreen extends StatelessWidget {
   /// Section Widget
   Widget _buildRowtelevision(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(
-        left: 19.h,
-        right: 16.h,
-      ),
+      padding: EdgeInsets.symmetric(horizontal: AppDs.space4.h),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -169,10 +167,10 @@ class Screen8TransperantBgScreen extends StatelessWidget {
                 height: 19.adaptSize,
                 width: 19.adaptSize,
               ),
-              SizedBox(height: 7.v),
-              Text(
+              SizedBox(height: AppDs.space2.v),
+              AppText(
                 "lbl_save".tr,
-                style: CustomTextStyles.bodySmall10,
+                variant: AppTextVariant.caption,
               )
             ],
           )

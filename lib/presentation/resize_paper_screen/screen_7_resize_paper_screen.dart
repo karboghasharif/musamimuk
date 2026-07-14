@@ -25,18 +25,19 @@ class Screen7ResizePaperScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return SafeArea(
       child: Scaffold(
+        backgroundColor: AppDs.surfaceBase,
         resizeToAvoidBottomInset: false,
         body: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             _buildRowView(context),
-            SizedBox(height: 2.v),
+            SizedBox(height: AppDs.space1.v),
             Align(
               alignment: Alignment.centerLeft,
               child: Container(
                 height: 3.v,
                 width: 19.h,
-                margin: EdgeInsets.only(left: 28.h),
+                margin: EdgeInsets.only(left: AppDs.space6.h),
                 decoration: BoxDecoration(
                   color: theme.colorScheme.primary,
                   borderRadius: BorderRadius.circular(
@@ -45,14 +46,14 @@ class Screen7ResizePaperScreen extends StatelessWidget {
                 ),
               ),
             ),
-            SizedBox(height: 2.v),
+            SizedBox(height: AppDs.space1.v),
             Align(
               alignment: Alignment.centerRight,
               child: Padding(
-                padding: EdgeInsets.only(right: 25.h),
-                child: Text(
+                padding: EdgeInsets.only(right: AppDs.space5.h),
+                child: AppText(
                   "lbl_save".tr,
-                  style: CustomTextStyles.bodySmall10,
+                  variant: AppTextVariant.caption,
                 ),
               ),
             ),
@@ -98,7 +99,7 @@ class Screen7ResizePaperScreen extends StatelessWidget {
             ),
             SizedBox(height: 5.v),
             Padding(
-              padding: EdgeInsets.symmetric(horizontal: 49.h),
+              padding: EdgeInsets.symmetric(horizontal: AppDs.space6.h),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -195,7 +196,7 @@ class Screen7ResizePaperScreen extends StatelessWidget {
 
   Widget _buildRowView(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 28.h),
+      padding: EdgeInsets.symmetric(horizontal: AppDs.space6.h),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -226,34 +227,32 @@ class Screen7ResizePaperScreen extends StatelessWidget {
   Widget _buildColumnSelectSize(BuildContext context) {
     return Align(
       alignment: Alignment.bottomCenter,
-      child: Container(
-        margin: EdgeInsets.only(bottom: 45.v),
+      child: AppCard(
+        margin: EdgeInsets.only(bottom: AppDs.space6.v),
         padding: EdgeInsets.symmetric(
-          horizontal: 24.h,
-          vertical: 20.v,
+          horizontal: AppDs.space6.h,
+          vertical: AppDs.space5.v,
         ),
-        decoration: AppDecoration.fillPrimary.copyWith(
-          borderRadius: BorderRadiusStyle.roundedBorder33,
-        ),
+        elevated: true,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
+            AppText(
               "lbl_select_size2".tr,
-              style: CustomTextStyles.titleMediumPoppinsBluegray90004,
+              variant: AppTextVariant.title,
             ),
-            SizedBox(height: 12.v),
+            SizedBox(height: AppDs.space3.v),
             Align(
               alignment: Alignment.centerLeft,
               child: Padding(
-                padding: EdgeInsets.only(left: 16.h),
-                child: Text(
+                padding: EdgeInsets.only(left: AppDs.space4.h),
+                child: AppText(
                   "lbl_custom_size".tr,
-                  style: CustomTextStyles.bodySmallBluegray90004,
+                  variant: AppTextVariant.secondary,
                 ),
               ),
             ),
-            SizedBox(height: 10.v),
+            SizedBox(height: AppDs.space2.v),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -281,9 +280,9 @@ class Screen7ResizePaperScreen extends StatelessWidget {
                     top: 17.v,
                     bottom: 14.v,
                   ),
-                  child: Text(
+                  child: AppText(
                     "lbl_x".tr,
-                    style: CustomTextStyles.bodySmallBluegray90004,
+                    variant: AppTextVariant.secondary,
                   ),
                 ),
                 BlocSelector<Screen7ResizePaperBloc, Screen7ResizePaperState,
@@ -342,9 +341,9 @@ class Screen7ResizePaperScreen extends StatelessWidget {
                 )
               ],
             ),
-            SizedBox(height: 14.v),
+            SizedBox(height: AppDs.space3.v),
             Container(
-              padding: EdgeInsets.all(15.h),
+              padding: EdgeInsets.all(AppDs.space3.h),
               decoration: AppDecoration.fillYellow.copyWith(
                 borderRadius: BorderRadiusStyle.roundedBorder10,
               ),
@@ -438,7 +437,7 @@ class Screen7ResizePaperScreen extends StatelessWidget {
                 ],
               ),
             ),
-            SizedBox(height: 68.v)
+            SizedBox(height: AppDs.space12.v)
           ],
         ),
       ),

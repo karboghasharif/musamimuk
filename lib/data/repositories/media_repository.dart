@@ -3,6 +3,7 @@ import 'package:musamimuk/core/network/api_client.dart';
 import 'package:musamimuk/core/network/api_utils.dart';
 import 'package:musamimuk/data/models/category_item.dart';
 import 'package:musamimuk/data/models/media_item.dart';
+import 'package:musamimuk/data/repositories/asset_repository.dart';
 
 enum MediaType { shape, png, logo, design }
 
@@ -49,11 +50,21 @@ class MediaRepository {
   final ApiClient _api;
 
   Future<MediaResult> list() async {
+    final assetType = AssetRepository.typeParamFor(type);
+    if (assetType != null) {
+      final result = await AssetRepository().listAssets(
+        type: assetType,
+        perPage: 100,
+      );
+      if (result is AssetFailure) return MediaFailure(result.message);
+      final success = result as AssetSuccess;
+      return MediaSuccess(items: success.items, message: success.message);
+    }
     try {
       final response = await _api.dio.get<Map<String, dynamic>>('${type.pathSegment}/list');
       final data = response.data;
       if (data == null) return MediaFailure('Empty response');
-      final list = apiExtractDbDataList(data).map(MediaItem.fromJson).toList();
+      final list = apiExtractDataList(data).map(MediaItem.fromJson).toList();
       return MediaSuccess(items: list, message: apiExtractMessage(data));
     } on DioException catch (e) {
       return MediaFailure(apiMessageFromDioException(e));
@@ -63,6 +74,13 @@ class MediaRepository {
   }
 
   Future<MediaResult> getById(int id) async {
+    final assetType = AssetRepository.typeParamFor(type);
+    if (assetType != null) {
+      final result = await AssetRepository().getAsset(id);
+      if (result is AssetFailure) return MediaFailure(result.message);
+      final success = result as AssetSuccess;
+      return MediaSuccess(item: success.item, message: success.message);
+    }
     try {
       final response = await _api.dio.get<Map<String, dynamic>>('${type.pathSegment}/$id');
       final data = response.data;
@@ -78,6 +96,15 @@ class MediaRepository {
   }
 
   Future<MediaCategoriesResult> categoryList() async {
+    final assetType = AssetRepository.typeParamFor(type);
+    if (assetType != null) {
+      final result = await AssetRepository().categories(type: assetType);
+      if (result is AssetCategoriesFailure) {
+        return MediaCategoriesFailure(result.message);
+      }
+      final success = result as AssetCategoriesSuccess;
+      return MediaCategoriesSuccess(items: success.items, message: success.message);
+    }
     try {
       final response = await _api.dio.get<Map<String, dynamic>>(
         '${type.pathSegment}/category',

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class PrefUtils {
@@ -34,6 +35,8 @@ class PrefUtils {
   static const String _keyLanguageCode = 'language_code';
   static const String _keyRememberSession = 'remember_session';
   static const String _keySavedLoginEmail = 'saved_login_email';
+  /// Stable per-install identifier used to start/resume a backend guest session.
+  static const String _keyDeviceId = 'device_id';
   /// Local home access without API token: `guest` or `google` (server has no Google OAuth yet).
   static const String _keyOfflineHomeKind = 'offline_home_kind';
 
@@ -131,6 +134,30 @@ class PrefUtils {
     return id == 1 || id == 3;
   }
 
+  /// Returns a stable device id for guest sessions, generating and persisting
+  /// one on first use. Survives logout ([clearAuth]); reset only on reinstall.
+  Future<String> getOrCreateDeviceId() async {
+    final prefs = _sharedPreferences ?? await SharedPreferences.getInstance();
+    _sharedPreferences ??= prefs;
+    final existing = prefs.getString(_keyDeviceId);
+    if (existing != null && existing.isNotEmpty) return existing;
+    final id = _generateUuidV4();
+    await prefs.setString(_keyDeviceId, id);
+    return id;
+  }
+
+  /// RFC-4122 v4 UUID from a cryptographically secure RNG (no extra package).
+  static String _generateUuidV4() {
+    final rnd = Random.secure();
+    final bytes = List<int>.generate(16, (_) => rnd.nextInt(256));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
+    bytes[8] = (bytes[8] & 0x3f) | 0x80; // variant 10xx
+    String hex(int b) => b.toRadixString(16).padLeft(2, '0');
+    final h = bytes.map(hex).join();
+    return '${h.substring(0, 8)}-${h.substring(8, 12)}-'
+        '${h.substring(12, 16)}-${h.substring(16, 20)}-${h.substring(20)}';
+  }
+
   /// Guest or Google-offline session: home and editor work; cloud APIs stay gated by [isLoggedIn].
   String? getOfflineHomeKind() {
     try {
@@ -147,10 +174,40 @@ class PrefUtils {
     return k == offlineHomeKindGuest || k == offlineHomeKindGoogle;
   }
 
+  /// True when the current session is a guest.
+  ///
+  /// Prefers the backend `is_guest` flag (role_id 4) from the stored user, and
+  /// falls back to the legacy local guest marker for older sessions.
+  bool isGuestAccount() {
+    final s = getUserSession();
+    if (s != null) {
+      final flag = s['is_guest'];
+      if (flag is bool) return flag;
+      if (flag != null) {
+        final t = flag.toString().toLowerCase();
+        if (t == 'true' || t == '1') return true;
+        if (t == 'false' || t == '0') return false;
+      }
+      final r = s['role_id'];
+      final id = r is int ? r : int.tryParse(r?.toString() ?? '');
+      if (id == 4) return true;
+      if (s['role']?.toString().toLowerCase() == 'guest') return true;
+    }
+    return getOfflineHomeKind() == offlineHomeKindGuest;
+  }
+
   Future<void> clearOfflineHomeSession() async {
     final prefs = _sharedPreferences ?? await SharedPreferences.getInstance();
     _sharedPreferences ??= prefs;
     await prefs.remove(_keyOfflineHomeKind);
+  }
+
+  /// Marks the local offline-home kind as guest (used by the backend guest
+  /// session so splash / offline gates keep working alongside the real token).
+  Future<void> markGuestOfflineHome() async {
+    final prefs = _sharedPreferences ?? await SharedPreferences.getInstance();
+    _sharedPreferences ??= prefs;
+    await prefs.setString(_keyOfflineHomeKind, offlineHomeKindGuest);
   }
 
   /// Continues as guest: no bearer token; minimal profile for UI.

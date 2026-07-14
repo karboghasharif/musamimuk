@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 
+import '/core/constants/editor_various_constants.dart';
 import '/core/models/editor_configs/pro_image_editor_configs.dart';
 import '/core/models/layers/layer.dart';
 import '/shared/widgets/extended/interactive_viewer/extended_interactive_viewer.dart';
@@ -144,6 +145,7 @@ class LayerDragSelectionService {
 
       // Skip layers that have enableSelection set to false
       if (!layer.interaction.enableSelection) continue;
+      if (layer.meta?[kMusamiLayerLockedMetaKey] == true) continue;
 
       Offset fractionalOffset = layer.isTextLayer
           ? textOffset

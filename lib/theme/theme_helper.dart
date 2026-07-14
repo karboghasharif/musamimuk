@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
-import '../core/app_export.dart';
+
+import '../core/design_system/app_design_tokens.dart';
+import '../core/utils/pref_utils.dart';
+import '../core/utils/size_utils.dart';
 
 LightCodeColors get appTheme => ThemeHelper().themeColor();
 ThemeData get theme => ThemeHelper().themeData();
@@ -19,11 +22,16 @@ class ThemeHelper {
   ThemeData _getThemeData() {
     var colorScheme =
         _supportedColorScheme[_appTheme] ?? ColorSchemes.lightCodeColorScheme;
+    final radius = BorderRadius.circular(AppDs.radiusLg);
     return ThemeData(
+      useMaterial3: true,
       visualDensity: VisualDensity.standard,
       colorScheme: colorScheme,
       textTheme: TextThemes.textTheme(colorScheme),
-      scaffoldBackgroundColor: appTheme.blueGray90007,
+      scaffoldBackgroundColor: AppDs.surfaceBase,
+      canvasColor: AppDs.surfaceBase,
+      cardColor: AppDs.surfaceRaised,
+      dividerColor: Colors.white.withValues(alpha: 0.1),
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
           TargetPlatform.android: FadeUpwardsPageTransitionsBuilder(),
@@ -31,43 +39,153 @@ class ThemeHelper {
           TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
         },
       ),
+      cardTheme: CardThemeData(
+        color: AppDs.surfaceRaised,
+        elevation: 0,
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+          borderRadius: radius,
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: colorScheme.primary,
+          foregroundColor: colorScheme.onPrimary,
+          disabledBackgroundColor: colorScheme.primary.withValues(alpha: 0.35),
+          disabledForegroundColor: colorScheme.onPrimary.withValues(alpha: 0.5),
+          minimumSize: Size(0, AppDs.buttonHeight),
+          padding: EdgeInsets.symmetric(
+            horizontal: AppDs.space4,
+            vertical: AppDs.space3,
+          ),
+          shape: RoundedRectangleBorder(borderRadius: radius),
+          textStyle: TextStyle(
+            fontSize: AppDs.fontBody,
+            fontWeight: FontWeight.w600,
+          ),
+          elevation: 0,
+        ),
+      ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: colorScheme.primary,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
+          foregroundColor: colorScheme.onPrimary,
+          minimumSize: Size(0, AppDs.buttonHeight),
+          padding: EdgeInsets.symmetric(
+            horizontal: AppDs.space4,
+            vertical: AppDs.space3,
           ),
-          visualDensity: const VisualDensity(
-            vertical: -4,
-            horizontal: -4,
-          ),
-          padding: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(borderRadius: radius),
+          elevation: 0,
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          backgroundColor: Colors.transparent,
+          foregroundColor: AppDs.textOnDarkPrimary,
           side: BorderSide(
-            color: appTheme.black900,
-            width: 1,
+            color: Colors.white.withValues(alpha: 0.22),
+            width: 1.2,
           ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
+          minimumSize: Size(0, AppDs.buttonHeight),
+          padding: EdgeInsets.symmetric(
+            horizontal: AppDs.space4,
+            vertical: AppDs.space3,
           ),
-          visualDensity: const VisualDensity(
-            vertical: -4,
-            horizontal: -4,
+          shape: RoundedRectangleBorder(borderRadius: radius),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: colorScheme.primary,
+          padding: EdgeInsets.symmetric(
+            horizontal: AppDs.space3,
+            vertical: AppDs.space2,
           ),
-          padding: EdgeInsets.zero,
+          textStyle: TextStyle(
+            fontSize: AppDs.fontBody,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: AppDs.surfaceElevated,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: AppDs.space4,
+          vertical: AppDs.space3,
+        ),
+        hintStyle: TextStyle(
+          color: AppDs.textOnDarkSecondary,
+          fontSize: AppDs.fontBody,
+        ),
+        labelStyle: TextStyle(
+          color: AppDs.textOnDarkSecondary,
+          fontSize: AppDs.fontSecondary,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppDs.radiusMd),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppDs.radiusMd),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppDs.radiusMd),
+          borderSide: BorderSide(color: colorScheme.primary, width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppDs.radiusMd),
+          borderSide: BorderSide(color: colorScheme.error),
+        ),
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: AppDs.surfaceElevated,
+        selectedColor: colorScheme.primary.withValues(alpha: 0.22),
+        labelStyle: TextStyle(
+          color: AppDs.textOnDarkSecondary,
+          fontSize: AppDs.fontSecondary,
+          fontWeight: FontWeight.w500,
+        ),
+        secondaryLabelStyle: TextStyle(
+          color: AppDs.textOnDarkPrimary,
+          fontSize: AppDs.fontSecondary,
+          fontWeight: FontWeight.w600,
+        ),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppDs.space2,
+          vertical: AppDs.space1,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppDs.radiusFull),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
         ),
       ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: colorScheme.primary,
+        foregroundColor: colorScheme.onPrimary,
+        elevation: 2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppDs.radiusLg),
+        ),
       ),
       dividerTheme: DividerThemeData(
         thickness: 1,
         space: 1,
-        color: colorScheme.primary,
+        color: Colors.white.withValues(alpha: 0.1),
+      ),
+      appBarTheme: AppBarTheme(
+        backgroundColor: AppDs.surfaceBase,
+        foregroundColor: AppDs.textOnDarkPrimary,
+        elevation: 0,
+        centerTitle: true,
+        titleTextStyle: TextStyle(
+          color: AppDs.textOnDarkPrimary,
+          fontSize: AppDs.fontSectionTitle,
+          fontWeight: FontWeight.w600,
+          fontFamily: 'Poppins',
+        ),
       ),
     );
   }
@@ -77,86 +195,111 @@ class ThemeHelper {
 }
 
 class TextThemes {
-  static TextTheme textTheme(ColorScheme colorScheme) => TextTheme(
-        bodyLarge: TextStyle(
-          color: colorScheme.onPrimaryContainer.withOpacity(1),
-          fontSize: 17.fSize,
-          fontFamily: 'Inter',
-          fontWeight: FontWeight.w400,
-        ),
-        bodyMedium: TextStyle(
-          color: colorScheme.onPrimaryContainer.withOpacity(1),
-          fontSize: 13.fSize,
-          fontFamily: 'Poppins',
-          fontWeight: FontWeight.w400,
-        ),
-        bodySmall: TextStyle(
-          color: colorScheme.onPrimaryContainer.withOpacity(1),
-          fontSize: 11.fSize,
-          fontFamily: 'Poppins',
-          fontWeight: FontWeight.w400,
-        ),
-        displaySmall: TextStyle(
-          color: appTheme.blueGray90004,
-          fontSize: 37.fSize,
-          fontFamily: 'Poppins',
-          fontWeight: FontWeight.w700,
-        ),
-        headlineLarge: TextStyle(
-          color: colorScheme.onPrimaryContainer.withOpacity(1),
-          fontSize: 30.fSize,
-          fontFamily: 'Visby Round CF',
-          fontWeight: FontWeight.w900,
-        ),
-        headlineMedium: TextStyle(
-          color: colorScheme.onPrimaryContainer.withOpacity(1),
-          fontSize: 28.fSize,
-          fontFamily: 'Poppins',
-          fontWeight: FontWeight.w700,
-        ),
-        labelLarge: TextStyle(
-          color: appTheme.blueGray90004,
-          fontSize: 12.fSize,
-          fontFamily: 'Poppins',
-          fontWeight: FontWeight.w500,
-        ),
-        labelMedium: TextStyle(
-          color: colorScheme.onPrimaryContainer.withOpacity(1),
-          fontSize: 11.fSize,
-          fontFamily: 'Poppins',
-          fontWeight: FontWeight.w700,
-        ),
-        titleLarge: TextStyle(
-          color: colorScheme.onPrimaryContainer.withOpacity(1),
-          fontSize: 20.fSize,
-          fontFamily: 'Poppins',
-          fontWeight: FontWeight.w700,
-        ),
-        titleMedium: TextStyle(
-          color: colorScheme.onPrimaryContainer.withOpacity(1),
-          fontSize: 18.fSize,
-          fontFamily: 'Visby Round CF',
-          fontWeight: FontWeight.w500,
-        ),
-        titleSmall: TextStyle(
-          color: colorScheme.onPrimaryContainer.withOpacity(1),
-          fontSize: 14.fSize,
-          fontFamily: 'Poppins',
-          fontWeight: FontWeight.w500,
-        ),
-      );
+  static TextTheme textTheme(ColorScheme colorScheme) {
+    final primary = AppDs.textOnDarkPrimary;
+    final secondary = AppDs.textOnDarkSecondary;
+    return TextTheme(
+      displaySmall: TextStyle(
+        color: primary,
+        fontSize: 32.fSize,
+        fontFamily: 'Poppins',
+        fontWeight: FontWeight.w700,
+        height: 1.15,
+      ),
+      headlineLarge: TextStyle(
+        color: primary,
+        fontSize: 30.fSize,
+        fontFamily: 'Visby Round CF',
+        fontWeight: FontWeight.w800,
+        height: 1.2,
+      ),
+      headlineMedium: TextStyle(
+        color: primary,
+        fontSize: 28.fSize,
+        fontFamily: 'Poppins',
+        fontWeight: FontWeight.w700,
+        height: 1.2,
+      ),
+      titleLarge: TextStyle(
+        color: primary,
+        fontSize: 20.fSize,
+        fontFamily: 'Poppins',
+        fontWeight: FontWeight.w600,
+        height: 1.25,
+      ),
+      titleMedium: TextStyle(
+        color: primary,
+        fontSize: 17.fSize,
+        fontFamily: 'Visby Round CF',
+        fontWeight: FontWeight.w600,
+        height: 1.3,
+      ),
+      titleSmall: TextStyle(
+        color: primary,
+        fontSize: 15.fSize,
+        fontFamily: 'Poppins',
+        fontWeight: FontWeight.w500,
+        height: 1.35,
+      ),
+      bodyLarge: TextStyle(
+        color: primary,
+        fontSize: 16.fSize,
+        fontFamily: 'Inter',
+        fontWeight: FontWeight.w400,
+        height: 1.45,
+      ),
+      bodyMedium: TextStyle(
+        color: primary,
+        fontSize: 15.fSize,
+        fontFamily: 'Poppins',
+        fontWeight: FontWeight.w400,
+        height: 1.4,
+      ),
+      bodySmall: TextStyle(
+        color: secondary,
+        fontSize: 13.fSize,
+        fontFamily: 'Poppins',
+        fontWeight: FontWeight.w400,
+        height: 1.35,
+      ),
+      labelLarge: TextStyle(
+        color: primary,
+        fontSize: 14.fSize,
+        fontFamily: 'Poppins',
+        fontWeight: FontWeight.w600,
+        height: 1.25,
+      ),
+      labelMedium: TextStyle(
+        color: secondary,
+        fontSize: 12.fSize,
+        fontFamily: 'Poppins',
+        fontWeight: FontWeight.w600,
+        height: 1.25,
+      ),
+    );
+  }
 }
 
 class ColorSchemes {
-  static const lightCodeColorScheme = ColorScheme.light(
-    primary: Color(0XFFF4DF08),
-    primaryContainer: Color(0XFF512DA7),
-    secondaryContainer: Color(0XFFF8D832),
-    errorContainer: Color(0XFF8F8F8F),
-    onError: Color(0X7FDEDEDE),
-    onErrorContainer: Color(0XFF1305FF),
-    onPrimary: Color(0XFF24282E),
-    onPrimaryContainer: Color(0X19FFFFFF),
+  static const lightCodeColorScheme = ColorScheme(
+    brightness: Brightness.dark,
+    primary: Color(0xFFF4DF08),
+    onPrimary: Color(0xFF000000),
+    primaryContainer: Color(0xFF512DA7),
+    onPrimaryContainer: Color(0xFFFFFFFF),
+    secondary: Color(0xFFF4DF08),
+    onSecondary: Color(0xFF000000),
+    secondaryContainer: Color(0xFF2F353D),
+    onSecondaryContainer: Color(0xFFFFFFFF),
+    surface: Color(0xFF252A30),
+    onSurface: Color(0xFFFFFFFF),
+    onSurfaceVariant: Color(0xFF9FA7B8),
+    outline: Color(0xFF4B525B),
+    outlineVariant: Color(0xFF2F353D),
+    error: Color(0xFFFF6B6B),
+    onError: Color(0xFF000000),
+    errorContainer: Color(0xFF5C2B2B),
+    onErrorContainer: Color(0xFFF0F2F5),
   );
 }
 

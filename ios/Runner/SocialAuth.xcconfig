@@ -1,0 +1,7 @@
+// Replace placeholders with credentials from Google Cloud Console, Meta for Developers,
+// and Apple Developer (Sign in with Apple capability on the App ID).
+GOOGLE_IOS_CLIENT_ID=REPLACE_WITH_IOS_OAUTH_CLIENT_ID.apps.googleusercontent.com
+GOOGLE_REVERSED_CLIENT_ID=com.googleusercontent.apps.REPLACE_WITH_NUMERIC_ID
+FACEBOOK_APP_ID=REPLACE_WITH_FACEBOOK_APP_ID
+FACEBOOK_CLIENT_TOKEN=REPLACE_WITH_FACEBOOK_CLIENT_TOKEN
+FACEBOOK_DISPLAY_NAME=Musamimuk

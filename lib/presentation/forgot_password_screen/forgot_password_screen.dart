@@ -5,8 +5,8 @@ import '../../core/app_export.dart';
 import '../../core/utils/app_toast.dart';
 import '../../core/utils/validation_functions.dart';
 import '../../data/repositories/auth_repository.dart';
-import '../../theme/custom_button_style.dart';
-import '../../widgets/custom_elevated_button.dart';
+import '../../widgets/app_bar/appbar_leading_image.dart';
+import '../../widgets/app_bar/custom_app_bar.dart';
 import '../../widgets/custom_text_form_field.dart';
 
 /// Requests a password reset email from the API (`POST /forgot-password`).
@@ -33,16 +33,19 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     setState(() => _loading = true);
-    final result = await AuthRepository().requestPasswordReset(
-      _emailController.text.trim(),
-    );
-    if (!mounted) return;
-    setState(() => _loading = false);
-    if (result is ForgotPasswordSuccess) {
-      showAppToast(result.message, type: ToastificationType.success);
-      NavigatorService.goBack();
-    } else if (result is ForgotPasswordFailure) {
-      showAppToast(result.message, type: ToastificationType.error);
+    try {
+      final result = await AuthRepository().requestPasswordReset(
+        _emailController.text.trim(),
+      );
+      if (!mounted) return;
+      if (result is ForgotPasswordSuccess) {
+        showAppToast(result.message, type: ToastificationType.success);
+        NavigatorService.goBack();
+      } else if (result is ForgotPasswordFailure) {
+        showAppToast(result.message, type: ToastificationType.error);
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -50,22 +53,26 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   Widget build(BuildContext context) {
     return SafeArea(
       child: Scaffold(
-        appBar: AppBar(
-          title: Text('lbl_forgot_password'.tr),
+        appBar: CustomAppBar(
+          leading: AppbarLeadingImage(
+            imagePath: ImageConstant.imgArrowLeftPrimary,
+          ),
         ),
         body: Form(
           key: _formKey,
           child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 20.h, vertical: 24.v),
+            padding: EdgeInsets.symmetric(
+              horizontal: AppDs.space4.h,
+              vertical: AppDs.space6.v,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  'msg_forgot_password_hint'.tr,
-                  style: CustomTextStyles.titleSmallVisbyRoundCFBluegray10001
-                      .copyWith(height: 1.35),
+                AppPageHeader(
+                  title: 'lbl_forgot_password'.tr,
+                  subtitle: 'msg_forgot_password_hint'.tr,
                 ),
-                SizedBox(height: 24.v),
+                SizedBox(height: AppDs.space6.v),
                 CustomTextFormField(
                   controller: _emailController,
                   hintText: 'lbl_email'.tr,
@@ -92,23 +99,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   borderDecoration: TextFormFieldStyleHelper.fillBlueGray,
                   fillColor: appTheme.blueGray90001,
                 ),
-                SizedBox(height: 28.v),
-                _loading
-                    ? Center(
-                        child: SizedBox(
-                          height: 48.v,
-                          width: 48.h,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: theme.colorScheme.primary,
-                          ),
-                        ),
-                      )
-                    : CustomElevatedButton(
-                        text: 'lbl_send_reset_link'.tr,
-                        buttonStyle: CustomButtonStyles.fillPrimary,
-                        onPressed: _submit,
-                      ),
+                SizedBox(height: AppDs.space6.v),
+                AppPrimaryButton(
+                  label: 'lbl_send_reset_link'.tr,
+                  isLoading: _loading,
+                  onPressed: _submit,
+                ),
               ],
             ),
           ),

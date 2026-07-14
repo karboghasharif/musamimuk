@@ -6,13 +6,18 @@ import '../../../core/app_export.dart';
 import '../../../core/utils/app_toast.dart';
 import 'design_export_encode.dart';
 
-/// Save dialog: file name, format, visibility (dimensions & JPG quality use editor defaults).
+/// Save dialog: file name; optional format and visibility (sizes & JPG quality follow editor).
+///
+/// [showFileType] / [allowedFileTypes] — device gallery flows show PNG/JPG only;
+/// workspace upload hides format and fixes type to JPG in the submitted result.
 Future<DesignSaveFormResult?> showDesignSaveFormDialog(
   BuildContext context, {
   required int initialWidth,
   required int initialHeight,
   String? suggestedName,
   bool showVisibility = true,
+  bool showFileType = true,
+  List<DesignExportFileType>? allowedFileTypes,
 }) {
   return showDialog<DesignSaveFormResult>(
     context: context,
@@ -23,9 +28,18 @@ Future<DesignSaveFormResult?> showDesignSaveFormDialog(
       initialHeight: initialHeight,
       suggestedName: suggestedName,
       showVisibility: showVisibility,
+      showFileType: showFileType,
+      allowedFileTypes: allowedFileTypes,
     ),
   );
 }
+
+const List<DesignExportFileType> _designSaveDialogDefaultTypeOrder =
+    <DesignExportFileType>[
+  DesignExportFileType.png,
+  DesignExportFileType.jpg,
+  DesignExportFileType.pdf,
+];
 
 abstract final class _SaveDialogLook {
   static const Color accent = Color(0xFF7A1E32);
@@ -43,12 +57,16 @@ class _DesignSaveFormDialog extends StatefulWidget {
     required this.initialHeight,
     this.suggestedName,
     required this.showVisibility,
+    required this.showFileType,
+    this.allowedFileTypes,
   });
 
   final int initialWidth;
   final int initialHeight;
   final String? suggestedName;
   final bool showVisibility;
+  final bool showFileType;
+  final List<DesignExportFileType>? allowedFileTypes;
 
   @override
   State<_DesignSaveFormDialog> createState() => _DesignSaveFormDialogState();
@@ -56,12 +74,33 @@ class _DesignSaveFormDialog extends StatefulWidget {
 
 class _DesignSaveFormDialogState extends State<_DesignSaveFormDialog> {
   late final TextEditingController _nameCtrl;
-  DesignExportFileType _fileType = DesignExportFileType.jpg;
+  late DesignExportFileType _fileType;
   String _visibility = 'public';
+
+  List<DesignExportFileType> _orderedFileTypesForUi() {
+    if (!widget.showFileType) return const [];
+    final allowed = widget.allowedFileTypes;
+    if (allowed == null) {
+      return _designSaveDialogDefaultTypeOrder;
+    }
+    return _designSaveDialogDefaultTypeOrder
+        .where(allowed.contains)
+        .toList(growable: false);
+  }
+
+  DesignExportFileType _initialFileSelection(List<DesignExportFileType> order) {
+    if (order.isEmpty) return DesignExportFileType.jpg;
+    if (order.contains(DesignExportFileType.jpg)) {
+      return DesignExportFileType.jpg;
+    }
+    return order.first;
+  }
 
   @override
   void initState() {
     super.initState();
+    final types = _orderedFileTypesForUi();
+    _fileType = widget.showFileType ? _initialFileSelection(types) : DesignExportFileType.jpg;
     _nameCtrl = TextEditingController(
       text: widget.suggestedName?.trim().isNotEmpty == true
           ? widget.suggestedName!.trim()
@@ -83,11 +122,14 @@ class _DesignSaveFormDialogState extends State<_DesignSaveFormDialog> {
     }
     final w = widget.initialWidth.clamp(16, 8192);
     final h = widget.initialHeight.clamp(16, 8192);
+    final fileType = widget.showFileType ? _fileType : DesignExportFileType.jpg;
+    final visibility = widget.showVisibility ? _visibility : 'public';
+
     Navigator.of(context, rootNavigator: true).pop(
       DesignSaveFormResult(
         title: title,
-        visibility: _visibility,
-        fileType: _fileType,
+        visibility: visibility,
+        fileType: fileType,
         width: w,
         height: h,
         quality: _SaveDialogLook.defaultJpgQuality,
@@ -149,46 +191,24 @@ class _DesignSaveFormDialogState extends State<_DesignSaveFormDialog> {
                     ),
                   ),
                 ),
-                SizedBox(height: AppDs.space4.v),
-                _LabeledRow(
-                  label: 'lbl_file_type'.tr,
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      _SegmentRow<DesignExportFileType>(
-                        value: _fileType,
-                        options: [
-                          (DesignExportFileType.png, 'lbl_format_png'.tr),
-                          (DesignExportFileType.jpg, 'lbl_format_jpg'.tr),
-                          (DesignExportFileType.pdf, 'lbl_format_pdf'.tr),
-                        ],
-                        onChanged: (v) => setState(() => _fileType = v),
-                      ),
-                      Positioned(
-                        right: 4.h,
-                        top: -6.v,
-                        child: Container(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 6.h,
-                            vertical: 2.v,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFE65100),
-                            borderRadius: BorderRadius.circular(6.h),
-                          ),
-                          child: Text(
-                            'lbl_premium'.tr,
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 10.fSize,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                if (widget.showFileType && _orderedFileTypesForUi().isNotEmpty) ...[
+                  SizedBox(height: AppDs.space4.v),
+                  _LabeledRow(
+                    label: 'lbl_file_type'.tr,
+                    child: _SegmentRow<DesignExportFileType>(
+                      value: _fileType,
+                      options: _orderedFileTypesForUi().map((t) {
+                        final labelKey = switch (t) {
+                          DesignExportFileType.png => 'lbl_format_png',
+                          DesignExportFileType.jpg => 'lbl_format_jpg',
+                          DesignExportFileType.pdf => 'lbl_format_pdf',
+                        };
+                        return (t, labelKey.tr);
+                      }).toList(),
+                      onChanged: (v) => setState(() => _fileType = v),
+                    ),
                   ),
-                ),
+                ],
                 if (widget.showVisibility) ...[
                   SizedBox(height: AppDs.space4.v),
                   _LabeledRow(

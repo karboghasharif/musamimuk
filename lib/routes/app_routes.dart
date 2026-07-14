@@ -9,6 +9,8 @@ import '../presentation/background_color_tab_container_screen/screen_9_backgroun
 import '../presentation/color_picker_screen/screen_10_color_picker_screen.dart';
 import '../presentation/color_wheel_tab_container_screen/screen_11_color_wheel_tab_container_screen.dart';
 import '../presentation/home_screen/screen_1_home_screen.dart';
+import '../presentation/favorites/favorites_screen.dart';
+import '../presentation/notifications/notifications_screen.dart';
 import '../presentation/forgot_password_screen/forgot_password_screen.dart';
 import '../presentation/login_screen/screen_0_login_screen.dart';
 import '../presentation/profile_screen/change_password_screen.dart';
@@ -27,6 +29,11 @@ import '../presentation/remove_background_screen/screen_19_remove_background_scr
 import '../presentation/remove_background_screen1/screen_20_remove_background_screen.dart';
 import '../presentation/remove_background_screen2/screen_21_remove_background_screen.dart';
 import '../presentation/resize_paper_screen/screen_7_resize_paper_screen.dart';
+import '../presentation/contest/contest_feed_screen.dart';
+import '../presentation/contest/contest_gallery_screen.dart';
+import '../presentation/guest_upgrade/guest_upgrade_screen.dart';
+import '../presentation/contest/contest_my_submissions_screen.dart';
+import '../presentation/contest/contest_winners_screen.dart';
 import '../presentation/screen_contest_screen/screen_contest_screen.dart';
 import '../presentation/screen_contesttwo_screen/screen_contesttwo_screen.dart';
 import '../presentation/about_us_screen/about_us_screen.dart';
@@ -42,6 +49,7 @@ class AppRoutes {
   static const String forgotPasswordScreen = '/forgot_password_screen';
   static const String root = '/root';
   static const String screen0RegisterScreen = '/screen_0_register_screen';
+  static const String guestUpgradeScreen = '/guest_upgrade_screen';
   static const String completeProfileScreen = '/complete_profile_screen';
   static const String screen1HomeScreen = '/screen_1_home_screen';
   static const String profileScreen = '/profile_screen';
@@ -75,6 +83,12 @@ class AppRoutes {
       '/screen_14_recent_colors_page';
   static const String screenContesttwoScreen = '/screen_contesttwo_screen';
   static const String screenContestScreen = '/screen_contest_screen';
+  static const String contestGalleryScreen = '/contest_gallery_screen';
+  static const String contestFeedScreen = '/contest_feed_screen';
+  static const String contestWinnersScreen = '/contest_winners_screen';
+  static const String contestMySubmissionsScreen = '/contest_my_submissions_screen';
+  static const String favoritesScreen = '/favorites_screen';
+  static const String notificationsScreen = '/notifications_screen';
   static const String screen16OnlineDesignsScreen =
       '/screen_16_online_designs_screen';
   static const String screen17SearchBarScreen = '/screen_17_search_bar_screen';
@@ -102,6 +116,7 @@ class AppRoutes {
     forgotPasswordScreen: ForgotPasswordScreen.builder,
     // root: (_) => RootScreen(),
     screen0RegisterScreen: Screen0RegisterScreen.builder,
+    guestUpgradeScreen: GuestUpgradeScreen.builder,
     completeProfileScreen: CompleteProfileScreen.builder,
     screen1HomeScreen: Screen1HomeScreen.builder,
     profileScreen: ProfileScreen.builder,
@@ -125,9 +140,15 @@ class AppRoutes {
     screen12SwatchTabContainerScreen: Screen12SwatchTabContainerScreen.builder,
     screenContesttwoScreen: ScreenContesttwoScreen.builder,
     screenContestScreen: ScreenContestScreen.builder,
+    contestGalleryScreen: ContestGalleryScreen.builder,
+    contestFeedScreen: ContestFeedScreen.builder,
+    contestWinnersScreen: ContestWinnersScreen.builder,
+    contestMySubmissionsScreen: ContestMySubmissionsScreen.builder,
     screen16OnlineDesignsScreen: Screen16OnlineDesignsScreen.builder,
     screen17SearchBarScreen: Screen17SearchBarScreen.builder,
     screen18MyDesignsScreen: Screen18MyDesignsScreen.builder,
+    favoritesScreen: FavoritesScreen.builder,
+    notificationsScreen: NotificationsScreen.builder,
     screen19RemoveBackgroundScreen: Screen19RemoveBackgroundScreen.builder,
     enhancedRemoveBackgroundScreen: EnhancedRemoveBackgroundScreen.builder,
     backgroundRemovalSettingsScreen: BackgroundRemovalSettingsScreen.builder,

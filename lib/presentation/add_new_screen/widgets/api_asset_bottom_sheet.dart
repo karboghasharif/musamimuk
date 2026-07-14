@@ -1,53 +1,116 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:pro_image_editor/pro_image_editor.dart';
 
 import '../../../core/app_export.dart';
+import '../../../data/models/category_item.dart';
 import '../../../data/models/media_item.dart';
+import '../../../data/repositories/asset_repository.dart';
 import '../../../data/repositories/media_repository.dart';
+import '../../../widgets/app_bar/appbar_leading_image.dart';
+import '../utils/musami_asset_layer.dart';
 
-/// Reusable API-driven asset picker bottom sheet.
-///
-/// Same UI/behavior as Shapes bottom sheet, but supports different endpoints
-/// via [MediaType] (shape/png/logo/design).
+/// Opens the asset picker sheet at ~92% screen height.
+Future<T?> showApiAssetBottomSheet<T>({
+  required BuildContext context,
+  required GlobalKey<ProImageEditorState>? editorKey,
+  MediaType? type,
+  String? assetType,
+  bool pickOnly = false,
+  VoidCallback? onAssetAdded,
+}) {
+  assert(
+    type != null || assetType != null,
+    'Provide either type or assetType',
+  );
+  return showModalBottomSheet<T>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (ctx) => SizedBox(
+      height: MediaQuery.sizeOf(ctx).height * 0.92,
+      child: ApiAssetBottomSheet(
+        editorKey: editorKey,
+        type: type,
+        assetType: assetType,
+        pickOnly: pickOnly,
+        onAssetAdded: onAssetAdded,
+      ),
+    ),
+  );
+}
+
+/// API-driven asset picker matching the shapes reference screen:
+/// back arrow, search, category chips, stacked horizontal sections.
 class ApiAssetBottomSheet extends StatefulWidget {
   const ApiAssetBottomSheet({
     super.key,
     required this.editorKey,
-    required this.type,
+    this.type,
+    this.assetType,
     this.pickOnly = false,
-  });
+    this.onAssetAdded,
+  }) : assert(type != null || assetType != null);
 
   final GlobalKey<ProImageEditorState>? editorKey;
-  final MediaType type;
+  final MediaType? type;
+  final String? assetType;
 
-  /// When true, selecting an asset pops the sheet with a [WidgetLayer] instead
-  /// of adding it to the editor (used for "Replace image").
+  /// When true, selecting an asset pops the sheet with a [WidgetLayer].
   final bool pickOnly;
+
+  /// Called after an asset is added to the editor (non–pick-only mode).
+  final VoidCallback? onAssetAdded;
 
   @override
   State<ApiAssetBottomSheet> createState() => _ApiAssetBottomSheetState();
 }
 
 class _ApiAssetBottomSheetState extends State<ApiAssetBottomSheet> {
-  late final MediaRepository _repo = MediaRepository(type: widget.type);
+  final AssetRepository _assetRepo = AssetRepository();
+  late final MediaRepository? _legacyRepo =
+      _assetType == null && widget.type != null
+      ? MediaRepository(type: widget.type!)
+      : null;
   final TextEditingController _searchController = TextEditingController();
+  Timer? _searchDebounce;
 
+  List<CategoryItem> _apiCategories = [];
   List<String> _categories = [];
   Map<String, List<MediaItem>> _byCategory = {};
   int _selectedCategoryIndex = 0;
   bool _loading = true;
   String? _error;
 
+  String? get _assetType {
+    final key = widget.assetType;
+    if (key != null) {
+      return AssetRepository.unifiedAssetType(key) ?? key.trim().toLowerCase();
+    }
+    final mediaType = widget.type;
+    if (mediaType != null) return AssetRepository.typeParamFor(mediaType);
+    return null;
+  }
+
   @override
   void initState() {
     super.initState();
+    _searchController.addListener(_onSearchChanged);
     _loadAssets();
   }
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
+    _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _onSearchChanged() {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 350), _loadAssets);
   }
 
   Future<void> _loadAssets() async {
@@ -55,7 +118,81 @@ class _ApiAssetBottomSheetState extends State<ApiAssetBottomSheet> {
       _loading = true;
       _error = null;
     });
-    final result = await _repo.list();
+
+    try {
+      if (_assetType != null) {
+        await _loadUnifiedAssets();
+      } else {
+        await _loadLegacyAssets();
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = 'Something went wrong';
+        _byCategory = {};
+        _categories = const [];
+        _selectedCategoryIndex = 0;
+      });
+    }
+  }
+
+  Future<void> _loadUnifiedAssets() async {
+    final type = _assetType!;
+    final search = _searchController.text.trim();
+
+    if (_apiCategories.isEmpty) {
+      final catResult = await _assetRepo.categories(type: type);
+      if (catResult is AssetCategoriesSuccess) {
+        _apiCategories = catResult.items;
+      }
+    }
+
+    final result = await _assetRepo.listAssets(
+      type: type,
+      search: search.isEmpty ? null : search,
+      perPage: 50,
+    );
+    if (!mounted) return;
+
+    if (result is AssetFailure) {
+      setState(() {
+        _loading = false;
+        _error = result.message;
+        _byCategory = {};
+        _categories = const [];
+        _selectedCategoryIndex = 0;
+      });
+      return;
+    }
+
+    final list = (result as AssetSuccess).items ?? const <MediaItem>[];
+    final byCategory = <String, List<MediaItem>>{};
+    for (final s in list) {
+      final name = s.category?.name ?? 'Other';
+      byCategory.putIfAbsent(name, () => []).add(s);
+    }
+
+    final tabNames = <String>['Home'];
+    if (_apiCategories.isNotEmpty) {
+      tabNames.addAll(_apiCategories.map((c) => c.name));
+    } else {
+      tabNames.addAll(byCategory.keys.toList()..sort());
+    }
+
+    setState(() {
+      _byCategory = byCategory;
+      _categories = tabNames;
+      _loading = false;
+      if (list.isEmpty) _error = 'No items found';
+      if (_selectedCategoryIndex >= _categories.length) {
+        _selectedCategoryIndex = 0;
+      }
+    });
+  }
+
+  Future<void> _loadLegacyAssets() async {
+    final result = await _legacyRepo!.list();
     if (!mounted) return;
 
     if (result is MediaFailure) {
@@ -80,9 +217,7 @@ class _ApiAssetBottomSheetState extends State<ApiAssetBottomSheet> {
       _byCategory = byCategory;
       _categories = categories;
       _loading = false;
-      if (list.isEmpty) {
-        _error = 'No items found';
-      }
+      if (list.isEmpty) _error = 'No items found';
       if (_selectedCategoryIndex >= _categories.length) {
         _selectedCategoryIndex = 0;
       }
@@ -90,169 +225,182 @@ class _ApiAssetBottomSheetState extends State<ApiAssetBottomSheet> {
   }
 
   Map<String, List<MediaItem>> get _sectionsToShow {
-    if (_selectedCategoryIndex == 0) return _byCategory;
     if (_categories.isEmpty) return const {};
+    if (_selectedCategoryIndex == 0) return _byCategory;
     final name = _categories[_selectedCategoryIndex];
     final list = _byCategory[name] ?? const <MediaItem>[];
     return {name: list};
   }
 
-  String _layerKindForType() {
+  String _layerKindForSelection() {
+    final unified = _assetType;
+    if (unified != null) return unified;
     return switch (widget.type) {
       MediaType.logo => 'logo',
       MediaType.png => 'png',
       MediaType.shape => 'shape',
       MediaType.design => 'png',
+      null => 'png',
     };
   }
 
-  void _onSelectAsset(MediaItem item) {
-    final layer = WidgetLayer(
-      meta: <String, dynamic>{'musamiLayerKind': _layerKindForType()},
-      widget: Container(
-        width: 150,
-        height: 150,
-        constraints: const BoxConstraints(maxWidth: 200, maxHeight: 200),
-        child: Image.network(
-          item.fileUrl,
-          fit: BoxFit.contain,
-          errorBuilder: (_, _, _) => const Icon(Icons.broken_image),
-        ),
-      ),
+  void _selectCategory(int index) {
+    setState(() => _selectedCategoryIndex = index);
+  }
+
+  void _onSeeAll(String categoryName) {
+    final index = _categories.indexOf(categoryName);
+    if (index >= 0) _selectCategory(index);
+  }
+
+  Future<void> _onSelectAsset(MediaItem item) async {
+    if (_assetType != null) {
+      unawaited(_assetRepo.interact(item.id, action: 'download'));
+    }
+
+    final layerKind = _layerKindForSelection();
+    final layer = await musamiBuildAssetWidgetLayer(
+      context: context,
+      item: item,
+      layerKind: layerKind,
     );
+    if (layer == null || !mounted) return;
+
     if (widget.pickOnly) {
-      if (mounted) Navigator.of(context).pop(layer);
+      Navigator.of(context).pop(layer);
       return;
     }
     final editor = widget.editorKey?.currentState;
     if (editor == null) return;
     editor.addLayer(layer);
+    widget.onAssetAdded?.call();
     if (mounted) Navigator.of(context).pop();
   }
 
-  static const Color _searchBarFill = Color(0xFF3A4048);
-  static const Color _textLight = Color(0xFFF5F5F5);
-  static const Color _textMuted = Color(0xFFB0B0B0);
-  static const Color _textOnYellow = Color(0xFF1A1A1A);
-  static const Color _borderLight = Color(0xFF4A5058);
-  static const Color _cardFill = Color(0xFF3A4048);
-
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppDs.sheetBackground,
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(AppDs.radiusSheet.adaptSize),
-        ),
-        boxShadow: AppDs.shadowSheetHandle(),
+    return Material(
+      color: AppDs.surfaceBase,
+      borderRadius: BorderRadius.vertical(
+        top: Radius.circular(AppDs.radiusSheet.adaptSize),
       ),
+      clipBehavior: Clip.antiAlias,
       child: SafeArea(
         top: false,
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            SizedBox(height: AppDs.space4.v),
-            _buildSearchBar(),
             SizedBox(height: AppDs.space3.v),
+            _buildBackRow(context),
+            SizedBox(height: AppDs.space3.v),
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: AppDs.space4.h),
+              child: AppSearchField(
+                controller: _searchController,
+                hintText: 'lbl_search'.tr,
+              ),
+            ),
+            SizedBox(height: AppDs.space4.v),
             _buildCategoryTabs(),
             SizedBox(height: AppDs.space2.v),
-            Flexible(
+            Expanded(
               child: _loading
                   ? const AppLoadingBlock()
                   : _error != null
                   ? Center(
-                      child: Text(
-                        _error!,
-                        style: const TextStyle(color: _textMuted),
+                      child: Padding(
+                        padding: EdgeInsets.all(AppDs.space6.h),
+                        child: AppText(
+                          _error!,
+                          variant: AppTextVariant.secondary,
+                          textAlign: TextAlign.center,
+                        ),
                       ),
                     )
                   : _buildSections(),
             ),
-            SizedBox(height: AppDs.space6.v),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildSearchBar() {
+  Widget _buildBackRow(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.symmetric(horizontal: AppDs.space4.h),
-      child: Container(
-        height: 48.v,
-        decoration: BoxDecoration(
-          color: _searchBarFill,
-          borderRadius: BorderRadius.circular(AppDs.radiusMd.h),
-        ),
-        child: TextField(
-          controller: _searchController,
-          onChanged: (_) => setState(() {}),
-          style: const TextStyle(color: _textLight, fontSize: 16),
-          decoration: InputDecoration(
-            hintText: 'Search',
-            hintStyle: const TextStyle(color: _textMuted, fontSize: 16),
-            prefixIcon: Icon(Icons.search, color: _textMuted, size: 22),
-            border: InputBorder.none,
-            contentPadding: EdgeInsets.symmetric(
-              horizontal: 16.h,
-              vertical: 14.v,
-            ),
-          ),
-        ),
+      padding: EdgeInsets.only(left: AppDs.space4.h),
+      child: AppbarLeadingImage(
+        imagePath: ImageConstant.imgArrowLeftPrimary,
+        onTap: () => Navigator.of(context).pop(),
       ),
     );
   }
 
   Widget _buildCategoryTabs() {
     if (_categories.isEmpty) return const SizedBox.shrink();
+
     return SizedBox(
       height: 44.v,
-      child: ListView.builder(
+      child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: EdgeInsets.symmetric(horizontal: AppDs.space4.h),
         itemCount: _categories.length,
+        separatorBuilder: (_, _) => SizedBox(width: AppDs.space4.h),
         itemBuilder: (context, index) {
           final isSelected = index == _selectedCategoryIndex;
-          final isHome = index == 0;
-          return GestureDetector(
-            onTap: () => setState(() => _selectedCategoryIndex = index),
-            child: Container(
-              margin: EdgeInsets.only(right: 10.h),
-              padding: EdgeInsets.symmetric(horizontal: 14.h, vertical: 10.v),
-              decoration: BoxDecoration(
-                color: isSelected ? appTheme.yellow500 : AppDs.sheetBackground,
-                borderRadius: BorderRadius.circular(AppDs.radiusSm.h),
-                border: Border.all(
-                  color: isSelected ? appTheme.yellow500 : _borderLight,
-                  width: 1,
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (isHome)
-                    Icon(
-                      isSelected ? Icons.home : Icons.home_outlined,
-                      color: isSelected ? _textOnYellow : _textMuted,
-                      size: 20,
-                    ),
-                  if (isHome) SizedBox(width: 6.h),
-                  Text(
-                    _categories[index],
-                    style: TextStyle(
-                      color: isSelected ? _textOnYellow : _textMuted,
-                      fontWeight: isSelected
-                          ? FontWeight.w600
-                          : FontWeight.normal,
-                      fontSize: 14,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          if (index == 0) return _buildHomeTab(isSelected, index);
+          return _buildTextCategoryTab(
+            label: _categories[index],
+            isSelected: isSelected,
+            index: index,
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildHomeTab(bool isSelected, int index) {
+    return GestureDetector(
+      onTap: () => _selectCategory(index),
+      child: Container(
+        height: 43.v,
+        width: 48.h,
+        padding: EdgeInsets.symmetric(
+          horizontal: AppDs.space3.h,
+          vertical: AppDs.space2.v,
+        ),
+        decoration: AppDecoration.fillGray800.copyWith(
+          borderRadius: BorderRadiusStyle.roundedBorder15,
+          border: Border.all(
+            color: isSelected ? appTheme.yellow500 : Colors.transparent,
+            width: 1.5,
+          ),
+        ),
+        child: CustomImageView(
+          imagePath: ImageConstant.imgHome,
+          height: AppDs.iconMd.adaptSize,
+          width: AppDs.iconMd.adaptSize,
+          alignment: Alignment.center,
+          color: isSelected ? appTheme.yellow500 : appTheme.gray100,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTextCategoryTab({
+    required String label,
+    required bool isSelected,
+    required int index,
+  }) {
+    return GestureDetector(
+      onTap: () => _selectCategory(index),
+      child: Center(
+        child: AppText(
+          label,
+          variant: isSelected ? AppTextVariant.heading : AppTextVariant.body,
+          color: isSelected
+              ? AppDs.textOnDarkPrimary
+              : AppDs.textOnDarkSecondary,
+        ),
       ),
     );
   }
@@ -261,98 +409,84 @@ class _ApiAssetBottomSheetState extends State<ApiAssetBottomSheet> {
     final sections = _sectionsToShow;
     if (sections.isEmpty) {
       return Center(
-        child: Text(
+        child: AppText(
           'No items in this category',
-          style: const TextStyle(color: _textMuted, fontSize: 15),
+          variant: AppTextVariant.secondary,
         ),
       );
     }
+
     return ListView(
-      shrinkWrap: true,
-      padding: EdgeInsets.symmetric(
-        horizontal: AppDs.space4.h,
-        vertical: AppDs.space3.v,
+      padding: EdgeInsets.fromLTRB(
+        AppDs.space4.h,
+        AppDs.space3.v,
+        AppDs.space4.h,
+        AppDs.space6.v,
       ),
       children: sections.entries.map((e) {
         final title = e.key;
-        final items = _applySearch(e.value);
+        final items = e.value;
         if (items.isEmpty) return const SizedBox.shrink();
         return _buildSection(title: title, items: items);
       }).toList(),
     );
   }
 
-  List<MediaItem> _applySearch(List<MediaItem> items) {
-    final q = _searchController.text.trim().toLowerCase();
-    if (q.isEmpty) return items;
-    return items.where((s) => s.name.toLowerCase().contains(q)).toList();
-  }
-
   Widget _buildSection({
     required String title,
     required List<MediaItem> items,
   }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: EdgeInsets.symmetric(vertical: 10.v),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  color: _textLight,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
+    return Padding(
+      padding: EdgeInsets.only(bottom: AppDs.space6.v),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          AppSectionHeader(
+            title: title,
+            trailing: GestureDetector(
+              onTap: () => _onSeeAll(title),
+              child: AppText(
+                'lbl_see_all'.tr,
+                variant: AppTextVariant.accent,
               ),
-              Text(
-                'See all',
-                style: TextStyle(
-                  color: appTheme.yellow500,
-                  fontWeight: FontWeight.w500,
-                  fontSize: 14,
-                ),
-              ),
-            ],
+            ),
+          ),
+          SizedBox(
+            height: 104.v,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: items.length,
+              separatorBuilder: (_, _) => SizedBox(width: AppDs.space4.h),
+              itemBuilder: (context, index) {
+                final asset = items[index];
+                return _buildAssetTile(asset);
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAssetTile(MediaItem asset) {
+    return GestureDetector(
+      onTap: () => _onSelectAsset(asset),
+      child: SizedBox(
+        width: 104.h,
+        height: 104.v,
+        child: Padding(
+          padding: EdgeInsets.all(AppDs.space2.h),
+          child: Image.network(
+            asset.fileUrl,
+            fit: BoxFit.contain,
+            errorBuilder: (_, _, _) => Icon(
+              Icons.broken_image_outlined,
+              color: AppDs.textOnDarkDisabled,
+              size: 32.adaptSize,
+            ),
           ),
         ),
-        SizedBox(
-          height: 110.v,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            itemCount: items.length,
-            itemBuilder: (context, index) {
-              final asset = items[index];
-              return GestureDetector(
-                onTap: () => _onSelectAsset(asset),
-                child: Container(
-                  width: 100.h,
-                  height: 100.v,
-                  margin: EdgeInsets.only(right: 12.h),
-                  decoration: BoxDecoration(
-                    color: _cardFill,
-                    borderRadius: BorderRadius.circular(AppDs.radiusMd.h),
-                    border: Border.all(color: _borderLight),
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(AppDs.radiusMd.h),
-                    child: Image.network(
-                      asset.fileUrl,
-                      fit: BoxFit.contain,
-                      errorBuilder: (_, _, _) =>
-                          Icon(Icons.broken_image, color: _textMuted, size: 32),
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-        SizedBox(height: 16.v),
-      ],
+      ),
     );
   }
 }

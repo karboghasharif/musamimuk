@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../core/app_export.dart';
-import '../../theme/custom_button_style.dart';
-import '../../widgets/custom_elevated_button.dart';
+import '../../widgets/app_bar/appbar_leading_image.dart';
+import '../../widgets/app_bar/appbar_title.dart';
+import '../../widgets/app_bar/custom_app_bar.dart';
 import 'bloc/screen_1_subcription_bloc.dart';
 import 'models/screen_1_subcription_model.dart';
 
@@ -9,249 +10,138 @@ class Screen1SubcriptionScreen extends StatelessWidget {
   const Screen1SubcriptionScreen({super.key});
   static Widget builder(BuildContext context) {
     return BlocProvider<Screen1SubcriptionBloc>(
-      create: (context) => Screen1SubcriptionBloc(Screen1SubcriptionState(
-        screen1SubcriptionModelObj: const Screen1SubcriptionModel(),
-      ))
-        ..add(Screen1SubcriptionInitialEvent()),
+      create: (context) => Screen1SubcriptionBloc(
+        Screen1SubcriptionState(
+          screen1SubcriptionModelObj: const Screen1SubcriptionModel(),
+        ),
+      )..add(Screen1SubcriptionInitialEvent()),
       child: const Screen1SubcriptionScreen(),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<Screen1SubcriptionBloc, Screen1SubcriptionState>(
-      builder: (context, state) {
-        return SafeArea(
-          child: Scaffold(
-            backgroundColor:
-                theme.colorScheme.onPrimaryContainer.withOpacity(1),
-            body: Container(
-              width: double.maxFinite,
-              padding: EdgeInsets.symmetric(
-                horizontal: 22.h,
-                vertical: 46.v,
-              ),
-              child: Column(
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      CustomImageView(
-                        imagePath: ImageConstant.imgArrowDown,
-                        height: 32.adaptSize,
-                        width: 32.adaptSize,
-                        onTap: () {
-                          onTapImgArrowdownone(context);
-                        },
-                      ),
-                      SizedBox(width: 12.h),
-                      Expanded(
-                        child: Text(
-                          "msg_choose_your_plan".tr,
-                          style: CustomTextStyles.titleMediumBluegray90002,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 48.v),
-                  CustomImageView(
-                    imagePath: ImageConstant.imgGroup16,
-                    height: 185.v,
-                    width: 270.h,
-                  ),
-                  SizedBox(height: 50.v),
-                  _buildBasicRow(context),
-                  SizedBox(height: 22.v),
-                  _buildPremiumRow(context),
-                  SizedBox(height: 5.v)
-                ],
-              ),
-            ),
+    return SafeArea(
+      child: Scaffold(
+        backgroundColor: AppDs.surfaceBase,
+        appBar: CustomAppBar(
+          leading: AppbarLeadingImage(
+            imagePath: ImageConstant.imgArrowDownPrimary,
+            onTap: () => NavigatorService.pushNamed(AppRoutes.screen1HomeScreen),
           ),
-        );
-      },
+          centerTitle: true,
+          title: AppbarTitle(text: 'msg_choose_your_plan'.tr),
+        ),
+        body: SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(
+            AppDs.space4.h,
+            AppDs.space4.v,
+            AppDs.space4.h,
+            AppDs.space8.v,
+          ),
+          child: Column(
+            children: [
+              AppPageHeader(
+                title: 'msg_choose_your_plan'.tr,
+                subtitle: 'msg_upgrade_to_access'.tr,
+                align: TextAlign.center,
+              ),
+              SizedBox(height: AppDs.space6.v),
+              CustomImageView(
+                imagePath: ImageConstant.imgGroup16,
+                height: 160.v,
+                width: 240.h,
+              ),
+              SizedBox(height: AppDs.space8.v),
+              _PlanCard(
+                name: 'lbl_basic'.tr,
+                price: 'lbl_free'.tr,
+                features: [
+                  'msg_access_to_few_design'.tr,
+                  'msg_available_memory'.tr,
+                ],
+                primary: false,
+                buttonLabel: 'lbl_subscribed'.tr,
+                onPressed: null,
+              ),
+              SizedBox(height: AppDs.space4.v),
+              _PlanCard(
+                name: 'lbl_premium'.tr,
+                price: 'lbl_5_month'.tr,
+                features: [
+                  'msg_access_to_all_design'.tr,
+                  'msg_available_memory2'.tr,
+                ],
+                primary: true,
+                buttonLabel: 'lbl_subscribe'.tr,
+                onPressed: () {},
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
+}
 
-  Widget _buildBasicRow(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: 10.h,
-        vertical: 12.v,
-      ),
-      decoration: AppDecoration.fillGray.copyWith(
-        borderRadius: BorderRadiusStyle.roundedBorder7,
-      ),
+class _PlanCard extends StatelessWidget {
+  const _PlanCard({
+    required this.name,
+    required this.price,
+    required this.features,
+    required this.primary,
+    required this.buttonLabel,
+    this.onPressed,
+  });
+
+  final String name;
+  final String price;
+  final List<String> features;
+  final bool primary;
+  final String buttonLabel;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      elevated: primary,
       child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SizedBox(height: 9.v),
-          Align(
-            alignment: Alignment.center,
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 17.h),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    "lbl_basic".tr,
-                    style: CustomTextStyles.titleMediumBluegray90004Bold,
-                  ),
-                  Text(
-                    "lbl_free".tr,
-                    style: CustomTextStyles.titleMediumBluegray90004,
-                  )
-                ],
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              AppText(name, variant: AppTextVariant.title),
+              AppText(
+                price,
+                variant: primary ? AppTextVariant.accent : AppTextVariant.body,
               ),
-            ),
+            ],
           ),
-          SizedBox(height: 24.v),
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16.h),
-            child: Row(
+          SizedBox(height: AppDs.space4.v),
+          for (final f in features) ...[
+            Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                CustomImageView(
-                  imagePath: ImageConstant.imgTickCircleSvgrepoCom,
-                  height: 14.adaptSize,
-                  width: 14.adaptSize,
+                Icon(
+                  Icons.check_circle_outline,
+                  size: AppDs.iconSm.adaptSize,
+                  color: theme.colorScheme.primary,
                 ),
-                SizedBox(width: 9.h),
+                SizedBox(width: AppDs.space2.h),
                 Expanded(
-                  child: Text(
-                    "msg_access_to_few_design".tr,
-                    style: CustomTextStyles.bodySmallInterGray90005,
-                  ),
+                  child: AppText(f, variant: AppTextVariant.secondary),
                 ),
               ],
             ),
-          ),
-          SizedBox(height: 10.v),
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16.h),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                CustomImageView(
-                  imagePath: ImageConstant.imgTickCircleSvgrepoCom,
-                  height: 14.adaptSize,
-                  width: 14.adaptSize,
-                ),
-                SizedBox(width: 9.h),
-                Expanded(
-                  child: Text(
-                    "msg_available_memory".tr,
-                    style: CustomTextStyles.bodySmallInterGray90005,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          SizedBox(height: 24.v),
-          CustomElevatedButton(
-            height: 44.v,
-            text: "lbl_subscribed".tr,
-            buttonStyle: CustomButtonStyles.fillOnError,
-            buttonTextStyle: CustomTextStyles.titleSmallBluegray90004,
-          )
+            SizedBox(height: AppDs.space2.v),
+          ],
+          SizedBox(height: AppDs.space4.v),
+          primary
+              ? AppPrimaryButton(label: buttonLabel, onPressed: onPressed)
+              : AppSecondaryButton(label: buttonLabel, onPressed: onPressed),
         ],
       ),
-    );
-  }
-
-  Widget _buildPremiumRow(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: 10.h,
-        vertical: 13.v,
-      ),
-      decoration: AppDecoration.fillGray.copyWith(
-        borderRadius: BorderRadiusStyle.roundedBorder7,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(height: 8.v),
-          Align(
-            alignment: Alignment.center,
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16.h),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    "lbl_premium".tr,
-                    style: CustomTextStyles.titleMediumBluegray90004Bold,
-                  ),
-                  Text(
-                    "lbl_5_month".tr,
-                    style: CustomTextStyles.titleMediumBluegray90004,
-                  )
-                ],
-              ),
-            ),
-          ),
-          SizedBox(height: 21.v),
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16.h),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                CustomImageView(
-                  imagePath: ImageConstant.imgTickCircleSvgrepoCom,
-                  height: 14.adaptSize,
-                  width: 14.adaptSize,
-                ),
-                SizedBox(width: 9.h),
-                Expanded(
-                  child: Text(
-                    "msg_access_to_all_design".tr,
-                    style: CustomTextStyles.bodySmallInterGray90005,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          SizedBox(height: 10.v),
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16.h),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                CustomImageView(
-                  imagePath: ImageConstant.imgTickCircleSvgrepoCom,
-                  height: 14.adaptSize,
-                  width: 14.adaptSize,
-                ),
-                SizedBox(width: 9.h),
-                Expanded(
-                  child: Text(
-                    "msg_available_memory2".tr,
-                    style: CustomTextStyles.bodySmallInterGray90005,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          SizedBox(height: 25.v),
-          CustomElevatedButton(
-            height: 44.v,
-            text: "lbl_subscribe".tr,
-            buttonStyle: CustomButtonStyles.fillPrimaryTL10,
-            buttonTextStyle: CustomTextStyles.titleSmallBluegray90004,
-          )
-        ],
-      ),
-    );
-  }
-
-  onTapImgArrowdownone(BuildContext context) {
-    NavigatorService.pushNamed(
-      AppRoutes.screen1HomeScreen,
     );
   }
 }

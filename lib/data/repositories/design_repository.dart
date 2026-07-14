@@ -72,7 +72,8 @@ class DesignRepository {
   /// [filename] – multipart filename (e.g. `design.png`, `design.jpg`, `design.pdf`).
   ///
   /// Endpoint: POST `design/add` (multipart/form-data): `file`, `category_id`, `name`,
-  /// `tags`, optional `sub_category_id`, `width`, `height`, `visibility`.
+  /// `tags`, optional `sub_category_id`, `width`, `height`, `visibility`,
+  /// `design_data` (Pro Image Editor state history JSON for redesign).
   Future<SaveDesignResult> saveDesign({
     required Uint8List imageBytes,
     int? width,
@@ -83,6 +84,7 @@ class DesignRepository {
     int? subCategoryId,
     String visibility = 'public',
     String? filename,
+    String? designData,
   }) async {
     try {
       final resolvedCategoryId = await _resolveCategoryId(categoryId);
@@ -115,6 +117,10 @@ class DesignRepository {
       }
       if (height != null) {
         formData.fields.add(MapEntry('height', height.toString()));
+      }
+      final history = designData?.trim();
+      if (history != null && history.isNotEmpty) {
+        formData.fields.add(MapEntry('design_data', history));
       }
       final fileName = (filename != null && filename.trim().isNotEmpty)
           ? filename.trim()
@@ -185,7 +191,7 @@ class DesignRepository {
       );
       final data = response.data;
       if (data == null) return DesignListFailure('Empty response');
-      final list = apiExtractDbDataList(data).map(MediaItem.fromJson).toList();
+      final list = apiExtractDataList(data).map(MediaItem.fromJson).toList();
       return DesignListSuccess(items: list, message: apiExtractMessage(data));
     } on DioException catch (e) {
       return DesignListFailure(apiMessageFromDioException(e));
@@ -303,7 +309,7 @@ class DesignRepository {
       final response = await _api.dio.get<Map<String, dynamic>>(path);
       final data = response.data;
       if (data == null) return DesignListFailure('Empty response');
-      final list = apiExtractDbDataList(data).map(MediaItem.fromJson).toList();
+      final list = apiExtractDataList(data).map(MediaItem.fromJson).toList();
       return DesignListSuccess(items: list, message: apiExtractMessage(data));
     } on DioException catch (e) {
       return DesignListFailure(apiMessageFromDioException(e));

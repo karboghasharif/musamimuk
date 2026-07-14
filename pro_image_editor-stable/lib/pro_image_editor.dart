@@ -41,7 +41,7 @@ export '/core/models/complete_parameters.dart';
 export 'core/models/layers/layer.dart';
 export 'core/models/layers/exported_layer.dart';
 export '/core/constants/editor_various_constants.dart'
-    show kMusamiLayerHiddenMetaKey;
+    show kMusamiLayerHiddenMetaKey, kMusamiLayerLockedMetaKey;
 export 'core/models/custom_widgets/layer_interaction_widgets.dart';
 export 'features/blur_editor/blur_editor.dart';
 export 'features/crop_rotate_editor/crop_rotate_editor.dart';

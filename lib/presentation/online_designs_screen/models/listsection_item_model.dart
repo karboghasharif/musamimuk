@@ -1,5 +1,3 @@
-import '../../../core/app_export.dart';
-
 class ListsectionItemModel {
   ListsectionItemModel({
     this.rectangle,
@@ -8,14 +6,24 @@ class ListsectionItemModel {
     this.isFeatured = false,
     this.tier,
     this.previewDetails,
-  }) {
-    rectangle = rectangle ?? ImageConstant.imgRectangle5585;
-    id = id ?? "";
-  }
+    this.categoryName,
+    this.downloadsCount,
+    this.trendingScore,
+    this.designDataRaw,
+    this.width,
+    this.height,
+  });
+
   String? rectangle;
   String? id;
   String? name;
   bool isFeatured;
   String? tier;
   String? previewDetails;
+  String? categoryName;
+  int? downloadsCount;
+  int? trendingScore;
+  String? designDataRaw;
+  int? width;
+  int? height;
 }

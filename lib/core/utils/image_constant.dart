@@ -73,37 +73,7 @@ class ImageConstant {
   static String imgSoccerBall1 = '$imagePath/img_soccer_ball_1.png';
 
   // Screen 6 - Add Logos images
-  static String imgImageRemovebgPreview =
-      '$imagePath/img_image_removebg_preview.png';
-  static String imgImageRemovebgPreview80x82 =
-      '$imagePath/img_image_removebg_preview_80x82.png';
-  static String imgImageRemovebgPreview83x100 =
-      '$imagePath/img_image_removebg_preview_83x100.png';
-  static String imgImageRemovebgPreview110x110 =
-      '$imagePath/img_image_removebg_preview_110x110.png';
-  static String imgImageRemovebgPreview81x62 =
-      '$imagePath/img_image_removebg_preview_81x62.png';
-  static String imgImageRemovebgPreview73x79 =
-      '$imagePath/img_image_removebg_preview_73x79.png';
-  static String imgImageRemovebgPreview88x94 =
-      '$imagePath/img_image_removebg_preview_88x94.png';
-  static String imgImageRemovebgPreview121x113 =
-      '$imagePath/img_image_removebg_preview_121x113.png';
-  static String imgImageRemovebgPreview93x115 =
-      '$imagePath/img_image_removebg_preview_93x115.png';
-  static String imgImageRemovebgPreview144x141 =
-      '$imagePath/img_image_removebg_preview_144x141.png';
-  static String imgImageRemovebgPreview67x135 =
-      '$imagePath/img_image_removebg_preview_67x135.png';
-  static String imgImageRemovebgPreview104x104 =
-      '$imagePath/img_image_removebg_preview_104x104.png';
-  static String imgImageRemovebgPreview85x91 =
-      '$imagePath/img_image_removebg_preview_85x91.png';
   static String imgPngimg1 = '$imagePath/img_pngimg_1.png';
-  static String imgImageRemovebgPreview181x69 =
-      '$imagePath/img_image_removebg_preview_181x69.png';
-  static String imgImageRemovebgPreview106x106 =
-      '$imagePath/img_image_removebg_preview_106x106.png';
 
   // Screen 7 - Resize Paper images
   static String imgArrowdownGray9001 =
@@ -140,8 +110,6 @@ class ImageConstant {
 
   // Screen - ContestTwo images
   static String imgImage5 = '$imagePath/img_image_5.png';
-  static String imgImageRemovebgPreview101x102 =
-      '$imagePath/img_image_removebg_preview_101x102.png';
   static String imgImage6 = '$imagePath/img_image_6.png';
   static String img2ndPlace1 = '$imagePath/img_2nd_place_1.png';
   static String imgImage7 = '$imagePath/img_image_7.png';

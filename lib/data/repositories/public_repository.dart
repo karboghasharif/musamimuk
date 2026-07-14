@@ -29,15 +29,10 @@ class PublicRepository {
       );
       final data = response.data;
       if (data == null) return PublicFailure('Empty response');
-      final db = apiExtractDbData(data);
-      final map = db is Map ? db.cast<String, dynamic>() : <String, dynamic>{};
-      final list = (map['designs'] is List)
-          ? (map['designs'] as List)
-              .whereType<Map>()
-              .map((e) => MediaItem.fromJson(e.cast<String, dynamic>()))
-              .toList()
-          : <MediaItem>[];
-      return PublicSuccess(data: list, message: apiExtractMessage(data));
+      return PublicSuccess(
+        data: _parseDesignList(data),
+        message: apiExtractMessage(data),
+      );
     } on DioException catch (e) {
       return PublicFailure(apiMessageFromDioException(e));
     } catch (_) {
@@ -52,15 +47,10 @@ class PublicRepository {
       );
       final data = response.data;
       if (data == null) return PublicFailure('Empty response');
-      final db = apiExtractDbData(data);
-      final map = db is Map ? db.cast<String, dynamic>() : <String, dynamic>{};
-      final list = (map['designs'] is List)
-          ? (map['designs'] as List)
-              .whereType<Map>()
-              .map((e) => MediaItem.fromJson(e.cast<String, dynamic>()))
-              .toList()
-          : <MediaItem>[];
-      return PublicSuccess(data: list, message: apiExtractMessage(data));
+      return PublicSuccess(
+        data: _parseDesignList(data),
+        message: apiExtractMessage(data),
+      );
     } on DioException catch (e) {
       return PublicFailure(apiMessageFromDioException(e));
     } catch (_) {
@@ -108,3 +98,22 @@ class PublicRepository {
   }
 }
 
+List<MediaItem> _parseDesignList(Map<String, dynamic> root) {
+  final direct = apiExtractDataList(root);
+  if (direct.isNotEmpty) {
+    return direct.map(MediaItem.fromJson).toList();
+  }
+  final payload = apiExtractPayloadMap(root);
+  if (payload != null) {
+    for (final key in const ['designs', 'items', 'featured']) {
+      final raw = payload[key];
+      if (raw is List) {
+        return raw
+            .whereType<Map>()
+            .map((e) => MediaItem.fromJson(e.cast<String, dynamic>()))
+            .toList();
+      }
+    }
+  }
+  return const [];
+}

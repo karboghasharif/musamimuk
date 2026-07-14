@@ -1,6 +1,6 @@
-import '../../../core/app_export.dart';
 
-/// This class is used in the [certificatedesign_item_widget] screen.// ignore_for_file: must_be_immutable// ignore_for_file: must_be_immutable
+import '../../../data/models/contest_countdown.dart';
+
 class CertificatedesignItemModel {
   CertificatedesignItemModel({
     this.certificateText,
@@ -8,16 +8,31 @@ class CertificatedesignItemModel {
     this.image,
     this.id,
     this.contestJson,
-  }) {
-    certificateText = certificateText ?? "Certificate Design Competition";
-    designsText = designsText ?? "44 Designs Submitted";
-    image = image ?? ImageConstant.imgRectangle5591;
-    id = id ?? "";
-  }
+    this.showResultAnnounced = false,
+    this.status,
+    this.countdown,
+    this.prizeText,
+    this.participantsCount,
+    this.submissionsCount,
+    this.categoryName,
+    this.dateRange,
+    this.primaryAction,
+    this.hasJoined = false,
+  });
+
   String? certificateText;
   String? designsText;
   String? image;
   String? id;
-  /// Raw fields from [GET /api/contest/list] for the detail screen (no GET /api/contest/:id).
   Map<String, dynamic>? contestJson;
+  bool showResultAnnounced;
+  String? status;
+  ContestCountdown? countdown;
+  String? prizeText;
+  int? participantsCount;
+  int? submissionsCount;
+  String? categoryName;
+  String? dateRange;
+  String? primaryAction;
+  bool hasJoined;
 }

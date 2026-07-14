@@ -15,7 +15,6 @@ class ScreenTwentythreeBloc
     Emitter<ScreenTwentythreeState> emit,
   ) async {
     await Future.delayed(const Duration(milliseconds: 3000));
-    await PrefUtils().init();
     if (PrefUtils().isLoggedIn() || PrefUtils().hasOfflineHomeAccess()) {
       NavigatorService.popAndPushNamed(AppRoutes.screen1HomeScreen);
     } else {

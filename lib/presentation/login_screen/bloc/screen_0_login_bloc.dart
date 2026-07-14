@@ -11,10 +11,6 @@ import '../models/screen_0_login_model.dart';
 part 'screen_0_login_event.dart';
 part 'screen_0_login_state.dart';
 
-/// Shared backend account used when the user taps "Continue as guest".
-const String _kGuestAccountEmail = 'guest@example.com';
-const String _kGuestAccountPassword = 'secret1234';
-
 class Screen0LoginBloc extends Bloc<Screen0LoginEvent, Screen0LoginState> {
   Screen0LoginBloc(super.initialState)
       : _authRepository = AuthRepository(),
@@ -102,21 +98,44 @@ class Screen0LoginBloc extends Bloc<Screen0LoginEvent, Screen0LoginState> {
     LoginSubmitEvent event,
     Emitter<Screen0LoginState> emit,
   ) async {
+    if (state.isLoading || state.isLoadingGoogle || state.isLoadingGuest) {
+      return;
+    }
     emit(state.copyWith(isLoading: true, loginError: null));
-    final result = await _authRepository.login(
-      LoginRequest(email: event.email, password: event.password),
-    );
-    if (result is LoginSuccess) {
-      await _persistLoginSuccess(
-        result,
-        rememberMe: event.rememberMe,
-        emailToSaveWhenRemembered: event.email,
+    try {
+      final result = await _authRepository.login(
+        LoginRequest(email: event.email, password: event.password),
       );
+      if (result is LoginSuccess) {
+        await _persistLoginSuccess(
+          result,
+          rememberMe: event.rememberMe,
+          emailToSaveWhenRemembered: event.email,
+        );
+        emit(
+          state.copyWith(
+            isLoading: false,
+            loginError: null,
+            loginSuccess: true,
+          ),
+        );
+      } else if (result is LoginFailure) {
+        emit(state.copyWith(isLoading: false, loginError: result.message));
+      } else {
+        emit(
+          state.copyWith(
+            isLoading: false,
+            loginError: 'Something went wrong',
+          ),
+        );
+      }
+    } catch (_) {
       emit(
-        state.copyWith(isLoading: false, loginError: null, loginSuccess: true),
+        state.copyWith(
+          isLoading: false,
+          loginError: 'Something went wrong',
+        ),
       );
-    } else if (result is LoginFailure) {
-      emit(state.copyWith(isLoading: false, loginError: result.message));
     }
   }
 
@@ -124,6 +143,9 @@ class Screen0LoginBloc extends Bloc<Screen0LoginEvent, Screen0LoginState> {
     LoginWithGoogleEvent event,
     Emitter<Screen0LoginState> emit,
   ) async {
+    if (state.isLoading || state.isLoadingGoogle || state.isLoadingGuest) {
+      return;
+    }
     if (kIsWeb) {
       emit(
         state.copyWith(
@@ -181,38 +203,57 @@ class Screen0LoginBloc extends Bloc<Screen0LoginEvent, Screen0LoginState> {
     ContinueAsGuestEvent event,
     Emitter<Screen0LoginState> emit,
   ) async {
+    if (state.isLoading || state.isLoadingGoogle || state.isLoadingGuest) {
+      return;
+    }
     emit(
       state.copyWith(
         isLoadingGuest: true,
         loginError: null,
       ),
     );
-    final result = await _authRepository.login(
-      LoginRequest(
-        email: _kGuestAccountEmail,
-        password: _kGuestAccountPassword,
-      ),
-    );
-    if (result is LoginSuccess) {
-      await _persistLoginSuccess(
-        result,
-        rememberMe: true,
-        emailToSaveWhenRemembered: null,
-      );
+    try {
+      final prefs = PrefUtils();
+      final deviceId = await prefs.getOrCreateDeviceId();
+      final result = await _authRepository.guestLogin(deviceId);
+      if (result is LoginSuccess) {
+        await prefs.setRememberSession(true);
+        await prefs.setSavedLoginEmail(null);
+        // Keep the legacy local marker so splash / offline gates still work.
+        await prefs.markGuestOfflineHome();
+        await prefs.setToken(result.data.token);
+        if (result.data.user != null) {
+          await prefs.setUserSession(result.data.user!.toJson());
+        }
+        emit(
+          state.copyWith(
+            isLoadingGuest: false,
+            loginError: null,
+            loginSuccess: true,
+          ),
+        );
+      } else if (result is LoginFailure) {
+        emit(
+          state.copyWith(
+            isLoadingGuest: false,
+            loginError: result.message.isNotEmpty
+                ? result.message
+                : AppLocalization.translate('msg_guest_login_failed'),
+          ),
+        );
+      } else {
+        emit(
+          state.copyWith(
+            isLoadingGuest: false,
+            loginError: AppLocalization.translate('msg_guest_login_failed'),
+          ),
+        );
+      }
+    } catch (_) {
       emit(
         state.copyWith(
           isLoadingGuest: false,
-          loginError: null,
-          loginSuccess: true,
-        ),
-      );
-    } else if (result is LoginFailure) {
-      emit(
-        state.copyWith(
-          isLoadingGuest: false,
-          loginError: result.message.isNotEmpty
-              ? result.message
-              : AppLocalization.translate('msg_guest_login_failed'),
+          loginError: AppLocalization.translate('msg_guest_login_failed'),
         ),
       );
     }

@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import '../../core/app_export.dart';
 import '../../data/models/media_item.dart';
 import '../../widgets/app_bar/appbar_leading_image.dart';
+import '../../widgets/app_bar/appbar_title.dart';
 import '../../widgets/app_bar/custom_app_bar.dart';
-import '../../widgets/custom_search_view.dart';
 import '../../widgets/design_preview_sheet.dart';
 import 'bloc/screen_16_online_designs_bloc.dart';
 import 'models/listsection_item_model.dart';
@@ -29,113 +29,94 @@ class Screen16OnlineDesignsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return SafeArea(
       child: Scaffold(
-        resizeToAvoidBottomInset: false,
         appBar: _buildAppBar(context),
-        body: SizedBox(
-          width: double.maxFinite,
+        body: Padding(
+          padding: EdgeInsets.fromLTRB(
+            AppDs.space4.h,
+            AppDs.space3.v,
+            AppDs.space4.h,
+            0,
+          ),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              AppPageHeader(
+                title: 'lbl_online_designs'.tr,
+                subtitle: 'msg_search_online_t'.tr,
+              ),
+              SizedBox(height: AppDs.space4.v),
+              BlocSelector<
+                Screen16OnlineDesignsBloc,
+                Screen16OnlineDesignsState,
+                TextEditingController?
+              >(
+                selector: (state) => state.searchController,
+                builder: (context, searchController) {
+                  return AppSearchField(
+                    controller: searchController,
+                    hintText: 'msg_search_online_t'.tr,
+                    onChanged: (value) {
+                      context.read<Screen16OnlineDesignsBloc>().add(
+                        Screen16OnlineDesignsSearchChangedEvent(value),
+                      );
+                    },
+                  );
+                },
+              ),
+              SizedBox(height: AppDs.space4.v),
+              _buildSocialMediaSection(context),
+              SizedBox(height: AppDs.space4.v),
               Expanded(
-                child: SingleChildScrollView(
-                  child: Column(
-                    children: [
-                      Padding(
-                        padding: EdgeInsets.only(left: 22.h, right: 23.h),
-                        child:
-                            BlocSelector<
-                              Screen16OnlineDesignsBloc,
-                              Screen16OnlineDesignsState,
-                              TextEditingController?
-                            >(
-                              selector: (state) => state.searchController,
-                              builder: (context, searchController) {
-                                return CustomSearchView(
-                                  controller: searchController,
-                                  hintText: "msg_search_online_t".tr,
-                                  onChanged: (value) {
-                                    context.read<Screen16OnlineDesignsBloc>().add(
-                                      Screen16OnlineDesignsSearchChangedEvent(
-                                        value,
-                                      ),
-                                    );
-                                  },
-                                );
-                              },
-                            ),
-                      ),
-                      SizedBox(height: 16.v),
-                      _buildSocialMediaSection(context),
-                      SizedBox(height: 30.v),
-                      Container(
-                        margin: EdgeInsets.only(right: 2.h),
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 20.h,
-                          vertical: 29.v,
-                        ),
-                        decoration: AppDecoration.fillBluegray90005.copyWith(
-                          borderRadius: BorderRadiusStyle.circleBorder44,
-                        ),
-                        child:
-                            BlocBuilder<
-                              Screen16OnlineDesignsBloc,
-                              Screen16OnlineDesignsState
-                            >(
-                              builder: (context, state) {
-                                if (state.isLoading) {
-                                  return const Padding(
-                                    padding: EdgeInsets.symmetric(vertical: 40),
-                                    child: Center(
-                                      child: CircularProgressIndicator(),
-                                    ),
-                                  );
-                                }
-                                if (state.errorMessage != null) {
-                                  return Padding(
-                                    padding: EdgeInsets.symmetric(
-                                      horizontal: 12.h,
-                                      vertical: 40.v,
-                                    ),
-                                    child: Center(
-                                      child: Text(
-                                        state.errorMessage!,
-                                        textAlign: TextAlign.center,
-                                        style: theme.textTheme.bodyMedium,
-                                      ),
-                                    ),
-                                  );
-                                }
-                                final model =
-                                    state.screen16OnlineDesignsModelObj;
-                                final forYou = state.selectedCategoryId == null;
-                                return Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    SizedBox(height: 9.v),
-                                    _buildImageSection(context),
-                                    SizedBox(height: 17.v),
-                                    if (forYou)
-                                      ..._buildForYouGroupedSections(
-                                        context,
-                                        model,
-                                      )
-                                    else ...[
-                                      ..._buildCategoryFilterHeading(
-                                        state.categoryOptions,
-                                        state.selectedCategoryId,
-                                      ),
-                                      _buildRectangleListSection(context),
-                                      SizedBox(height: 17.v),
-                                      _buildListSection(context),
-                                    ],
-                                    SizedBox(height: 32.v),
-                                  ],
-                                );
-                              },
-                            ),
-                      ),
-                    ],
+                child: AppCard(
+                  elevated: true,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: AppDs.space3.h,
+                    vertical: AppDs.space4.v,
                   ),
+                  child:
+                      BlocBuilder<
+                        Screen16OnlineDesignsBloc,
+                        Screen16OnlineDesignsState
+                      >(
+                        builder: (context, state) {
+                          final model = state.screen16OnlineDesignsModelObj;
+                          final forYou = state.selectedCategoryId == null;
+                          return AppAsyncBody(
+                            isLoading: state.isLoading,
+                            errorMessage: state.errorMessage,
+                            loading: Column(
+                              children: [
+                                const AppFeaturedRowSkeleton(),
+                                SizedBox(height: AppDs.space4.v),
+                                const AppHorizontalListSkeleton(),
+                              ],
+                            ),
+                            child: SingleChildScrollView(
+                              child: Column(
+                                children: [
+                                  _buildImageSection(context),
+                                  SizedBox(height: AppDs.space4.v),
+                                  if (forYou)
+                                    ..._buildForYouGroupedSections(
+                                      context,
+                                      model,
+                                    )
+                                  else ...[
+                                    ..._buildCategoryFilterHeading(
+                                      state.categoryOptions,
+                                      state.selectedCategoryId,
+                                    ),
+                                    _buildRectangleListSection(context),
+                                    SizedBox(height: AppDs.space4.v),
+                                    _buildListSection(context),
+                                  ],
+                                  SizedBox(height: AppDs.space4.v),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                 ),
               ),
             ],
@@ -147,7 +128,12 @@ class Screen16OnlineDesignsScreen extends StatelessWidget {
 
   PreferredSizeWidget _buildAppBar(BuildContext context) {
     return CustomAppBar(
-      leading: AppbarLeadingImage(imagePath: ImageConstant.imgArrowLeftPrimary),
+      leading: AppbarLeadingImage(
+        imagePath: ImageConstant.imgArrowLeftPrimary,
+        onTap: () => Navigator.of(context).pop(),
+      ),
+      centerTitle: true,
+      title: AppbarTitle(text: 'lbl_online_designs'.tr),
     );
   }
 
@@ -280,12 +266,9 @@ class Screen16OnlineDesignsScreen extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
-                  style: theme.textTheme.bodySmall!.copyWith(
-                    color: theme.colorScheme.onPrimaryContainer.withValues(
-                      alpha: 1.0,
-                    ),
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                  ),
+                  style: selected
+                      ? AppTypography.navActive(theme)
+                      : AppTypography.navInactive(theme),
                 ),
               ),
             ],
@@ -315,23 +298,7 @@ class Screen16OnlineDesignsScreen extends StatelessWidget {
       }
     }
     if (title.isEmpty) return const [];
-    return [
-      Padding(
-        padding: EdgeInsets.only(left: 9.h, right: 9.h),
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: Text(
-            title,
-            style:
-                theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ) ??
-                theme.textTheme.bodyLarge,
-          ),
-        ),
-      ),
-      SizedBox(height: 10.v),
-    ];
+    return [AppSectionHeader(title: title)];
   }
 
   /// When "For you" is selected: category heading + horizontal row per category.
@@ -345,26 +312,11 @@ class Screen16OnlineDesignsScreen extends StatelessWidget {
     }
     final out = <Widget>[];
     for (final g in groups) {
-      out.add(
-        Padding(
-          padding: EdgeInsets.only(left: 9.h, right: 9.h),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              g.categoryHeading,
-              style:
-                  theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ) ??
-                  theme.textTheme.bodyLarge,
-            ),
-          ),
-        ),
-      );
-      out.add(SizedBox(height: 10.v));
+      out.add(AppSectionHeader(title: g.categoryHeading));
+      out.add(SizedBox(height: AppDs.space2.v));
       out.add(
         SizedBox(
-          height: 110.v,
+          height: 168.v,
           child: ListView.separated(
             padding: EdgeInsets.only(left: 9.h),
             scrollDirection: Axis.horizontal,
@@ -395,29 +347,28 @@ class Screen16OnlineDesignsScreen extends StatelessWidget {
         return Padding(
           padding: EdgeInsets.only(left: 9.h),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: List.generate(3, (i) {
               final url = i < urls.length ? urls[i] : null;
               final tile = i < tiles.length ? tiles[i] : null;
               final fallback = _fallbackFeatured[i];
-              final path =
-                  url != null && url.isNotEmpty ? url : fallback;
-              final canPreviewNetwork =
-                  url != null && url.trim().isNotEmpty;
+              final path = url != null && url.isNotEmpty ? url : fallback;
+              final canPreviewNetwork = url != null && url.trim().isNotEmpty;
               if (tile != null &&
                   (tile.rectangle ?? '').trim().isNotEmpty &&
                   canPreviewNetwork) {
                 return RectanglelistsectionItemWidget(
                   tile,
                   cellWidth: w[i],
-                  imageHeight: 157.v,
+                  imageHeight: 140.v,
                 );
               }
               final child = CustomImageView(
                 imagePath: path,
-                height: 157.v,
+                height: 140.v,
                 width: w[i],
-                radius: BorderRadius.circular(6.h),
+                radius: BorderRadius.circular(12.h),
               );
               if (!canPreviewNetwork) {
                 return child;
@@ -430,9 +381,11 @@ class Screen16OnlineDesignsScreen extends StatelessWidget {
                       context,
                       imageRef: url.trim(),
                       title: "lbl_online_designs".tr,
+                      showRemoveBackground: false,
+                      enableRedesign: true,
                     );
                   },
-                  borderRadius: BorderRadius.circular(6.h),
+                  borderRadius: BorderRadius.circular(12.h),
                   child: child,
                 ),
               );
@@ -445,7 +398,7 @@ class Screen16OnlineDesignsScreen extends StatelessWidget {
 
   Widget _buildRectangleListSection(BuildContext context) {
     return SizedBox(
-      height: 110.v,
+      height: 168.v,
       child:
           BlocSelector<
             Screen16OnlineDesignsBloc,
@@ -480,7 +433,7 @@ class Screen16OnlineDesignsScreen extends StatelessWidget {
 
   Widget _buildListSection(BuildContext context) {
     return SizedBox(
-      height: 110.v,
+      height: 168.v,
       child:
           BlocSelector<
             Screen16OnlineDesignsBloc,

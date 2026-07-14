@@ -1,6 +1,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
+import '/core/constants/editor_various_constants.dart';
 import '/core/models/editor_callbacks/pro_image_editor_callbacks.dart';
 import '/core/models/editor_configs/pro_image_editor_configs.dart';
 import '/core/models/layers/layer.dart';
@@ -118,6 +119,8 @@ class MainEditorLayersService {
 
   /// Handles tap events on a layer to manage selection or editing.
   void handleLayerTap(Layer layer, PointerEvent event) {
+    if (layer.meta?[kMusamiLayerLockedMetaKey] == true) return;
+
     final bool layersAreSelectable = layerInteraction.layersAreSelectable(
       configs,
     );
@@ -193,6 +196,8 @@ class MainEditorLayersService {
 
   /// Handles the tap-down event on a layer to begin selection or interaction.
   void handleTapDown(Layer layer, PointerDownEvent event) {
+    if (layer.meta?[kMusamiLayerLockedMetaKey] == true) return;
+
     if (_isScaleInteractionActive ||
         state.isLayerBeingTransformed ||
         (mouseService.validatePanAction(event: event) && isDesktop)) {

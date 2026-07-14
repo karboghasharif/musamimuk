@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../../core/app_export.dart';
 import '../../widgets/app_bar/appbar_leading_image.dart';
 import '../../widgets/app_bar/custom_app_bar.dart';
-import '../../widgets/custom_elevated_button.dart';
 import 'bloc/screen_21_remove_background_bloc.dart';
 import 'models/screen_21_remove_background_model.dart';
 
@@ -26,85 +25,80 @@ class Screen21RemoveBackgroundScreen extends StatelessWidget {
       builder: (context, state) {
         return SafeArea(
           child: Scaffold(
+            backgroundColor: AppDs.surfaceBase,
             appBar: _buildAppBar(context),
-            body: Container(
-              width: double.maxFinite,
-              padding: EdgeInsets.symmetric(
-                horizontal: 28.h,
-                vertical: 24.v,
+            body: SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(
+                AppDs.space4.h,
+                AppDs.space3.v,
+                AppDs.space4.h,
+                AppDs.space6.v,
               ),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  CustomImageView(
-                    imagePath: ImageConstant.imgGalleryRemoveSvgrepoCom,
-                    height: 72.adaptSize,
-                    width: 72.adaptSize,
+                  AppPageHeader(
+                    title: 'msg_remove_background2'.tr,
+                    subtitle: 'msg_100_automatically'.tr,
+                    align: TextAlign.center,
                   ),
-                  SizedBox(height: 41.v),
-                  SizedBox(
-                    width: 178.h,
-                    child: Text(
-                      "msg_remove_background2".tr,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.headlineMedium!.copyWith(
-                        height: 1.20,
+                  SizedBox(height: AppDs.space4.v),
+                  Center(
+                    child: CustomImageView(
+                      imagePath: ImageConstant.imgGalleryRemoveSvgrepoCom,
+                      height: 72.adaptSize,
+                      width: 72.adaptSize,
+                    ),
+                  ),
+                  SizedBox(height: AppDs.space4.v),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      AppText(
+                        'msg_remove_background'.tr,
+                        variant: AppTextVariant.accent,
                       ),
-                    ),
+                      SizedBox(width: AppDs.space6.h),
+                      AppText(
+                        'lbl_original'.tr,
+                        variant: AppTextVariant.secondary,
+                      ),
+                    ],
                   ),
-                  Text(
-                    "msg_100_automatically".tr,
-                    style: CustomTextStyles.bodyMedium15,
-                  ),
-                  SizedBox(height: 44.v),
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 52.h),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          "msg_remove_background".tr,
-                          style: CustomTextStyles.titleSmallPrimary,
-                        ),
-                        Padding(
-                          padding: EdgeInsets.only(left: 39.h),
-                          child: Text(
-                            "lbl_original".tr,
-                            style: CustomTextStyles.bodyMedium15,
-                          ),
-                        )
-                      ],
-                    ),
-                  ),
-                  SizedBox(height: 5.v),
+                  SizedBox(height: AppDs.space1.v),
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: SizedBox(
+                    child: Container(
                       width: 181.h,
-                      child: Divider(
+                      margin: EdgeInsets.only(left: 82.h),
+                      height: 3.v,
+                      decoration: BoxDecoration(
                         color: theme.colorScheme.primary,
-                        indent: 82.h,
+                        borderRadius: BorderRadius.circular(1.h),
                       ),
                     ),
                   ),
-                  SizedBox(height: 29.v),
-                  CustomImageView(
-                    imagePath: ImageConstant.imgRectangle5484,
-                    height: 282.v,
-                    width: 372.h,
-                    radius: BorderRadius.circular(
-                      7.h,
+                  SizedBox(height: AppDs.space4.v),
+                  AppCard(
+                    elevated: true,
+                    padding: EdgeInsets.zero,
+                    child: SizedBox(
+                      height: 282.v,
+                      width: double.infinity,
+                      child: AppEmptyState(
+                        title: 'lbl_original'.tr,
+                        message: 'lbl_upload_image'.tr,
+                        icon: Icons.image_outlined,
+                      ),
                     ),
                   ),
-                  SizedBox(height: 29.v),
-                  CustomElevatedButton(
-                    text: "lbl_download".tr,
+                  SizedBox(height: AppDs.space4.v),
+                  AppPrimaryButton(
+                    label: 'lbl_download'.tr,
                     onPressed: () {
                       onTapDownload(context);
                     },
                   ),
-                  SizedBox(height: 5.v)
                 ],
               ),
             ),
@@ -118,7 +112,7 @@ class Screen21RemoveBackgroundScreen extends StatelessWidget {
     return CustomAppBar(
       leading: AppbarLeadingImage(
         imagePath: ImageConstant.imgArrowLeftPrimary,
-        margin: EdgeInsets.fromLTRB(29.h, 20.v, 378.h, 19.v),
+        margin: EdgeInsets.only(left: AppDs.space4.h),
       ),
     );
   }
