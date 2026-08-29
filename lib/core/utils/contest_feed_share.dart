@@ -1,19 +1,11 @@
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../network/api_utils.dart';
-
 /// Share helpers for contest submission feed items.
+///
+/// Production share links must come from the backend `share_url` field.
 class ContestFeedShare {
   ContestFeedShare._();
-
-  static String shareUrl({
-    required int contestId,
-    required int submissionId,
-  }) {
-    final origin = apiSiteOrigin();
-    return '$origin/contests/$contestId/submissions/$submissionId';
-  }
 
   static String shareMessage({
     required String contestTitle,

@@ -4,11 +4,11 @@ import 'package:toastification/toastification.dart';
 
 import '../../../core/app_export.dart';
 import '../../../core/utils/app_toast.dart';
-import '../../../theme/custom_button_style.dart';
-import '../../../widgets/custom_elevated_button.dart';
-import '../../../widgets/custom_text_form_field.dart';
 
-/// Yellow-themed resize canvas popup (editor overlay) with unit-aware dimensions.
+/// Yellow resize canvas panel (editor overlay), matching other tool tabs.
+///
+/// Sliders and fields only update the draft values shown in the panel.
+/// The editor canvas size changes only when the user taps Apply.
 class CanvasResizeSizePanel extends StatefulWidget {
   const CanvasResizeSizePanel({
     super.key,
@@ -18,8 +18,7 @@ class CanvasResizeSizePanel extends StatefulWidget {
     required this.maxHeightPx,
     required this.initialUnit,
     required this.onApply,
-    required this.onHeightSliderEnd,
-    required this.onWidthSliderEnd,
+    this.isApplying = false,
     this.minWidthPx = 50,
   });
 
@@ -29,9 +28,8 @@ class CanvasResizeSizePanel extends StatefulWidget {
   final double maxHeightPx;
   final String initialUnit;
   final double minWidthPx;
+  final bool isApplying;
   final void Function(double widthPx, double heightPx, String unit) onApply;
-  final void Function(double widthPx, double heightPx) onHeightSliderEnd;
-  final void Function(double widthPx, double heightPx) onWidthSliderEnd;
 
   @override
   State<CanvasResizeSizePanel> createState() => _CanvasResizeSizePanelState();
@@ -39,10 +37,13 @@ class CanvasResizeSizePanel extends StatefulWidget {
 
 class _CanvasResizeSizePanelState extends State<CanvasResizeSizePanel> {
   static const double _minHeightPx = 50;
+  static const Color _ink = Color(0xFF1A1D21);
+  static const Color _inkMuted = Color(0xFF4A5560);
 
   late final TextEditingController _wCtrl;
   late final TextEditingController _hCtrl;
   late CanvasUnitDimensions _dims;
+  bool _dirty = false;
 
   @override
   void initState() {
@@ -60,14 +61,24 @@ class _CanvasResizeSizePanelState extends State<CanvasResizeSizePanel> {
   @override
   void didUpdateWidget(covariant CanvasResizeSizePanel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.editorWidthPx != widget.editorWidthPx ||
-        oldWidget.editorHeightPx != widget.editorHeightPx) {
+    // Sync from the live editor only after Apply finishes (or external resize).
+    // While the user is drafting, ignore parent size so sliders stay local.
+    if (!_dirty &&
+        (oldWidget.editorWidthPx != widget.editorWidthPx ||
+            oldWidget.editorHeightPx != widget.editorHeightPx)) {
       _dims.setPixelSize(widget.editorWidthPx, widget.editorHeightPx);
       _clampPixels();
       _syncTextFromDimensions();
     }
+    if (oldWidget.isApplying && !widget.isApplying) {
+      _dims.setPixelSize(widget.editorWidthPx, widget.editorHeightPx);
+      _clampPixels();
+      _syncTextFromDimensions();
+      _dirty = false;
+    }
     if (oldWidget.initialUnit != widget.initialUnit &&
-        _dims.unit != widget.initialUnit) {
+        _dims.unit != widget.initialUnit &&
+        !_dirty) {
       _dims.changeUnit(widget.initialUnit);
       _syncTextFromDimensions();
     }
@@ -80,12 +91,13 @@ class _CanvasResizeSizePanelState extends State<CanvasResizeSizePanel> {
     super.dispose();
   }
 
-  double get _minPx => widget.minWidthPx < _minHeightPx
-      ? widget.minWidthPx
-      : _minHeightPx;
+  double get _minPx =>
+      widget.minWidthPx < _minHeightPx ? widget.minWidthPx : _minHeightPx;
 
-  double _maxDisplayW() => CanvasUnitUtils.fromPixels(widget.maxWidthPx, _dims.unit);
-  double _maxDisplayH() => CanvasUnitUtils.fromPixels(widget.maxHeightPx, _dims.unit);
+  double _maxDisplayW() =>
+      CanvasUnitUtils.fromPixels(widget.maxWidthPx, _dims.unit);
+  double _maxDisplayH() =>
+      CanvasUnitUtils.fromPixels(widget.maxHeightPx, _dims.unit);
   double _minDisplay() => CanvasUnitUtils.minValue(_dims.unit);
 
   void _clampPixels() {
@@ -118,6 +130,7 @@ class _CanvasResizeSizePanelState extends State<CanvasResizeSizePanel> {
       _dims.setDisplaySize(w, h);
       _clampPixels();
       _syncTextFromDimensions();
+      _dirty = true;
     });
   }
 
@@ -127,6 +140,7 @@ class _CanvasResizeSizePanelState extends State<CanvasResizeSizePanel> {
       _dims.changeUnit(newUnit);
       _clampPixels();
       _syncTextFromDimensions();
+      _dirty = true;
     });
   }
 
@@ -164,11 +178,10 @@ class _CanvasResizeSizePanelState extends State<CanvasResizeSizePanel> {
   }
 
   void _apply() {
+    if (widget.isApplying) return;
+    FocusScope.of(context).unfocus();
     final parsed = _parseAndClampFromFields();
     if (parsed == null) return;
-    setState(() {
-      _dims.setPixelSize(parsed.widthPx, parsed.heightPx);
-    });
     widget.onApply(parsed.widthPx, parsed.heightPx, _dims.unit);
   }
 
@@ -184,296 +197,305 @@ class _CanvasResizeSizePanelState extends State<CanvasResizeSizePanel> {
         .replaceAll('@height', '${widget.maxHeightPx.round()}');
   }
 
-  Widget _unitDropdown() {
-    return SizedBox(
-      width: 122.h,
-      child: DropdownButtonFormField<String>(
-        key: ValueKey(_dims.unit),
-        isExpanded: true,
-        initialValue: _dims.unit,
-        decoration: InputDecoration(
-          isDense: true,
-          filled: true,
-          fillColor: appTheme.yellow500,
-          contentPadding: EdgeInsets.symmetric(horizontal: 12.h, vertical: 10.v),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10.h),
-            borderSide: BorderSide.none,
-          ),
-        ),
-        icon: CustomImageView(
-          imagePath: ImageConstant.imgArrowdownGray9001,
-          height: 16.adaptSize,
-          width: 16.adaptSize,
-        ),
-        items: CanvasUnitUtils.units
-            .map(
-              (unit) => DropdownMenuItem<String>(
-                value: unit,
-                child: Text(
-                  CanvasUnitUtils.unitLabelKey(unit).tr,
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
-                ),
-              ),
-            )
-            .toList(),
-        onChanged: _onUnitChanged,
+  InputDecoration _fieldDeco({required String label}) {
+    return InputDecoration(
+      isDense: true,
+      filled: true,
+      fillColor: Colors.white,
+      labelText: label,
+      labelStyle: const TextStyle(
+        color: _inkMuted,
+        fontWeight: FontWeight.w500,
       ),
-    );
-  }
-
-  Widget _sliderBox({
-    required String label,
-    required double displayValue,
-    required double maxDisplay,
-    required ValueChanged<double> onChanged,
-    required ValueChanged<double> onChangeEnd,
-  }) {
-    final min = _minDisplay();
-    final clamped = displayValue.clamp(min, maxDisplay);
-    return Container(
-      padding: EdgeInsets.all(15.h),
-      decoration: AppDecoration.fillYellow.copyWith(
-        borderRadius: BorderRadiusStyle.roundedBorder10,
+      floatingLabelStyle: const TextStyle(
+        color: _ink,
+        fontWeight: FontWeight.w600,
       ),
-      child: Column(
-        children: [
-          Text(
-            label,
-            style: CustomTextStyles.bodySmallBluegray90004.copyWith(
-              color: Colors.black,
-            ),
-          ),
-          SizedBox(height: 4.v),
-          Text(
-            '${CanvasUnitUtils.formatValue(clamped, _dims.unit)} ${_dims.unit}',
-            style: CustomTextStyles.bodySmallBluegray90004.copyWith(
-              fontSize: 11,
-              color: Colors.black54,
-            ),
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CustomImageView(
-                imagePath: ImageConstant.imgArrowDownGray900,
-                height: 18.adaptSize,
-                width: 18.adaptSize,
-              ),
-              Expanded(
-                child: Padding(
-                  padding: EdgeInsets.only(
-                    left: 12.h,
-                    top: 3.v,
-                    bottom: 3.v,
-                  ),
-                  child: SliderTheme(
-                    data: SliderThemeData(
-                      trackShape: const RoundedRectSliderTrackShape(),
-                      overlayShape: const RoundSliderOverlayShape(),
-                      activeTrackColor: appTheme.blueGray90004,
-                      inactiveTrackColor:
-                          appTheme.black900.withValues(alpha: 0.08),
-                      thumbColor: appTheme.blueGray90004,
-                      thumbShape: const RoundSliderThumbShape(
-                        enabledThumbRadius: 6,
-                      ),
-                    ),
-                    child: Slider(
-                      value: clamped,
-                      min: min,
-                      max: maxDisplay,
-                      onChanged: onChanged,
-                      onChangeEnd: onChangeEnd,
-                    ),
-                  ),
-                ),
-              ),
-              CustomImageView(
-                imagePath: ImageConstant.imgArrowLeft,
-                height: 17.adaptSize,
-                width: 17.adaptSize,
-                margin: EdgeInsets.only(left: 11.h),
-              ),
-            ],
-          ),
-        ],
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppDs.radiusMd.adaptSize),
+        borderSide: BorderSide.none,
       ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppDs.radiusMd.adaptSize),
+        borderSide: BorderSide.none,
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppDs.radiusMd.adaptSize),
+        borderSide: BorderSide(color: appTheme.blueGray90004, width: 1.6),
+      ),
+      contentPadding: EdgeInsets.symmetric(horizontal: 12.h, vertical: 12.v),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final maxDisplayW = _maxDisplayW();
     final maxDisplayH = _maxDisplayH();
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
+    final maxPanelHeight = MediaQuery.sizeOf(context).height *
+        (keyboardOpen ? 0.42 : 0.55);
+    final applying = widget.isApplying;
+    final canApply = _dirty && !applying;
 
     return Container(
-      margin: EdgeInsets.only(bottom: 45.v),
-      padding: EdgeInsets.symmetric(horizontal: 24.h, vertical: 20.v),
-      decoration: AppDecoration.fillPrimary.copyWith(
+      margin: EdgeInsets.only(bottom: 46.v, left: 12.h, right: 12.h),
+      padding: EdgeInsets.fromLTRB(
+        AppDs.space5.h,
+        AppDs.space4.v,
+        AppDs.space5.h,
+        AppDs.space5.v,
+      ),
+      decoration: AppDecoration.fillYellow.copyWith(
         borderRadius: BorderRadiusStyle.roundedBorder33,
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            'lbl_select_size2'.tr,
-            style: CustomTextStyles.titleMediumPoppinsBluegray90004,
-          ),
-          SizedBox(height: 12.v),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Padding(
-              padding: EdgeInsets.only(left: 16.h),
-              child: Text(
-                'lbl_custom_size'.tr,
-                style: CustomTextStyles.bodySmallBluegray90004,
+      constraints: BoxConstraints(maxHeight: maxPanelHeight),
+      child: SingleChildScrollView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'lbl_select_size2'.tr,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: _ink,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                Text(
+                  _maxLabel(),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: _inkMuted,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: AppDs.space3.v),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _wCtrl,
+                    enabled: !applying,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      color: _ink,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: _inputFormatters(),
+                    onChanged: (_) => _syncFromText(),
+                    decoration: _fieldDeco(label: 'lbl_width'.tr),
+                  ),
+                ),
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 8.h),
+                  child: Text(
+                    '×',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: _inkMuted,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: TextField(
+                    controller: _hCtrl,
+                    enabled: !applying,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      color: _ink,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: _inputFormatters(),
+                    onChanged: (_) => _syncFromText(),
+                    onSubmitted: (_) => _apply(),
+                    decoration: _fieldDeco(label: 'lbl_height'.tr),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: AppDs.space3.v),
+            Row(
+              children: [
+                Expanded(child: _unitDropdown(theme, enabled: !applying)),
+                SizedBox(width: AppDs.space2.h),
+                SizedBox(
+                  height: 48.v,
+                  child: FilledButton(
+                    onPressed: canApply ? _apply : null,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: canApply
+                          ? appTheme.blueGray90004
+                          : appTheme.blueGray90004.withValues(alpha: 0.72),
+                      disabledBackgroundColor:
+                          appTheme.blueGray90004.withValues(alpha: 0.72),
+                      foregroundColor: Colors.white,
+                      disabledForegroundColor: Colors.white,
+                      padding: EdgeInsets.symmetric(horizontal: 20.h),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(
+                          AppDs.radiusMd.adaptSize,
+                        ),
+                      ),
+                    ),
+                    child: applying
+                        ? SizedBox(
+                            width: 20.adaptSize,
+                            height: 20.adaptSize,
+                            child: const CircularProgressIndicator(
+                              strokeWidth: 2.4,
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : Text(
+                            'lbl_apply'.tr,
+                            style: theme.textTheme.labelLarge?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: AppDs.space2.v),
+            Text(
+              _pixelPreview(),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: _inkMuted,
+                fontWeight: FontWeight.w500,
               ),
             ),
-          ),
-          SizedBox(height: 10.v),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: CustomTextFormField(
-                  controller: _wCtrl,
-                  hintText: 'lbl_width'.tr,
-                  textStyle: CustomTextStyles.bodySmallBluegray90004,
-                  textInputAction: TextInputAction.next,
-                  textInputType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  inputFormatters: _inputFormatters(),
-                  onChanged: (_) => _syncFromText(),
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: 16.h,
-                    vertical: 14.v,
-                  ),
-                  borderDecoration: TextFormFieldStyleHelper.fillYellow,
-                  fillColor: appTheme.yellow500,
-                ),
-              ),
-              Padding(
-                padding: EdgeInsets.only(
-                  top: 17.v,
-                  left: 6.h,
-                  right: 6.h,
-                  bottom: 14.v,
-                ),
-                child: Text(
-                  'lbl_x'.tr,
-                  style: CustomTextStyles.bodySmallBluegray90004,
-                ),
-              ),
-              Expanded(
-                child: CustomTextFormField(
-                  controller: _hCtrl,
-                  hintText: 'lbl_height'.tr,
-                  textStyle: CustomTextStyles.bodySmallBluegray90004,
-                  textInputAction: TextInputAction.done,
-                  textInputType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  inputFormatters: _inputFormatters(),
-                  onChanged: (_) => _syncFromText(),
-                  onFieldSubmitted: (_) => _apply(),
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: 16.h,
-                    vertical: 14.v,
-                  ),
-                  borderDecoration: TextFormFieldStyleHelper.fillYellow,
-                  fillColor: appTheme.yellow500,
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 10.v),
-          Row(
-            children: [
-              Expanded(child: _unitDropdown()),
-              SizedBox(width: 8.h),
-              CustomElevatedButton(
-                height: 49.v,
-                width: 80.h,
-                text: 'lbl_apply'.tr,
-                buttonStyle: CustomButtonStyles.fillYellow,
-                buttonTextStyle: CustomTextStyles.bodySmallBluegray90004,
-                onPressed: _apply,
-              ),
-            ],
-          ),
-          SizedBox(height: 8.v),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Padding(
-              padding: EdgeInsets.only(left: 4.h),
-              child: Text(
-                _pixelPreview(),
-                style: CustomTextStyles.bodySmallBluegray90004.copyWith(
-                  fontSize: 11,
-                ),
-              ),
+            SizedBox(height: AppDs.space3.v),
+            _sliderRow(
+              theme: theme,
+              label: 'lbl_width'.tr,
+              displayValue: _dims.widthDisplay,
+              maxDisplay: maxDisplayW,
+              enabled: !applying,
+              onChanged: (value) {
+                setState(() {
+                  _dims.setDisplaySize(value, _dims.heightDisplay);
+                  _clampPixels();
+                  _syncTextFromDimensions();
+                  _dirty = true;
+                });
+              },
             ),
-          ),
-          Padding(
-            padding: EdgeInsets.only(top: 4.v),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                _maxLabel(),
-                style: CustomTextStyles.bodySmallBluegray90004.copyWith(
-                  fontSize: 11,
-                ),
-              ),
+            SizedBox(height: AppDs.space1.v),
+            _sliderRow(
+              theme: theme,
+              label: 'lbl_height'.tr,
+              displayValue: _dims.heightDisplay,
+              maxDisplay: maxDisplayH,
+              enabled: !applying,
+              onChanged: (value) {
+                setState(() {
+                  _dims.setDisplaySize(_dims.widthDisplay, value);
+                  _clampPixels();
+                  _syncTextFromDimensions();
+                  _dirty = true;
+                });
+              },
             ),
-          ),
-          SizedBox(height: 14.v),
-          _sliderBox(
-            label: 'lbl_height'.tr,
-            displayValue: _dims.heightDisplay,
-            maxDisplay: maxDisplayH,
-            onChanged: (value) {
-              setState(() {
-                _dims.setDisplaySize(_dims.widthDisplay, value);
-                _clampPixels();
-                _syncTextFromDimensions();
-              });
-            },
-            onChangeEnd: (value) {
-              setState(() {
-                _dims.setDisplaySize(_dims.widthDisplay, value);
-                _clampPixels();
-                _syncTextFromDimensions();
-              });
-              widget.onHeightSliderEnd(_dims.widthPx, _dims.heightPx);
-            },
-          ),
-          SizedBox(height: 10.v),
-          _sliderBox(
-            label: 'lbl_width'.tr,
-            displayValue: _dims.widthDisplay,
-            maxDisplay: maxDisplayW,
-            onChanged: (value) {
-              setState(() {
-                _dims.setDisplaySize(value, _dims.heightDisplay);
-                _clampPixels();
-                _syncTextFromDimensions();
-              });
-            },
-            onChangeEnd: (value) {
-              setState(() {
-                _dims.setDisplaySize(value, _dims.heightDisplay);
-                _clampPixels();
-                _syncTextFromDimensions();
-              });
-              widget.onWidthSliderEnd(_dims.widthPx, _dims.heightPx);
-            },
-          ),
-          SizedBox(height: 68.v),
-        ],
+          ],
+        ),
       ),
+    );
+  }
+
+  Widget _unitDropdown(ThemeData theme, {required bool enabled}) {
+    return DropdownButtonFormField<String>(
+      key: ValueKey(_dims.unit),
+      isExpanded: true,
+      initialValue: _dims.unit,
+      dropdownColor: Colors.white,
+      style: theme.textTheme.bodyMedium?.copyWith(
+        color: _ink,
+        fontWeight: FontWeight.w600,
+      ),
+      decoration: _fieldDeco(label: 'lbl_unit'.tr),
+      items: CanvasUnitUtils.units
+          .map(
+            (unit) => DropdownMenuItem<String>(
+              value: unit,
+              child: Text(
+                CanvasUnitUtils.unitLabelKey(unit).tr,
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+            ),
+          )
+          .toList(),
+      onChanged: enabled ? _onUnitChanged : null,
+    );
+  }
+
+  Widget _sliderRow({
+    required ThemeData theme,
+    required String label,
+    required double displayValue,
+    required double maxDisplay,
+    required bool enabled,
+    required ValueChanged<double> onChanged,
+  }) {
+    final min = _minDisplay();
+    final safeMax = maxDisplay <= min ? min + 1 : maxDisplay;
+    final clamped = displayValue.clamp(min, safeMax);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Text(
+              label,
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: _inkMuted,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              '${CanvasUnitUtils.formatValue(clamped, _dims.unit)} ${_dims.unit}',
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: _ink,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+        SliderTheme(
+          data: SliderTheme.of(context).copyWith(
+            trackHeight: 4,
+            activeTrackColor: appTheme.blueGray90004,
+            inactiveTrackColor: Colors.black.withValues(alpha: 0.12),
+            thumbColor: appTheme.blueGray90004,
+            overlayColor: appTheme.blueGray90004.withValues(alpha: 0.16),
+            disabledActiveTrackColor:
+                appTheme.blueGray90004.withValues(alpha: 0.4),
+            disabledInactiveTrackColor: Colors.black.withValues(alpha: 0.08),
+            disabledThumbColor: appTheme.blueGray90004.withValues(alpha: 0.5),
+          ),
+          child: Slider(
+            value: clamped,
+            min: min,
+            max: safeMax,
+            onChanged: enabled ? onChanged : null,
+          ),
+        ),
+      ],
     );
   }
 }

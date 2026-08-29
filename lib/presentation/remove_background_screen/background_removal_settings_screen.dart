@@ -24,7 +24,6 @@ class BackgroundRemovalSettingsScreen extends StatefulWidget {
 
 class _BackgroundRemovalSettingsScreenState
     extends State<BackgroundRemovalSettingsScreen> {
-  final TextEditingController _apiKeyController = TextEditingController();
   final TextEditingController _modelController = TextEditingController();
   bool _isLoading = false;
   String? _statusMessage;
@@ -38,15 +37,15 @@ class _BackgroundRemovalSettingsScreenState
 
   @override
   void dispose() {
-    _apiKeyController.dispose();
     _modelController.dispose();
     super.dispose();
   }
 
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('hf_api_key');
+    if (!mounted) return;
     setState(() {
-      _apiKeyController.text = prefs.getString('hf_api_key') ?? '';
       _modelController.text = prefs.getString('hf_model') ?? 'briaai/RMBG-1.4';
     });
   }
@@ -59,7 +58,6 @@ class _BackgroundRemovalSettingsScreenState
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('hf_api_key', _apiKeyController.text.trim());
       await prefs.setString('hf_model', _modelController.text.trim());
 
       setState(() {
@@ -93,7 +91,7 @@ class _BackgroundRemovalSettingsScreenState
             children: [
               _buildHeader(),
               SizedBox(height: 30.v),
-              _buildApiKeySection(),
+              _buildSecurityNotice(),
               SizedBox(height: 20.v),
               _buildModelSection(),
               SizedBox(height: 20.v),
@@ -158,7 +156,7 @@ class _BackgroundRemovalSettingsScreenState
         ),
         SizedBox(height: 8.v),
         Text(
-          "Set up your Hugging Face API key to enable AI-powered background removal",
+          "Background removal credentials are managed securely by the Musamimuk backend",
           style: theme.textTheme.bodyLarge?.copyWith(
             color: theme.colorScheme.onSurface.withOpacity(0.7),
           ),
@@ -167,35 +165,18 @@ class _BackgroundRemovalSettingsScreenState
     );
   }
 
-  Widget _buildApiKeySection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          "Hugging Face API Key",
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        SizedBox(height: 8.v),
-        Text(
-          "Get your API key from https://huggingface.co/settings/tokens",
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurface.withOpacity(0.6),
-          ),
-        ),
-        SizedBox(height: 12.v),
-        CustomTextFormField(
-          controller: _apiKeyController,
-          hintText: "Enter your Hugging Face API key",
-          textInputType: TextInputType.text,
-          obscureText: true,
-          contentPadding: EdgeInsets.symmetric(
-            horizontal: 16.h,
-            vertical: 14.v,
-          ),
-        ),
-      ],
+  Widget _buildSecurityNotice() {
+    return Container(
+      width: double.maxFinite,
+      padding: EdgeInsets.all(16.adaptSize),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primary.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12.adaptSize),
+      ),
+      child: Text(
+        "API credentials are never stored on this device. Requests use your authenticated Musamimuk session.",
+        style: theme.textTheme.bodyMedium,
+      ),
     );
   }
 
@@ -288,30 +269,27 @@ class _BackgroundRemovalSettingsScreenState
     return Container(
       padding: EdgeInsets.all(16.h),
       decoration: BoxDecoration(
-        color:
-            _isStatusError
-                ? theme.colorScheme.errorContainer
-                : theme.colorScheme.primaryContainer,
+        color: _isStatusError
+            ? theme.colorScheme.errorContainer
+            : theme.colorScheme.primaryContainer,
         borderRadius: BorderRadius.circular(8.h),
       ),
       child: Row(
         children: [
           Icon(
             _isStatusError ? Icons.error_outline : Icons.check_circle_outline,
-            color:
-                _isStatusError
-                    ? theme.colorScheme.onErrorContainer
-                    : theme.colorScheme.onPrimaryContainer,
+            color: _isStatusError
+                ? theme.colorScheme.onErrorContainer
+                : theme.colorScheme.onPrimaryContainer,
           ),
           SizedBox(width: 12.h),
           Expanded(
             child: Text(
               _statusMessage!,
               style: theme.textTheme.bodyMedium?.copyWith(
-                color:
-                    _isStatusError
-                        ? theme.colorScheme.onErrorContainer
-                        : theme.colorScheme.onPrimaryContainer,
+                color: _isStatusError
+                    ? theme.colorScheme.onErrorContainer
+                    : theme.colorScheme.onPrimaryContainer,
               ),
             ),
           ),

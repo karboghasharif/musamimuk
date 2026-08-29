@@ -7,6 +7,7 @@ import '../../../data/repositories/asset_repository.dart';
 import '../models/gridgallery_pic_item_model.dart';
 import 'api_asset_bottom_sheet.dart';
 import 'gridgallery_pic_item_widget.dart';
+import 'online_assets/online_assets_category_sheet.dart';
 
 /// Add-new yellow panel: main tools grid, then asset types from API.
 class AddNewBookmarkPanel extends StatefulWidget {
@@ -69,7 +70,20 @@ class _AddNewBookmarkPanelState extends State<AddNewBookmarkPanel> {
 
   List<GridgalleryPicItemModel> get _combinedGridItems {
     final base = widget.baseGridItems;
-    if (_loadingTypes || _assetTypes.isEmpty) return base;
+    final result = List<GridgalleryPicItemModel>.from(base);
+
+    // Always expose Online Assets next to Add Text.
+    final onlineTile = GridgalleryPicItemModel(
+      gallerypic: 'lbl_online_assets'.tr,
+      icon: Icons.travel_explore_rounded,
+      id: 'online_assets',
+    );
+    final insertAfterText =
+        result.indexWhere((e) => e.gallerypic == 'Add Text');
+    final onlineAt = insertAfterText >= 0 ? insertAfterText + 1 : result.length;
+    result.insert(onlineAt, onlineTile);
+
+    if (_loadingTypes || _assetTypes.isEmpty) return result;
 
     final assetTiles = _assetTypes.map((type) {
       return GridgalleryPicItemModel(
@@ -78,11 +92,7 @@ class _AddNewBookmarkPanelState extends State<AddNewBookmarkPanel> {
         id: 'asset_type:$type',
       );
     });
-
-    final result = List<GridgalleryPicItemModel>.from(base);
-    final insertAfterText = result.indexWhere((e) => e.gallerypic == 'Add Text');
-    final insertAt = insertAfterText >= 0 ? insertAfterText + 1 : result.length;
-    result.insertAll(insertAt, assetTiles);
+    result.insertAll(onlineAt + 1, assetTiles);
     return result;
   }
 
@@ -145,6 +155,14 @@ class _AddNewBookmarkPanelState extends State<AddNewBookmarkPanel> {
               model,
               onTapColumngallery: () async {
                 final id = model.id ?? '';
+                if (id == 'online_assets') {
+                  await showOnlineAssetsCategorySheet<void>(
+                    context: context,
+                    editorKey: widget.editorKey,
+                    onAssetAdded: widget.onAssetAdded,
+                  );
+                  return;
+                }
                 if (id.startsWith('asset_type:')) {
                   final rawType = id.substring('asset_type:'.length);
                   await _openAssetType(rawType);

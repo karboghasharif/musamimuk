@@ -5,10 +5,23 @@ import 'package:flutter/foundation.dart';
 import 'package:musamimuk/core/network/api_error_mapper.dart';
 import 'package:musamimuk/core/session/session_manager.dart';
 import 'package:musamimuk/core/utils/pref_utils.dart';
+import 'package:musamimuk/data/models/wallet_models.dart';
 
 /// Base URL for the musamimuk API (versioned root). Paths in repositories are
 /// relative to this (e.g. `user/login` → `…/api/v1/user/login`).
 const String baseUrl = 'https://srv1813447.hstgr.cloud/api/v1/';
+
+bool isTrustedMusamimukUri(Uri uri) {
+  final apiUri = Uri.parse(baseUrl);
+  int effectivePort(Uri value) {
+    if (value.hasPort) return value.port;
+    return value.scheme == 'https' ? 443 : 80;
+  }
+
+  return uri.scheme == apiUri.scheme &&
+      uri.host == apiUri.host &&
+      effectivePort(uri) == effectivePort(apiUri);
+}
 
 /// Dio-based API client with interceptors for auth, session expiry, and logging.
 class ApiClient {
@@ -40,8 +53,11 @@ class _AuthSessionInterceptor extends Interceptor {
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
     final token = PrefUtils().getToken();
-    if (token != null && token.isNotEmpty) {
+    final isTrustedOrigin = isTrustedMusamimukUri(options.uri);
+    if (token != null && token.isNotEmpty && isTrustedOrigin) {
       options.headers['Authorization'] = 'Bearer $token';
+    } else if (!isTrustedOrigin) {
+      options.headers.remove('Authorization');
     }
     handler.next(options);
   }
@@ -57,6 +73,13 @@ class _AuthSessionInterceptor extends Interceptor {
       );
     } else if (ApiErrorMapper.isGuestForbidden(err)) {
       SessionManager.instance.handleGuestForbidden(message: friendly);
+    } else if (ApiErrorMapper.isInsufficientCoins(err)) {
+      SessionManager.instance.handleInsufficientCoins(
+        InsufficientCoinsInfo.fromResponse(
+          body: err.response?.data,
+          fallbackMessage: friendly,
+        ),
+      );
     }
 
     handler.next(mapped);
@@ -66,12 +89,42 @@ class _AuthSessionInterceptor extends Interceptor {
 /// Interceptor that logs API request and response (or error).
 class _ApiLoggerInterceptor extends Interceptor {
   static const int _maxBodyLength = 2000;
+  static const Set<String> _sensitiveKeys = {
+    'authorization',
+    'token',
+    'access_token',
+    'refresh_token',
+    'password',
+    'password_confirmation',
+    'prompt',
+    'messages',
+    'contents',
+    'b64_json',
+    'design_data',
+  };
 
   static String _truncate(dynamic data) {
     if (data == null) return 'null';
-    final s = data is String ? data : data.toString();
+    final safeData = _redact(data);
+    final s = safeData is String ? safeData : safeData.toString();
     if (s.length <= _maxBodyLength) return s;
     return '${s.substring(0, _maxBodyLength)}... [truncated ${s.length - _maxBodyLength} chars]';
+  }
+
+  static dynamic _redact(dynamic value, {String? key}) {
+    if (key != null && _sensitiveKeys.contains(key.toLowerCase())) {
+      return '<redacted>';
+    }
+    if (value is Map) {
+      return <String, dynamic>{
+        for (final entry in value.entries)
+          entry.key.toString(): _redact(entry.value, key: entry.key.toString()),
+      };
+    }
+    if (value is Iterable) {
+      return value.map((entry) => _redact(entry)).toList(growable: false);
+    }
+    return value;
   }
 
   static Map<String, dynamic> _safeHeaders(RequestOptions options) {

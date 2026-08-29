@@ -4,6 +4,8 @@ import 'package:dio/dio.dart';
 import 'package:flutter/widgets.dart';
 import 'package:musamimuk/core/network/api_client.dart';
 
+import 'musami_clipping_mask.dart';
+
 /// Extracts raw bytes from the first [MemoryImage] found under [root].
 ///
 /// Used to detect gallery-backed (bitmap) layers and to feed the
@@ -24,6 +26,12 @@ Uint8List? musamiTryExtractMemoryImageBytes(Widget root) {
           return inner.bytes;
         }
       }
+    }
+
+    final clipped = musamiTryUnwrapClipMaskedContent(widget);
+    if (clipped != null) {
+      queue.add(clipped);
+      continue;
     }
 
     if (widget is SingleChildRenderObjectWidget) {
@@ -50,6 +58,13 @@ ImageProvider? musamiTryExtractImageProvider(Widget root) {
     if (widget is Image) {
       return widget.image;
     }
+
+    final clipped = musamiTryUnwrapClipMaskedContent(widget);
+    if (clipped != null) {
+      queue.add(clipped);
+      continue;
+    }
+
     if (widget is SingleChildRenderObjectWidget) {
       final child = widget.child;
       if (child != null) queue.add(child);

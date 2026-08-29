@@ -52,6 +52,35 @@ int musamiColorToArgb32(Color c) {
 
 Color musamiColorFromArgb32(int v) => Color(v);
 
+/// Visual on-canvas text size used by pro_image_editor's [LayerWidgetTextItem]:
+/// `initFontSize * scale * fontScale` (package ignores [TextStyle.fontSize]).
+double musamiTextLayerVisualFontSize(
+  TextLayer layer, {
+  required double initFontSize,
+}) {
+  return (initFontSize * layer.scale * layer.fontScale).clamp(8.0, 160.0);
+}
+
+/// Applies a desired visual font size by updating [TextLayer.fontScale]
+/// (and syncing [TextStyle.fontSize] for UI / export metadata).
+TextLayer musamiTextLayerWithVisualFontSize(
+  TextLayer layer, {
+  required double visualFontSize,
+  required double initFontSize,
+}) {
+  final size = visualFontSize.clamp(8.0, 160.0);
+  final denom = initFontSize * layer.scale;
+  final nextFontScale = denom > 0 ? size / denom : 1.0;
+  final nextStyle = (layer.textStyle ?? TextStyle(color: layer.color)).copyWith(
+    fontSize: size,
+  );
+  return layer.copyWith(
+    fontScale: nextFontScale,
+    textStyle: nextStyle,
+    color: nextStyle.color ?? layer.color,
+  );
+}
+
 /// Ring of non-blurred shadows to approximate a text outline (canvas text).
 List<Shadow> musamiOutlineShadows(Color color, double strokeWidth) {
   if (strokeWidth <= 0) return [];
@@ -270,9 +299,11 @@ Future<void> showMusamiTextLayerStyleSheet({
                               if (l == null) {
                                 return const SizedBox.shrink();
                               }
-                              final sz = (baseStyle(l).fontSize ?? 24.0).clamp(
-                                8.0,
-                                160.0,
+                              final initFontSize =
+                                  editor.configs.textEditor.initFontSize;
+                              final sz = musamiTextLayerVisualFontSize(
+                                l,
+                                initFontSize: initFontSize,
                               );
                               return Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -289,14 +320,11 @@ Future<void> showMusamiTextLayerStyleSheet({
                                           onChanged: (v) {
                                             final cur = layerOrNull();
                                             if (cur == null) return;
-                                            final nextSt = baseStyle(
-                                              cur,
-                                            ).copyWith(fontSize: v);
                                             apply(
-                                              cur.copyWith(
-                                                textStyle: nextSt,
-                                                color:
-                                                    nextSt.color ?? cur.color,
+                                              musamiTextLayerWithVisualFontSize(
+                                                cur,
+                                                visualFontSize: v,
+                                                initFontSize: initFontSize,
                                               ),
                                             );
                                             setS(() {});

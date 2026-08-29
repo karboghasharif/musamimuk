@@ -1,3 +1,5 @@
+import 'package:musamimuk/data/models/wallet_models.dart';
+
 /// Response from POST `user/login`.
 ///
 /// Backend responses seen:
@@ -7,11 +9,13 @@ class LoginResponse {
   final String token;
   final String? tokenType;
   final LoginUser? user;
+  final WalletBalance? wallet;
 
   LoginResponse({
     required this.token,
     this.tokenType,
     this.user,
+    this.wallet,
   });
 
   factory LoginResponse.fromJson(Map<String, dynamic> json) {
@@ -23,10 +27,14 @@ class LoginResponse {
     final user = userJson != null
         ? LoginUser.fromJson(userJson as Map<String, dynamic>)
         : null;
+    final wallet = walletBalanceFromPayload(data) ??
+        walletBalanceFromPayload(dbData) ??
+        walletBalanceFromPayload(json);
     return LoginResponse(
       token: token,
       tokenType: json['token_type'] as String?,
       user: user,
+      wallet: wallet,
     );
   }
 }

@@ -42,6 +42,11 @@ class LoginWithGoogleEvent extends Screen0LoginEvent {
   List<Object?> get props => [];
 }
 
+class LoginWithAppleEvent extends Screen0LoginEvent {
+  @override
+  List<Object?> get props => [];
+}
+
 class ContinueAsGuestEvent extends Screen0LoginEvent {
   @override
   List<Object?> get props => [];

@@ -97,6 +97,16 @@
 				<string>fb$(FACEBOOK_APP_ID)</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.musamimuk.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>musamimuk</string>
+			</array>
+		</dict>
 	</array>
 	<!-- Facebook Login -->
 	<key>FacebookAppID</key>
@@ -112,5 +122,19 @@
 		<string>fbauth2</string>
 		<string>fbshareextension</string>
 	</array>
+	<!-- Colormind API is HTTP-only; allow cleartext for that host. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>colormind.io</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+			</dict>
+		</dict>
+	</dict>
 </dict>
 </plist>

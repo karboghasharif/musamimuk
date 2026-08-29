@@ -95,72 +95,91 @@ class _SelectSizeBodyState extends State<_SelectSizeBody> {
               .toList(growable: false);
 
     return CustomScrollView(
+      physics: const BouncingScrollPhysics(
+        parent: AlwaysScrollableScrollPhysics(),
+      ),
       slivers: [
         SliverPadding(
           padding: EdgeInsets.fromLTRB(
             AppDs.space4.h,
             AppDs.space3.v,
             AppDs.space4.h,
-            AppDs.space4.v,
+            AppDs.space3.v,
           ),
           sliver: SliverList(
             delegate: SliverChildListDelegate([
               AppPageHeader(
                 title: 'lbl_select_size'.tr,
-                subtitle: 'msg_choose_from_below'.tr,
+                subtitle: 'msg_select_size_subtitle'.tr,
               ),
-              SizedBox(height: AppDs.space6.v),
-              AppCard(
-                elevated: true,
-                child: CustomSizeSelector(
-                  initialWidth: 500,
-                  initialHeight: 500,
-                  onCreate: ({required width, required height, required unit}) =>
-                      _openEditor(
-                        width: width,
-                        height: height,
-                        unit: unit,
-                        presetName: 'lbl_custom_size'.tr,
-                      ),
-                ),
+              SizedBox(height: AppDs.space4.v),
+              CustomSizeSelector(
+                initialWidth: 1080,
+                initialHeight: 1080,
+                initiallyExpanded: false,
+                onCreate: ({required width, required height, required unit}) =>
+                    _openEditor(
+                      width: width,
+                      height: height,
+                      unit: unit,
+                      presetName: 'lbl_custom_size'.tr,
+                    ),
               ),
-              SizedBox(height: AppDs.space6.v),
+              SizedBox(height: AppDs.space5.v),
               AppSearchField(
                 controller: _searchCtrl,
                 hintText: 'lbl_search_presets'.tr,
                 onChanged: (_) => setState(() {}),
               ),
-              SizedBox(height: AppDs.space6.v),
-              AppSectionHeader(title: 'msg_choose_from_below'.tr),
+              SizedBox(height: AppDs.space4.v),
+              AppSectionHeader(
+                title: 'lbl_popular_sizes'.tr,
+                subtitle: query.isEmpty
+                    ? null
+                    : '${presets.length} ${'lbl_results'.tr}',
+              ),
             ]),
           ),
         ),
-        SliverPadding(
-          padding: EdgeInsets.symmetric(horizontal: AppDs.space4.h),
-          sliver: SliverMasonryGrid.count(
-            crossAxisCount: 2,
-            mainAxisSpacing: AppDs.space3.h,
-            crossAxisSpacing: AppDs.space3.h,
-            childCount: presets.length,
-            itemBuilder: (context, i) {
-              final p = presets[i];
-              return AppFadeIn(
-                delay: Duration(milliseconds: 30 * i),
-                child: SizePresetCard(
-                  preset: p,
-                  denseOnDark: true,
-                  onTap: () => _openEditor(
-                    width: p.width,
-                    height: p.height,
-                    unit: 'px',
-                    presetName: p.name,
+        if (presets.isEmpty)
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: AppEmptyState(
+              title: 'msg_no_size_presets'.tr,
+              icon: Icons.search_off_rounded,
+            ),
+          )
+        else
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(
+              AppDs.space4.h,
+              0,
+              AppDs.space4.h,
+              AppDs.space8.v,
+            ),
+            sliver: SliverMasonryGrid.count(
+              crossAxisCount: 2,
+              mainAxisSpacing: AppDs.space3.h,
+              crossAxisSpacing: AppDs.space3.h,
+              childCount: presets.length,
+              itemBuilder: (context, i) {
+                final p = presets[i];
+                return AppFadeIn(
+                  delay: Duration(milliseconds: 24 * (i % 8)),
+                  child: SizePresetCard(
+                    preset: p,
+                    denseOnDark: true,
+                    onTap: () => _openEditor(
+                      width: p.width,
+                      height: p.height,
+                      unit: 'px',
+                      presetName: p.name,
+                    ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
-        ),
-        SliverToBoxAdapter(child: SizedBox(height: AppDs.space6.v)),
       ],
     );
   }

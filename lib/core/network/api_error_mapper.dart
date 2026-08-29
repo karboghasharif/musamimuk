@@ -95,4 +95,21 @@ class ApiErrorMapper {
     if (SessionManager.instance.isAuthEndpoint(path)) return false;
     return PrefUtils().isGuestAccount();
   }
+
+  /// HTTP 402 or body `code == insufficient_coins` — open coin store UX.
+  static bool isInsufficientCoins(DioException e) {
+    if (e.requestOptions.extra[skipSessionHandlingKey] == true) return false;
+    if (e.response?.statusCode == 402) return true;
+    final data = e.response?.data;
+    if (data is Map) {
+      final code = data['code']?.toString().toLowerCase();
+      if (code == 'insufficient_coins') return true;
+      final nested = data['dbData'] ?? data['data'];
+      if (nested is Map) {
+        final nestedCode = nested['code']?.toString().toLowerCase();
+        if (nestedCode == 'insufficient_coins') return true;
+      }
+    }
+    return false;
+  }
 }

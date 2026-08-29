@@ -1,9 +1,16 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!-- Required for API calls and Play-featured network access in release builds
          (debug manifest alone is not merged into release). -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Required for Google Play Billing (Musamimuk Coins IAP). -->
+    <uses-permission android:name="com.android.vending.BILLING" />
+    <!-- App does not use advertising ID — strip AD_ID if any dependency merges it in. -->
+    <uses-permission
+        android:name="com.google.android.gms.permission.AD_ID"
+        tools:node="remove" />
     <!-- Saving designs to gallery (gal package; API 29 and below). -->
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
@@ -12,6 +19,7 @@
         android:label="Musamimuk"
         android:name="${applicationName}"
         android:requestLegacyExternalStorage="true"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"
@@ -34,6 +42,39 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+
+            <!-- Custom scheme: musamimuk://contest/12 -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="musamimuk" />
+            </intent-filter>
+
+            <!-- HTTPS App Links (verified hosts → open app when installed).
+                 Host these paths on the website; unverified clicks open the
+                 web landing page which redirects to Play Store. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="srv1813447.hstgr.cloud" android:pathPrefix="/open" />
+                <data android:scheme="https" android:host="srv1813447.hstgr.cloud" android:pathPrefix="/app" />
+                <data android:scheme="https" android:host="srv1813447.hstgr.cloud" android:pathPrefix="/contest" />
+                <data android:scheme="https" android:host="srv1813447.hstgr.cloud" android:pathPrefix="/contests" />
+                <data android:scheme="https" android:host="srv1813447.hstgr.cloud" android:pathPrefix="/share" />
+                <data android:scheme="https" android:host="srv1813447.hstgr.cloud" android:pathPrefix="/s" />
+                <data android:scheme="https" android:host="srv1813447.hstgr.cloud" android:pathPrefix="/feed" />
+                <data android:scheme="https" android:host="musamimuk.app" android:pathPrefix="/open" />
+                <data android:scheme="https" android:host="musamimuk.app" android:pathPrefix="/app" />
+                <data android:scheme="https" android:host="musamimuk.app" android:pathPrefix="/contest" />
+                <data android:scheme="https" android:host="musamimuk.app" android:pathPrefix="/contests" />
+                <data android:scheme="https" android:host="musamimuk.app" android:pathPrefix="/share" />
+                <data android:scheme="https" android:host="musamimuk.app" android:pathPrefix="/s" />
+                <data android:scheme="https" android:host="www.musamimuk.app" android:pathPrefix="/open" />
+                <data android:scheme="https" android:host="www.musamimuk.app" android:pathPrefix="/contest" />
+                <data android:scheme="https" android:host="www.musamimuk.app" android:pathPrefix="/share" />
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
@@ -51,6 +92,12 @@
         <meta-data
             android:name="com.facebook.sdk.ApplicationName"
             android:value="@string/facebook_display_name" />
+        <meta-data
+            android:name="com.facebook.sdk.AdvertiserIDCollectionEnabled"
+            android:value="false" />
+        <meta-data
+            android:name="com.facebook.sdk.AutoLogAppEventsEnabled"
+            android:value="false" />
 
         <activity
             android:name="com.facebook.FacebookActivity"

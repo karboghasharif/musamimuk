@@ -18,8 +18,9 @@ class RectanglelistsectionItemWidget extends StatelessWidget {
   void _openPreview(BuildContext context) {
     final path = rectanglelistsectionItemModelObj.rectangle ?? '';
     if (path.isEmpty) return;
-    final designId =
-        int.tryParse((rectanglelistsectionItemModelObj.id ?? '').trim());
+    final designId = int.tryParse(
+      (rectanglelistsectionItemModelObj.id ?? '').trim(),
+    );
     final category = rectanglelistsectionItemModelObj.categoryName?.trim();
     showDesignPreviewSheet(
       context,
@@ -27,6 +28,7 @@ class RectanglelistsectionItemWidget extends StatelessWidget {
       designId: designId,
       showRemoveBackground: false,
       enableRedesign: true,
+      cloneBeforeRedesign: true,
       title: rectanglelistsectionItemModelObj.name?.trim().isNotEmpty == true
           ? rectanglelistsectionItemModelObj.name
           : 'lbl_online_designs'.tr,

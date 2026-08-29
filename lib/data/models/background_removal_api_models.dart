@@ -1,3 +1,5 @@
+import 'package:musamimuk/data/models/wallet_models.dart';
+
 /// Server response payload for `POST /remove-background`.
 class BackgroundRemovalApiData {
   const BackgroundRemovalApiData({
@@ -23,6 +25,7 @@ enum BackgroundRemovalErrorKind {
   timeout,
   apiFailure,
   network,
+  insufficientCoins,
 }
 
 sealed class BackgroundRemovalApiResult {}
@@ -31,18 +34,22 @@ class BackgroundRemovalApiSuccess extends BackgroundRemovalApiResult {
   BackgroundRemovalApiSuccess({
     required this.data,
     this.message,
+    this.wallet,
   });
 
   final BackgroundRemovalApiData data;
   final String? message;
+  final WalletBalance? wallet;
 }
 
 class BackgroundRemovalApiFailure extends BackgroundRemovalApiResult {
   BackgroundRemovalApiFailure({
     required this.kind,
     required this.message,
+    this.insufficient,
   });
 
   final BackgroundRemovalErrorKind kind;
   final String message;
+  final InsufficientCoinsInfo? insufficient;
 }

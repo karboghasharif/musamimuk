@@ -58,7 +58,7 @@ class ContestItem {
     final directUrl = fileUrlRaw.isNotEmpty ? fileUrlRaw : imageUrlRaw;
     final resolvedUrl =
         directUrl.isNotEmpty ? directUrl : apiResolveDesignFileUrl(json);
-    final prizeRaw = json['prize'] ?? json['prize_breakdown'];
+    final prize = _parsePrize(json);
     final countdownRaw = json['countdown'];
     final countdown = countdownRaw != null
         ? ContestCountdown.fromJson(countdownRaw)
@@ -76,6 +76,7 @@ class ContestItem {
     } else if (cat is Map && cat['id'] != null) {
       parsedCategoryId = apiParseInt(cat['id']);
     }
+    final prizeText = json['prize_text']?.toString();
     return ContestItem(
       id: apiParseInt(json['id']),
       name: apiParseString(json['name']),
@@ -108,10 +109,13 @@ class ContestItem {
         'joined_count',
         'entries_count',
       ]),
-      prize: prizeRaw != null ? ContestPrize.fromJson(prizeRaw) : null,
+      prize: prize,
       countdown: countdown,
-      prizeText: json['prize_text']?.toString() ??
-          json['prize_amount']?.toString(),
+      prizeText: (prizeText != null && prizeText.trim().isNotEmpty)
+          ? prizeText
+          : (prize?.displayText().isNotEmpty == true
+              ? prize!.displayText()
+              : json['prize_amount']?.toString()),
       description: json['description']?.toString(),
       tags: json['tags']?.toString(),
       user: user,
@@ -134,6 +138,15 @@ class ContestItem {
         if (acceptedCount != null) 'accepted_count': acceptedCount,
         if (rejectedCount != null) 'rejected_count': rejectedCount,
         if (participantsCount != null) 'participants_count': participantsCount,
+        if (prize?.amount != null) 'prize_amount': prize!.amount,
+        if (prize?.currency != null) 'prize_currency': prize!.currency,
+        if (prize != null)
+          'prize': {
+            if (prize!.amount != null) 'amount': prize!.amount,
+            if (prize!.currency != null) 'currency': prize!.currency,
+            if (prize!.description != null) 'description': prize!.description,
+            if (prize!.label != null) 'label': prize!.label,
+          },
         if (prizeText != null) 'prize_text': prizeText,
         if (description != null) 'description': description,
         if (tags != null) 'tags': tags,
@@ -176,6 +189,30 @@ class ContestItem {
     final phase = countdown?.phase?.trim();
     if (phase != null && phase.isNotEmpty) return phase;
     return null;
+  }
+
+  /// Prefer nested `prize` map; else flat `prize_amount` + `prize_currency`
+  /// from list/detail/public API payloads. Ignore array `prize_breakdown`.
+  static ContestPrize? _parsePrize(Map<String, dynamic> json) {
+    final nested = json['prize'];
+    if (nested is Map) {
+      final prize = ContestPrize.fromJson(nested);
+      if (prize.displayText().isNotEmpty) return prize;
+    }
+    final breakdown = json['prize_breakdown'];
+    if (breakdown is Map) {
+      final prize = ContestPrize.fromJson(breakdown);
+      if (prize.displayText().isNotEmpty) return prize;
+    }
+    final hasAmount = json['prize_amount'] != null &&
+        json['prize_amount'].toString().trim().isNotEmpty;
+    final hasCurrency = json['prize_currency'] != null &&
+        json['prize_currency'].toString().trim().isNotEmpty;
+    if (!hasAmount && !hasCurrency) return null;
+    return ContestPrize.fromJson(<String, dynamic>{
+      'prize_amount': json['prize_amount'],
+      'prize_currency': json['prize_currency'],
+    });
   }
 }
 

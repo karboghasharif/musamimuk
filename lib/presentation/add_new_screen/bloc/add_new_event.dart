@@ -76,6 +76,17 @@ class SetBgColorEvent extends AddNewEvent {
   List<Object?> get props => [color];
 }
 
+/// Replaces the page background with already cover-cropped raster bytes.
+///
+/// The bytes must already match the canvas dimensions — cropping happens in
+/// [musamiRenderCoverBackground] so the editor never scales them non-uniformly.
+class SetBackgroundImageEvent extends AddNewEvent {
+  SetBackgroundImageEvent({required this.imageBytes});
+  final Uint8List imageBytes;
+  @override
+  List<Object?> get props => [imageBytes];
+}
+
 class ApplyCustomSizeEvent extends AddNewEvent {
   ApplyCustomSizeEvent({
     required this.width,
@@ -145,6 +156,11 @@ class SetImageContextSecondaryPanelEvent extends AddNewEvent {
 }
 
 class ClearPendingDesignHistoryEvent extends AddNewEvent {
+  @override
+  List<Object?> get props => [];
+}
+
+class ToggleCanvasLockEvent extends AddNewEvent {
   @override
   List<Object?> get props => [];
 }

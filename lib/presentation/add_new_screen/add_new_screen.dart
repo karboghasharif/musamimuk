@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -13,6 +15,7 @@ import 'package:toastification/toastification.dart';
 
 import '../../core/app_export.dart';
 import '../../core/utils/app_toast.dart';
+import '../../data/models/wallet_models.dart';
 import '../../data/repositories/design_repository.dart';
 import '../../data/repositories/media_repository.dart';
 import '../../theme/custom_button_style.dart';
@@ -21,6 +24,9 @@ import '../../widgets/advertisement_banner.dart';
 import '../../widgets/custom_elevated_button.dart';
 import '../../widgets/custom_icon_button.dart';
 import '../../widgets/custom_text_form_field.dart';
+import '../wallet/bloc/wallet_bloc.dart';
+import '../wallet/wallet_cost_guard.dart';
+import '../wallet/widgets/coin_balance_chip.dart';
 import 'bloc/add_new_bloc.dart';
 import 'models/add_new_model.dart';
 import 'models/gridgallery_pic_item_model.dart';
@@ -37,21 +43,75 @@ import 'widgets/musami_text_layer_style_sheet.dart';
 import 'widgets/editor_align_arrange_sheet.dart';
 import 'widgets/screen_color_picker_overlay.dart';
 import 'widgets/editor_contextual_toolbars.dart';
-import 'widgets/editor_ai_assistant.dart';
-import 'widgets/editor_ai_compose.dart';
+import 'widgets/editor_ai_command_bar.dart';
+import 'widgets/draggable_editor_ai_fab.dart';
+import 'utils/musami_clipping_mask.dart';
+import 'utils/musami_layer_capture.dart';
+import 'utils/musami_layer_clipboard.dart';
+import 'utils/musami_page_background.dart';
+import 'widgets/musami_layer_context_menu.dart';
+import 'widgets/musami_layer_floating_quick_bar.dart';
+import 'widgets/musami_layer_meta_sheets.dart';
+import 'widgets/musami_page_palette_sheet.dart';
+import '../../data/services/local_design_store.dart';
+import '../../data/services/custom_font_library.dart';
+import '../../data/services/user_font_library.dart';
+import '../../data/models/custom_font_models.dart';
+import 'widgets/musami_text_editor_arabic_fonts.dart';
+import '../../core/config/editor_ai_config.dart';
+import 'package:flutter_expandable_fab/flutter_expandable_fab.dart';
 import '../../background_removal/background_removal_controller.dart';
 import '../../background_removal/background_removal_loading_dialog.dart';
 import '../../background_removal/background_removal_state.dart';
 import '../../data/models/background_removal_api_models.dart';
+import '../../data/services/editor_ai/editor_ai_asset_registry.dart';
 import '../../core/utils/design_state_history.dart';
 import 'utils/musami_layer_raster_utils.dart';
 import 'package:pro_image_editor/features/crop_rotate_editor/utils/crop_aspect_ratios.dart';
 
+/// Layer lock flag stored in [Layer.meta] (app-side; not provided by pub.dev
+/// pro_image_editor).
+const String kMusamiLayerLockedMetaKey = 'musamiLayerLocked';
+
+/// Layer hide flag stored in [Layer.meta] (app-side; not provided by pub.dev
+/// pro_image_editor).
+const String kMusamiLayerHiddenMetaKey = 'musamiLayerHidden';
+
 /// Raster/sticker tint on [WidgetLayer.meta], applied before tune/colour-matrix.
 const String kMusamiImageTintArgbMetaKey = 'musamiImageTintArgb';
 
+/// Ratio (height / width) of the layer FRAME — the selection box the user
+/// drags. Free to become any ratio; resizing writes this key.
+const String kMusamiFrameAspectMetaKey = 'musamiAspect';
+
+/// Ratio (height / width) of the IMAGE inside the frame, taken from the source
+/// pixels when the image is inserted, replaced or cropped.
+///
+/// Resizing the frame must never write this key: the content keeps its own
+/// proportions and is cover-cropped to fill whatever frame the user drags.
+const String kMusamiImageAspectMetaKey = 'musamiImageAspect';
+
+/// Which part of the image stays visible when the frame crops it
+/// (-1 = start, 0 = centre, 1 = end, on each axis).
+const String kMusamiCropAlignXMetaKey = 'musamiCropAlignX';
+const String kMusamiCropAlignYMetaKey = 'musamiCropAlignY';
+
+/// Marks the frame box built by [musamiFrameWidgetLayerCore] so a later resize
+/// re-frames the original content instead of nesting another shell.
+const ValueKey<String> kMusamiLayerFrameBoxKey = ValueKey<String>(
+  'musami.layerFrameBox',
+);
+
 /// Rounded corners for gallery chrome and user border/shadow (painted above pixels).
 const double kMusamiImageLayerRoundedCorner = 16.0;
+
+/// Editor app bar: accent strip + action row. Must match [preferredSize] exactly
+/// (do not use `.v` here — it was overflowing the reserved height by ~0.2px).
+const double kMusamiEditorAppBarAccentHeight = 3;
+const double kMusamiEditorAppBarRowHeight = 56;
+
+double musamiEditorAppBarHeight(double topInset) =>
+    topInset + kMusamiEditorAppBarAccentHeight + kMusamiEditorAppBarRowHeight;
 
 Future<Size> _musamiDecodeImageSize(Uint8List bytes) async {
   final codec = await ui.instantiateImageCodec(bytes);
@@ -73,9 +133,23 @@ const ValueKey<String> kMusamiGalleryPickedChromeKey = ValueKey<String>(
   'musami.galleryPickedChrome',
 );
 
-/// Multiply tint applies unless alpha is zero or RGB is opaque white (no-op).
-bool musamiLayerImageTintAppliesFilterArgb(int tintArgb) {
+/// Silhouette assets (shapes / icons) need [BlendMode.srcIn] recoloring;
+/// photos and colorful stickers keep multiply ([BlendMode.modulate]).
+bool musamiLayerUsesSilhouetteTint(Map<String, dynamic> meta) {
+  final kind = meta['musamiLayerKind']?.toString();
+  return kind == 'shape' || kind == 'ai-shape' || kind == 'ai-icon';
+}
+
+/// Whether a tint ARGB should drive a [ColorFiltered] on the layer.
+///
+/// For modulate/photo tints, opaque white is treated as a no-op (identity).
+/// For silhouette [BlendMode.srcIn] tints, white is a valid recolor.
+bool musamiLayerImageTintAppliesFilterArgb(
+  int tintArgb, {
+  bool allowWhite = false,
+}) {
   if (((tintArgb >> 24) & 0xFF) == 0) return false;
+  if (allowWhite) return true;
   return tintArgb != 0xFFFFFFFF;
 }
 
@@ -131,12 +205,37 @@ List<double> musamiLayerTuneColorMatrix(
 }
 
 /// Opacity slider must always wrap the base child; stacking [Opacity] multiplies alphas.
+///
+/// The hit-area [Padding] added for tiny layers can sit either side of the
+/// [Opacity], so both are peeled until neither is left on the outside.
 Widget _unwrapOuterOpacityWidgets(Widget widget) {
+  Widget w = widget;
+  for (;;) {
+    final before = w;
+    w = _peelOuterOpacityAndPadding(w);
+    if (identical(w, before)) return w;
+  }
+}
+
+Widget _peelOuterOpacityAndPadding(Widget widget) {
   Widget w = widget;
   while (w is Opacity) {
     final next = (w as Opacity).child;
     if (next == null) break;
     w = next;
+  }
+  // Hit-area padding added for small layers — peel so compose can re-wrap.
+  while (w is Padding) {
+    final pad = w as Padding;
+    final child = pad.child;
+    if (child == null) break;
+    // Only peel symmetric pads we add for min hit area (not decorative).
+    final p = pad.padding.resolve(TextDirection.ltr);
+    if (p.left == p.right && p.top == p.bottom && (p.left > 0 || p.top > 0)) {
+      w = child;
+      continue;
+    }
+    break;
   }
   return w;
 }
@@ -194,6 +293,12 @@ Widget _unwrapMusamiWidgetLayerBareCore(Widget widget) {
       final ch = w.children;
       if (ch.isEmpty) break;
       w = ch.first;
+      continue;
+    }
+
+    final clippedCore = musamiTryUnwrapClipMaskedContent(w);
+    if (clippedCore != null) {
+      w = clippedCore;
       continue;
     }
 
@@ -266,11 +371,17 @@ Widget _musamiApplyImageLayerFilters(
 ) {
   Widget w = coreUnwrapped;
   final tintArgb = meta[kMusamiImageTintArgbMetaKey] as int?;
-  if (tintArgb != null && musamiLayerImageTintAppliesFilterArgb(tintArgb)) {
+  final silhouetteTint = musamiLayerUsesSilhouetteTint(meta);
+  if (tintArgb != null &&
+      musamiLayerImageTintAppliesFilterArgb(
+        tintArgb,
+        allowWhite: silhouetteTint,
+      )) {
     w = ColorFiltered(
       colorFilter: ColorFilter.mode(
         musamiColorFromArgb32(tintArgb),
-        BlendMode.modulate,
+        // Black/dark shape PNGs ignore modulate; srcIn recolors silhouettes.
+        silhouetteTint ? BlendMode.srcIn : BlendMode.modulate,
       ),
       child: w,
     );
@@ -279,10 +390,7 @@ Widget _musamiApplyImageLayerFilters(
   if (!musamiColorMatrixIsIdentity(matrix)) {
     w = RepaintBoundary(
       key: kMusamiTuneFilterRepaintKey,
-      child: ColorFiltered(
-        colorFilter: ColorFilter.matrix(matrix),
-        child: w,
-      ),
+      child: ColorFiltered(colorFilter: ColorFilter.matrix(matrix), child: w),
     );
   }
   return w;
@@ -316,14 +424,18 @@ Widget musamiComposeImageLayerVisualCore(
   final hasShadow = shadowBlur > 0;
   final hasPaintedBorder = border != null;
 
-  Widget content = _musamiApplyImageLayerFilters(coreUnwrapped, meta, items);
+  Widget filtered = _musamiApplyImageLayerFilters(coreUnwrapped, meta, items);
+
+  // Apply shape clipping mask (alpha of silhouette) when meta is set.
+  filtered = musamiApplyClippingMaskFromMeta(filtered, meta);
+
+  Widget content = filtered;
 
   if (hasShadow) {
-    final filtered = _musamiApplyImageLayerFilters(coreUnwrapped, meta, items);
     content = _MusamiImageDropShadow(
       key: kMusamiComposeShadowDecoratorKey,
       foreground: filtered,
-      shadowSource: _musamiApplyImageLayerFilters(coreUnwrapped, meta, items),
+      shadowSource: filtered,
       blur: shadowBlur,
       dx: shadowDx,
       dy: shadowDy,
@@ -359,22 +471,54 @@ WidgetLayer musamiRebuildWidgetLayerVisuals(
   final core = _unwrapMusamiWidgetLayerBareCore(current.widget);
   final opacity =
       (meta['musamiOpacity'] as num?)?.toDouble().clamp(0.0, 1.0) ?? 1.0;
+  final hidden = meta[kMusamiLayerHiddenMetaKey] == true;
   final styled = musamiComposeImageLayerVisualCore(
     core,
     meta,
     tuneAdjustmentItems: tuneAdjustmentItems,
   );
+
+  // Expand layout for tiny layers so hit-testing stays ~44×44 logical px
+  // without changing the painted content size more than a transparent pad.
+  final aspect = (meta['musamiAspect'] as num?)?.toDouble() ?? 1.0;
+  final baseW = (current.width ?? 100).clamp(1.0, 100000.0);
+  final baseH = (baseW * aspect).clamp(1.0, 100000.0);
+  final visualW = baseW * current.scale;
+  final visualH = baseH * current.scale;
+  Widget painted = Opacity(
+    opacity: hidden ? 0.0 : opacity,
+    child: styled,
+  );
+  if (!hidden && (visualW < 44 || visualH < 44)) {
+    final padX = visualW < 44 ? ((44 - visualW) / 2) / current.scale : 0.0;
+    final padY = visualH < 44 ? ((44 - visualH) / 2) / current.scale : 0.0;
+    painted = Padding(
+      padding: EdgeInsets.symmetric(horizontal: padX, vertical: padY),
+      child: painted,
+    );
+  }
+
+  final interaction = hidden
+      ? current.interaction.copyWith(
+          enableMove: false,
+          enableScale: false,
+          enableRotate: false,
+          enableSelection: false,
+          enableEdit: false,
+        )
+      : current.interaction;
+
   return WidgetLayer(
     id: current.id,
     key: current.key,
-    widget: Opacity(opacity: opacity, child: styled),
+    widget: painted,
     width: current.width,
     offset: current.offset,
     rotation: current.rotation,
     scale: current.scale,
     flipX: current.flipX,
     flipY: current.flipY,
-    interaction: current.interaction,
+    interaction: interaction,
     exportConfigs: current.exportConfigs,
     meta: meta,
     boxConstraints: current.boxConstraints,
@@ -410,50 +554,114 @@ void musamiReplaceWidgetLayerOnEditor(
   editor.setState(() {});
 }
 
-Image? _musamiTryExtractBareImage(Widget bare) {
-  if (bare is Image) return bare;
-  if (bare is SizedBox && bare.child is Image) {
-    return bare.child as Image;
-  }
-  return null;
+/// Peels the frame shell built by [musamiFrameWidgetLayerCore], returning the
+/// intrinsic content widget (which carries the image's own proportions).
+Widget musamiUnwrapLayerFrameBox(Widget bare) {
+  if (bare is! SizedBox || bare.key != kMusamiLayerFrameBoxKey) return bare;
+  final clip = bare.child;
+  if (clip is! ClipRect) return bare;
+  final fitted = clip.child;
+  if (fitted is! FittedBox) return bare;
+  return fitted.child ?? bare;
 }
 
-/// Re-wraps the bare widget core with explicit width/height for non-uniform stretch.
+/// Wraps [content] in a frame box of `width` × `width * aspect`.
+///
+/// The frame is the box the user drags; [content] keeps its own intrinsic size
+/// and proportions. `BoxFit.cover` + `ClipRect` scale the content up until it
+/// covers the frame and crop whatever falls outside, so a frame of any ratio
+/// never stretches a single pixel of the source image.
+Widget musamiFrameWidgetLayerCore(
+  Widget content, {
+  required double width,
+  required double aspect,
+  Alignment cropAlignment = Alignment.center,
+}) {
+  final frameWidth = musamiSanitizedLayerWidth(width);
+  final frameHeight = musamiSanitizedLayerWidth(
+    frameWidth * musamiSanitizedLayerAspect(aspect),
+  );
+  return SizedBox(
+    key: kMusamiLayerFrameBoxKey,
+    width: frameWidth,
+    height: frameHeight,
+    child: ClipRect(
+      child: FittedBox(
+        fit: BoxFit.cover,
+        alignment: cropAlignment,
+        clipBehavior: Clip.hardEdge,
+        child: content,
+      ),
+    ),
+  );
+}
+
+/// Re-frames a wrapped layer core to a new FRAME size.
+///
+/// [width] / [aspect] describe the frame only. The image content inside is
+/// untouched, so repeated resizes never accumulate distortion.
 Widget musamiResizeWidgetLayerCore(
   Widget wrappedWidget, {
   required double width,
   required double aspect,
+  Alignment cropAlignment = Alignment.center,
 }) {
   final bare = _unwrapMusamiWidgetLayerBareCore(wrappedWidget);
-  final height = width * aspect;
-  final image = _musamiTryExtractBareImage(bare);
-  if (image != null) {
-    return SizedBox(
-      width: width,
-      height: height,
-      child: Image(
-        image: image.image,
-        fit: BoxFit.fill,
-        gaplessPlayback: image.gaplessPlayback,
-        errorBuilder:
-            image.errorBuilder ??
-            (_, _, _) => const Icon(Icons.broken_image, size: 48),
-      ),
-    );
-  }
-  return SizedBox(
+  return musamiFrameWidgetLayerCore(
+    musamiUnwrapLayerFrameBox(bare),
     width: width,
-    height: height,
-    child: FittedBox(fit: BoxFit.fill, child: bare),
+    aspect: aspect,
+    cropAlignment: cropAlignment,
   );
 }
 
-double musamiWidgetLayerAspect(WidgetLayer layer) {
-  return (layer.meta?['musamiAspect'] as num?)?.toDouble() ?? 1.0;
+/// Guards layer geometry against zero, negative, NaN and infinite values.
+double musamiSanitizedLayerWidth(double width) {
+  if (!width.isFinite || width <= 0) return 1.0;
+  return width.clamp(1.0, 100000.0);
 }
 
-  /// Applies width / aspect / scale / offset to a widget layer in place (live drag).
-  void musamiMutateWidgetLayerGeometry(
+/// Guards a ratio (height / width) against invalid values.
+double musamiSanitizedLayerAspect(double aspect) {
+  if (!aspect.isFinite || aspect <= 0) return 1.0;
+  return aspect.clamp(0.001, 1000.0);
+}
+
+/// Ratio (height / width) of the layer FRAME.
+double musamiWidgetLayerAspect(WidgetLayer layer) {
+  return (layer.meta?[kMusamiFrameAspectMetaKey] as num?)?.toDouble() ?? 1.0;
+}
+
+/// Ratio (height / width) of the IMAGE inside the frame.
+///
+/// Falls back to the frame ratio for layers saved before frames existed, where
+/// the two were still the same value.
+double musamiWidgetLayerImageAspect(WidgetLayer layer) {
+  final stored = (layer.meta?[kMusamiImageAspectMetaKey] as num?)?.toDouble();
+  if (stored != null && stored.isFinite && stored > 0) return stored;
+  return musamiSanitizedLayerAspect(musamiWidgetLayerAspect(layer));
+}
+
+/// Crop alignment of the image inside its frame.
+Alignment musamiLayerCropAlignment(Map<String, dynamic>? meta) {
+  double axis(String key) {
+    final value = (meta?[key] as num?)?.toDouble();
+    if (value == null || !value.isFinite) return 0;
+    return value.clamp(-1.0, 1.0);
+  }
+
+  return Alignment(
+    axis(kMusamiCropAlignXMetaKey),
+    axis(kMusamiCropAlignYMetaKey),
+  );
+}
+
+/// Applies FRAME width / aspect plus scale / offset to a widget layer in place.
+///
+/// Only frame geometry changes here — [kMusamiImageAspectMetaKey] is carried
+/// through untouched so the image keeps its own proportions and is re-cropped
+/// to the new frame instead of being stretched into it.
+void musamiMutateWidgetLayerGeometry(
   ProImageEditorState editor,
   WidgetLayer layer, {
   required double width,
@@ -461,20 +669,34 @@ double musamiWidgetLayerAspect(WidgetLayer layer) {
   required double scale,
   required Offset offset,
 }) {
+  final safeWidth = musamiSanitizedLayerWidth(width);
+  final safeFrameAspect = musamiSanitizedLayerAspect(aspect);
+  final safeScale = (scale.isFinite && scale > 0) ? scale : layer.scale;
+  final safeOffset = (offset.dx.isFinite && offset.dy.isFinite)
+      ? offset
+      : layer.offset;
+
+  // Layers created before frames existed only stored the frame ratio, which
+  // back then still matched the image. Snapshot it once as the image ratio.
+  final imageAspect = musamiWidgetLayerImageAspect(layer);
+
   final meta = layer.meta == null
-      ? <String, dynamic>{'musamiAspect': aspect}
-      : (Map<String, dynamic>.from(layer.meta!)..['musamiAspect'] = aspect);
+      ? <String, dynamic>{}
+      : Map<String, dynamic>.from(layer.meta!);
+  meta[kMusamiFrameAspectMetaKey] = safeFrameAspect;
+  meta[kMusamiImageAspectMetaKey] = imageAspect;
 
   final core = musamiResizeWidgetLayerCore(
     layer.widget,
-    width: width,
-    aspect: aspect,
+    width: safeWidth,
+    aspect: safeFrameAspect,
+    cropAlignment: musamiLayerCropAlignment(meta),
   );
   final preliminary = layer.copyWith(
     widget: core,
-    width: width,
-    scale: scale,
-    offset: offset,
+    width: safeWidth,
+    scale: safeScale,
+    offset: safeOffset,
     meta: meta,
   );
   final rebuilt = musamiRebuildWidgetLayerVisuals(
@@ -823,12 +1045,24 @@ class AddNewScreen extends StatefulWidget {
   final double height;
   final String unit;
   final String presetName;
+  final int? designId;
+  final String? designVisibility;
+  final List<String> generatedAssetIds;
+  final EditorAiGenerationMode? initialAiMode;
+  final String? initialAiPrompt;
+  final bool aiAutoSend;
   const AddNewScreen({
     super.key,
     required this.height,
     required this.width,
     this.unit = 'px',
     this.presetName = 'Custom Size',
+    this.designId,
+    this.designVisibility,
+    this.generatedAssetIds = const [],
+    this.initialAiMode,
+    this.initialAiPrompt,
+    this.aiAutoSend = false,
   });
 
   static Widget builder(BuildContext context) {
@@ -842,22 +1076,48 @@ class AddNewScreen extends StatefulWidget {
     final backgroundImageBytes =
         arguments?['backgroundImageBytes'] as Uint8List?;
     final designHistoryJson = arguments?['designHistoryJson'] as String?;
+    final designId = arguments?['designId'] as int?;
+    final designVisibility = arguments?['designVisibility'] as String?;
+    final generatedAssetIds =
+        (arguments?['generatedAssetIds'] as List?)
+            ?.map((id) => id.toString())
+            .toList(growable: false) ??
+        const <String>[];
+    final aiModeName = arguments?['aiMode']?.toString();
+    EditorAiGenerationMode? initialAiMode;
+    if (aiModeName != null) {
+      for (final mode in EditorAiGenerationMode.values) {
+        if (mode.name == aiModeName) {
+          initialAiMode = mode;
+          break;
+        }
+      }
+    }
+    final initialAiPrompt = arguments?['aiPrompt']?.toString();
+    final aiAutoSend = arguments?['aiAutoSend'] == true;
 
     return BlocProvider<AddNewBloc>(
       create: (context) =>
-          AddNewBloc(AddNewState(screen3AddNewModelObj: AddNewModel()))
-            ..add(Screen3AddNewInitialEvent(
+          AddNewBloc(AddNewState(screen3AddNewModelObj: AddNewModel()))..add(
+            Screen3AddNewInitialEvent(
               height: height,
               width: width,
               unit: unit,
               backgroundImageBytes: backgroundImageBytes,
               designHistoryJson: designHistoryJson,
-            )),
+            ),
+          ),
       child: AddNewScreen(
         height: height,
         width: width,
         unit: unit,
         presetName: presetName,
+        designId: designId,
+        designVisibility: designVisibility,
+        generatedAssetIds: generatedAssetIds,
+        initialAiMode: initialAiMode,
+        initialAiPrompt: initialAiPrompt,
+        aiAutoSend: aiAutoSend,
       ),
     );
   }
@@ -866,15 +1126,164 @@ class AddNewScreen extends StatefulWidget {
   State<AddNewScreen> createState() => _AddNewScreenState();
 }
 
-class _AddNewScreenState extends State<AddNewScreen> {
+class _AddNewScreenState extends State<AddNewScreen>
+    with WidgetsBindingObserver {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final GlobalKey _editorRepaintKey = GlobalKey();
   final BackgroundRemovalController _backgroundRemovalController =
       BackgroundRemovalController();
-  final EditorAiAssistant _editorAiAssistant = EditorAiAssistant();
-  final EditorAiCompose _editorAiCompose = EditorAiCompose();
+  final GlobalKey<ExpandableFabState> _aiFabKey =
+      GlobalKey<ExpandableFabState>();
+  bool _aiBarVisible = false;
+  bool _isSavingDesign = false;
+  EditorAiGenerationMode _aiBarMode = EditorAiGenerationMode.text;
+  String? _aiBarPrompt;
+  bool _aiBarAutoSend = false;
+  bool _didLaunchInitialAi = false;
+  String? _localDraftId;
+  Timer? _autoSaveDebounce;
+  bool _autoSaveInFlight = false;
+  /// Cached in [didChangeDependencies] so dispose / lifecycle saves never call
+  /// `context.read` on a deactivated element.
+  AddNewBloc? _addNewBloc;
+
+  void _openAiBar(
+    EditorAiGenerationMode mode, {
+    String? prompt,
+    bool autoSend = false,
+  }) {
+    setState(() {
+      _aiBarVisible = true;
+      _aiBarMode = mode;
+      _aiBarPrompt = prompt;
+      _aiBarAutoSend = autoSend;
+    });
+  }
+
+  void _closeAiBar() {
+    if (!_aiBarVisible) return;
+    setState(() {
+      _aiBarVisible = false;
+      _aiBarPrompt = null;
+      _aiBarAutoSend = false;
+    });
+  }
+
+  void _maybeLaunchInitialAi(AddNewState state) {
+    if (_didLaunchInitialAi) return;
+    final mode = widget.initialAiMode;
+    final prompt = widget.initialAiPrompt?.trim();
+    if (mode == null || prompt == null || prompt.isEmpty) return;
+    if (state.editorKey?.currentState == null) return;
+    _didLaunchInitialAi = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _openAiBar(
+        mode,
+        prompt: prompt,
+        autoSend: widget.aiAutoSend,
+      );
+    });
+  }
+
+  void _editorZoomBy(ProImageEditorState editor, double factor) {
+    final viewer = editor.interactiveViewer.currentState;
+    if (viewer == null) return;
+    final current = viewer.scaleFactor.clamp(0.25, 4.0);
+    final next = (current * factor).clamp(0.25, 4.0);
+    final offset = viewer.offset;
+    viewer.zoomTo(offset: offset, scale: next);
+  }
+
+  /// Keeps the InteractiveViewer mounted (so zoom/pan matrix is preserved) and
+  /// only toggles whether pinch / two-finger / pan gestures may change it.
+  void _syncCanvasZoomInteraction(bool canvasLocked) {
+    final editor = _addNewBloc?.state.editorKey?.currentState;
+    editor?.interactiveViewer.currentState?.setEnableInteraction(
+      !canvasLocked,
+    );
+  }
+
+  Future<void> _autoSaveLocalDraft({bool force = false}) async {
+    if (_autoSaveInFlight && !force) return;
+    final bloc = _addNewBloc;
+    if (bloc == null) return;
+    final editor = bloc.state.editorKey?.currentState;
+    if (editor == null) return;
+    if (editor.activeLayers.isEmpty) return;
+    _autoSaveInFlight = true;
+    try {
+      final history = await musamiExportDesignStateHistory(editor);
+      if (history == null || history.trim().isEmpty) return;
+      final blocState = bloc.state;
+      final w = blocState.selectedwidth ?? widget.width;
+      final h = blocState.selectedheight ?? widget.height;
+      final name = widget.presetName.trim().isNotEmpty
+          ? widget.presetName.trim()
+          : 'Untitled draft';
+      Uint8List? thumb;
+      try {
+        final bytes = await editor.captureEditorImage();
+        thumb = await musamiEncodePngThumbnail(bytes);
+      } catch (_) {}
+      final draft = await LocalDesignStore.instance.saveDraft(
+        existingId: _localDraftId,
+        name: name,
+        historyJson: history,
+        width: w,
+        height: h,
+        thumbnailPng: thumb,
+      );
+      _localDraftId = draft.id;
+    } catch (e) {
+      debugPrint('Auto-save local draft failed: $e');
+    } finally {
+      _autoSaveInFlight = false;
+    }
+  }
+
+  void _scheduleAutoSave() {
+    _autoSaveDebounce?.cancel();
+    _autoSaveDebounce = Timer(const Duration(seconds: 8), () {
+      _autoSaveLocalDraft();
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      _autoSaveLocalDraft(force: true);
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final routeArgs =
+          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      final localId = routeArgs?['localDesignId']?.toString();
+      if (localId != null && localId.isNotEmpty) {
+        _localDraftId = localId;
+      }
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _addNewBloc = context.read<AddNewBloc>();
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _autoSaveDebounce?.cancel();
+    // Best-effort save without context (widget tree is already tearing down).
+    unawaited(_autoSaveLocalDraft(force: true));
     _backgroundRemovalController.dispose();
     super.dispose();
   }
@@ -893,10 +1302,8 @@ class _AddNewScreenState extends State<AddNewScreen> {
     return ok;
   }
 
-  /// Default scale for images added from device gallery (% of intrinsic size).
-  static const double _kGalleryLayerDefaultScale = 0.2;
-
-  Future<Size> _decodeImageSize(Uint8List bytes) => _musamiDecodeImageSize(bytes);
+  Future<Size> _decodeImageSize(Uint8List bytes) =>
+      _musamiDecodeImageSize(bytes);
 
   String _musamiImageLayerKind(WidgetLayer layer) {
     final raw = layer.meta?['musamiLayerKind'] as String?;
@@ -989,16 +1396,33 @@ class _AddNewScreenState extends State<AddNewScreen> {
       }
     }
 
-    final core = _unwrapMusamiWidgetLayerBareCore(picked.widget);
+    // Replacing swaps the image inside the existing frame: the frame keeps its
+    // size and ratio, the new image keeps its own and is cropped to fit.
+    final frameWidth =
+        existing.width ??
+        picked.width ??
+        editor.configs.stickerEditor.initWidth;
+    final frameAspect = musamiWidgetLayerAspect(existing);
+    meta[kMusamiFrameAspectMetaKey] = frameAspect;
+    meta[kMusamiImageAspectMetaKey] = musamiWidgetLayerImageAspect(picked);
+
+    final core = musamiFrameWidgetLayerCore(
+      musamiUnwrapLayerFrameBox(
+        _unwrapMusamiWidgetLayerBareCore(picked.widget),
+      ),
+      width: frameWidth,
+      aspect: frameAspect,
+      cropAlignment: musamiLayerCropAlignment(meta),
+    );
     final styled = musamiComposeImageLayerVisualCore(core, meta);
     final updated = WidgetLayer(
       id: existing.id,
       key: existing.key,
       widget: Opacity(opacity: opacity.clamp(0.0, 1.0), child: styled),
-      width: picked.width ?? existing.width,
+      width: frameWidth,
       offset: existing.offset,
       rotation: existing.rotation,
-      scale: picked.width != null ? picked.scale : existing.scale,
+      scale: existing.scale,
       flipX: existing.flipX,
       flipY: existing.flipY,
       interaction: existing.interaction,
@@ -1034,16 +1458,112 @@ class _AddNewScreenState extends State<AddNewScreen> {
   }) async {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final baseStyle = layer.textStyle ?? const TextStyle();
+    final layerId = layer.id;
+    final fontLibrary = CustomFontLibrary.instance;
+    final userFontLibrary = UserFontLibrary.instance;
+    unawaited(fontLibrary.ensureLoaded());
+    unawaited(userFontLibrary.ensureLoaded());
 
     final allFonts = GoogleFonts.asMap().keys.toList()..sort();
     String query = '';
+    String? loadingCustomKey;
+    String? loadingUserKey;
+
+    TextLayer? liveLayer() {
+      return editor.activeLayers.cast<TextLayer?>().firstWhere(
+        (l) => l?.id == layerId,
+        orElse: () => null,
+      );
+    }
+
+    TextStyle baseStyleFor(TextLayer live) {
+      return musamiTextStyleWithoutPackage(
+        live.textStyle ?? const TextStyle(),
+      );
+    }
 
     Future<void> applyFont(String fontName) async {
-      final nextStyle = GoogleFonts.getFont(fontName, textStyle: baseStyle);
-      final updated = copyTextLayer(layer, textStyle: nextStyle);
-      editor.applyTextLayerChanges(layer, updated);
+      final live = liveLayer() ?? layer;
+      final nextStyle = GoogleFonts.getFont(
+        fontName,
+        textStyle: baseStyleFor(live),
+      );
+      final updated = copyTextLayer(live, textStyle: nextStyle);
+      editor.applyTextLayerChanges(live, updated);
       editor.setState(() {});
+    }
+
+    Future<void> applyCustomFont(
+      CustomFontItem font,
+      void Function(VoidCallback fn) setSheetState,
+    ) async {
+      final key = font.uuid.isNotEmpty ? font.uuid : '${font.id}';
+      setSheetState(() => loadingCustomKey = key);
+      final style = await fontLibrary.loadStyle(font);
+      if (!context.mounted) return;
+      setSheetState(() => loadingCustomKey = null);
+      if (style == null) {
+        showAppToast(
+          fontLibrary.error ?? 'msg_custom_font_load_failed'.tr,
+          type: ToastificationType.error,
+        );
+        return;
+      }
+      final live = liveLayer() ?? layer;
+      final nextStyle = musamiTextStyleWithFont(
+        baseStyleFor(live),
+        fontFamily: style.fontFamily,
+        fontPackage: null,
+        fontWeight: style.fontWeight,
+        fontStyle: style.fontStyle,
+      );
+      final updated = copyTextLayer(live, textStyle: nextStyle);
+      editor.applyTextLayerChanges(live, updated);
+      editor.setState(() {});
+      if (context.mounted) Navigator.pop(context);
+    }
+
+    Future<void> applyUserFont(
+      UserFontItem font,
+      void Function(VoidCallback fn) setSheetState,
+    ) async {
+      setSheetState(() => loadingUserKey = font.id);
+      final style = await userFontLibrary.loadStyle(font);
+      if (!context.mounted) return;
+      setSheetState(() => loadingUserKey = null);
+      if (style == null) {
+        showAppToast(
+          userFontLibrary.error ?? 'msg_user_font_load_failed'.tr,
+          type: ToastificationType.error,
+        );
+        return;
+      }
+      final live = liveLayer() ?? layer;
+      final nextStyle = musamiTextStyleWithFont(
+        baseStyleFor(live),
+        fontFamily: style.fontFamily,
+        fontPackage: null,
+      );
+      final updated = copyTextLayer(live, textStyle: nextStyle);
+      editor.applyTextLayerChanges(live, updated);
+      editor.setState(() {});
+      if (context.mounted) Navigator.pop(context);
+    }
+
+    Future<void> importUserFont(
+      void Function(VoidCallback fn) setSheetState,
+    ) async {
+      final result = await userFontLibrary.importFromDevice();
+      if (!context.mounted) return;
+      if (result is UserFontImportSuccess) {
+        showAppToast(
+          'msg_user_font_imported'.tr.replaceAll('{name}', result.font.name),
+          type: ToastificationType.success,
+        );
+        await applyUserFont(result.font, setSheetState);
+      } else if (result is UserFontImportFailure) {
+        showAppToast(result.message, type: ToastificationType.error);
+      }
     }
 
     await showAppModalBottomSheet<void>(
@@ -1071,131 +1591,248 @@ class _AddNewScreenState extends State<AddNewScreen> {
                       AppDs.radiusLg.adaptSize,
                     ),
                     clipBehavior: Clip.antiAlias,
-                    child: StatefulBuilder(
-                      builder: (ctx, setSheetState) {
-                        final filtered = query.trim().isEmpty
-                            ? allFonts
-                            : allFonts
-                                  .where(
-                                    (f) => f.toLowerCase().contains(
-                                      query.trim().toLowerCase(),
-                                    ),
-                                  )
-                                  .toList();
+                    child: AnimatedBuilder(
+                      animation: Listenable.merge([
+                        fontLibrary,
+                        userFontLibrary,
+                      ]),
+                      builder: (ctx, _) {
+                        return StatefulBuilder(
+                          builder: (ctx, setSheetState) {
+                            final filtered = query.trim().isEmpty
+                                ? allFonts
+                                : allFonts
+                                      .where(
+                                        (f) => f.toLowerCase().contains(
+                                          query.trim().toLowerCase(),
+                                        ),
+                                      )
+                                      .toList();
+                            final hasCustomFonts = fontLibrary.fonts
+                                .where((f) => f.isFlutterLoadable)
+                                .isNotEmpty;
+                            final preferArabicFirst = RegExp(
+                              r'[\u0600-\u06FF]',
+                            ).hasMatch(layer.text);
 
-                        return Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Padding(
-                              padding: EdgeInsets.fromLTRB(
-                                AppDs.space4.h,
-                                AppDs.space3.v,
-                                AppDs.space2.h,
-                                AppDs.space2.v,
-                              ),
-                              child: Row(
-                                children: [
-                                  Expanded(
+                            return Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Padding(
+                                  padding: EdgeInsets.fromLTRB(
+                                    AppDs.space4.h,
+                                    AppDs.space3.v,
+                                    AppDs.space2.h,
+                                    AppDs.space2.v,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          'lbl_text_editor_fonts_section'.tr,
+                                          style: AppDs.sheetTitle(
+                                            theme,
+                                            color: Colors.white,
+                                          ).copyWith(fontSize: 18.fSize),
+                                        ),
+                                      ),
+                                      IconButton(
+                                        onPressed: () => Navigator.pop(ctx),
+                                        icon: Icon(
+                                          Icons.close_rounded,
+                                          color: Colors.white.withValues(
+                                            alpha: 0.85,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Padding(
+                                  padding: EdgeInsets.fromLTRB(
+                                    AppDs.space4.h,
+                                    0,
+                                    AppDs.space4.h,
+                                    AppDs.space3.v,
+                                  ),
+                                  child: TextField(
+                                    onChanged: (v) =>
+                                        setSheetState(() => query = v),
+                                    style: theme.textTheme.bodyLarge?.copyWith(
+                                      color: Colors.white,
+                                    ),
+                                    decoration: InputDecoration(
+                                      hintText: 'lbl_search_fonts'.tr,
+                                      hintStyle: TextStyle(
+                                        color: Colors.white.withValues(
+                                          alpha: 0.45,
+                                        ),
+                                      ),
+                                      prefixIcon: Icon(
+                                        Icons.search,
+                                        color: Colors.white.withValues(
+                                          alpha: 0.55,
+                                        ),
+                                      ),
+                                      filled: true,
+                                      fillColor: Colors.white.withValues(
+                                        alpha: 0.08,
+                                      ),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(
+                                          AppDs.radiusMd.adaptSize,
+                                        ),
+                                        borderSide: BorderSide(
+                                          color: Colors.white.withValues(
+                                            alpha: 0.2,
+                                          ),
+                                        ),
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(
+                                          AppDs.radiusMd.adaptSize,
+                                        ),
+                                        borderSide: BorderSide(
+                                          color: Colors.white.withValues(
+                                            alpha: 0.2,
+                                          ),
+                                        ),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(
+                                          AppDs.radiusMd.adaptSize,
+                                        ),
+                                        borderSide: BorderSide(
+                                          color: cs.primary,
+                                          width: 2,
+                                        ),
+                                      ),
+                                      contentPadding: EdgeInsets.symmetric(
+                                        horizontal: AppDs.space3.h,
+                                        vertical: AppDs.space3.v,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Padding(
+                                  padding: EdgeInsets.fromLTRB(
+                                    AppDs.space4.h,
+                                    0,
+                                    AppDs.space4.h,
+                                    AppDs.space2.v,
+                                  ),
+                                  child: MusamiUserFontSections(
+                                    theme: theme,
+                                    library: userFontLibrary,
+                                    query: query,
+                                    loadingFontKey: loadingUserKey,
+                                    chipBackground: Colors.white.withValues(
+                                      alpha: 0.08,
+                                    ),
+                                    labelColor: Colors.white.withValues(
+                                      alpha: 0.7,
+                                    ),
+                                    sectionTitleColor: cs.primary,
+                                    previewColor: Colors.white,
+                                    onSelect: (font) =>
+                                        applyUserFont(font, setSheetState),
+                                    onImport: () =>
+                                        importUserFont(setSheetState),
+                                  ),
+                                ),
+                                Padding(
+                                  padding: EdgeInsets.fromLTRB(
+                                    AppDs.space4.h,
+                                    0,
+                                    AppDs.space4.h,
+                                    AppDs.space2.v,
+                                  ),
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
                                     child: Text(
-                                      'Google Fonts',
-                                      style: AppDs.sheetTitle(
-                                        theme,
-                                        color: Colors.white,
-                                      ).copyWith(fontSize: 18.fSize),
-                                    ),
-                                  ),
-                                  IconButton(
-                                    onPressed: () => Navigator.pop(ctx),
-                                    icon: Icon(
-                                      Icons.close_rounded,
-                                      color: Colors.white.withValues(
-                                        alpha: 0.85,
+                                      'lbl_text_editor_fonts_custom'.tr,
+                                      style:
+                                          theme.textTheme.labelMedium?.copyWith(
+                                        color: cs.primary,
+                                        fontWeight: FontWeight.w600,
                                       ),
                                     ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Padding(
-                              padding: EdgeInsets.fromLTRB(
-                                AppDs.space4.h,
-                                0,
-                                AppDs.space4.h,
-                                AppDs.space3.v,
-                              ),
-                              child: TextField(
-                                onChanged: (v) =>
-                                    setSheetState(() => query = v),
-                                style: theme.textTheme.bodyLarge?.copyWith(
-                                  color: Colors.white,
-                                ),
-                                decoration: InputDecoration(
-                                  hintText: 'Search fonts',
-                                  hintStyle: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.45),
-                                  ),
-                                  prefixIcon: Icon(
-                                    Icons.search,
-                                    color: Colors.white.withValues(alpha: 0.55),
-                                  ),
-                                  filled: true,
-                                  fillColor: Colors.white.withValues(
-                                    alpha: 0.08,
-                                  ),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(
-                                      AppDs.radiusMd.adaptSize,
-                                    ),
-                                    borderSide: BorderSide(
-                                      color: Colors.white.withValues(
-                                        alpha: 0.2,
-                                      ),
-                                    ),
-                                  ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(
-                                      AppDs.radiusMd.adaptSize,
-                                    ),
-                                    borderSide: BorderSide(
-                                      color: Colors.white.withValues(
-                                        alpha: 0.2,
-                                      ),
-                                    ),
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(
-                                      AppDs.radiusMd.adaptSize,
-                                    ),
-                                    borderSide: BorderSide(
-                                      color: cs.primary,
-                                      width: 2,
-                                    ),
-                                  ),
-                                  contentPadding: EdgeInsets.symmetric(
-                                    horizontal: AppDs.space3.h,
-                                    vertical: AppDs.space3.v,
                                   ),
                                 ),
-                              ),
-                            ),
-                            Expanded(
-                              child: LayoutBuilder(
-                                builder: (ctx, constraints) {
-                                  final maxW = constraints.maxWidth;
-                                  final crossAxisCount = maxW >= 380 ? 2 : 1;
-                                  final previewText = layer.text.trim().isEmpty
-                                      ? 'The quick brown fox 123'
-                                      : layer.text;
+                                Padding(
+                                  padding: EdgeInsets.fromLTRB(
+                                    AppDs.space4.h,
+                                    0,
+                                    AppDs.space4.h,
+                                    AppDs.space2.v,
+                                  ),
+                                  child: MusamiCustomFontSections(
+                                    theme: theme,
+                                    library: fontLibrary,
+                                    query: query,
+                                    preferArabicFirst: preferArabicFirst,
+                                    loadingFontKey: loadingCustomKey,
+                                    chipBackground: Colors.white.withValues(
+                                      alpha: 0.08,
+                                    ),
+                                    labelColor: Colors.white.withValues(
+                                      alpha: 0.7,
+                                    ),
+                                    sectionTitleColor: Colors.white.withValues(
+                                      alpha: 0.9,
+                                    ),
+                                    previewColor: Colors.white,
+                                    onSelect: (font) => applyCustomFont(
+                                      font,
+                                      setSheetState,
+                                    ),
+                                  ),
+                                ),
+                                if (hasCustomFonts ||
+                                    fontLibrary.isLoading ||
+                                    fontLibrary.error != null)
+                                  SizedBox(height: AppDs.space2.v),
+                                Padding(
+                                  padding: EdgeInsets.fromLTRB(
+                                    AppDs.space4.h,
+                                    0,
+                                    AppDs.space4.h,
+                                    AppDs.space2.v,
+                                  ),
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      'lbl_text_editor_fonts_google_pkg'.tr,
+                                      style:
+                                          theme.textTheme.labelMedium?.copyWith(
+                                        color: Colors.white.withValues(
+                                          alpha: 0.7,
+                                        ),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: LayoutBuilder(
+                                    builder: (ctx, constraints) {
+                                      final maxW = constraints.maxWidth;
+                                      final crossAxisCount =
+                                          maxW >= 380 ? 2 : 1;
+                                      final previewText =
+                                          layer.text.trim().isEmpty
+                                          ? 'The quick brown fox 123'
+                                          : layer.text;
 
-                                  return GridView.builder(
-                                    padding: EdgeInsets.fromLTRB(
-                                      5.h,
-                                      0,
-                                      5.h,
-                                      5.v,
-                                    ),
-                                    gridDelegate:
-                                        SliverGridDelegateWithFixedCrossAxisCount(
+                                      return GridView.builder(
+                                        padding: EdgeInsets.fromLTRB(
+                                          5.h,
+                                          0,
+                                          5.h,
+                                          5.v,
+                                        ),
+                                        gridDelegate:
+                                            SliverGridDelegateWithFixedCrossAxisCount(
                                           crossAxisCount: crossAxisCount,
                                           mainAxisSpacing: 10.v,
                                           crossAxisSpacing: 10.h,
@@ -1203,85 +1840,94 @@ class _AddNewScreenState extends State<AddNewScreen> {
                                               ? 4.8
                                               : 3.2,
                                         ),
-                                    itemCount: filtered.length,
-                                    itemBuilder: (ctx, i) {
-                                      final fontName = filtered[i];
-                                      final previewStyle = GoogleFonts.getFont(
-                                        fontName,
-                                        textStyle: baseStyle.copyWith(
-                                          fontSize: 18.fSize,
-                                          color: Colors.white,
-                                        ),
-                                      );
-
-                                      return Material(
-                                        color: Colors.white.withValues(
-                                          alpha: 0.08,
-                                        ),
-                                        borderRadius: BorderRadius.circular(
-                                          AppDs.radiusMd.adaptSize,
-                                        ),
-                                        child: InkWell(
-                                          borderRadius: BorderRadius.circular(
-                                            AppDs.radiusMd.adaptSize,
-                                          ),
-                                          onTap: () async {
-                                            await applyFont(fontName);
-                                            if (ctx.mounted) Navigator.pop(ctx);
-                                          },
-                                          child: Padding(
-                                            padding: EdgeInsets.fromLTRB(
-                                              12.h,
-                                              10.v,
-                                              12.h,
-                                              10.v,
+                                        itemCount: filtered.length,
+                                        itemBuilder: (ctx, i) {
+                                          final fontName = filtered[i];
+                                          final live = liveLayer() ?? layer;
+                                          final previewStyle =
+                                              GoogleFonts.getFont(
+                                            fontName,
+                                            textStyle: baseStyleFor(live)
+                                                .copyWith(
+                                              fontSize: 18.fSize,
+                                              color: Colors.white,
                                             ),
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  fontName,
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  style: theme
-                                                      .textTheme
-                                                      .labelLarge
-                                                      ?.copyWith(
+                                          );
+
+                                          return Material(
+                                            color: Colors.white.withValues(
+                                              alpha: 0.08,
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              AppDs.radiusMd.adaptSize,
+                                            ),
+                                            child: InkWell(
+                                              borderRadius:
+                                                  BorderRadius.circular(
+                                                AppDs.radiusMd.adaptSize,
+                                              ),
+                                              onTap: () async {
+                                                await applyFont(fontName);
+                                                if (ctx.mounted) {
+                                                  Navigator.pop(ctx);
+                                                }
+                                              },
+                                              child: Padding(
+                                                padding: EdgeInsets.fromLTRB(
+                                                  12.h,
+                                                  10.v,
+                                                  12.h,
+                                                  10.v,
+                                                ),
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      fontName,
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow
+                                                          .ellipsis,
+                                                      style: theme
+                                                          .textTheme
+                                                          .labelLarge
+                                                          ?.copyWith(
                                                         fontWeight:
                                                             FontWeight.w800,
                                                         color: Colors.white,
                                                       ),
-                                                ),
-                                                SizedBox(height: 6.v),
-                                                Expanded(
-                                                  child: Align(
-                                                    alignment:
-                                                        Alignment.centerLeft,
-                                                    child: Text(
-                                                      previewText,
-                                                      maxLines:
-                                                          crossAxisCount == 1
-                                                          ? 1
-                                                          : 2,
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
-                                                      style: previewStyle,
                                                     ),
-                                                  ),
+                                                    SizedBox(height: 6.v),
+                                                    Expanded(
+                                                      child: Align(
+                                                        alignment: Alignment
+                                                            .centerLeft,
+                                                        child: Text(
+                                                          previewText,
+                                                          maxLines:
+                                                              crossAxisCount ==
+                                                                      1
+                                                                  ? 1
+                                                                  : 2,
+                                                          overflow: TextOverflow
+                                                              .ellipsis,
+                                                          style: previewStyle,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ),
-                                              ],
+                                              ),
                                             ),
-                                          ),
-                                        ),
+                                          );
+                                        },
                                       );
                                     },
-                                  );
-                                },
-                              ),
-                            ),
-                          ],
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
                         );
                       },
                     ),
@@ -1295,6 +1941,11 @@ class _AddNewScreenState extends State<AddNewScreen> {
     );
   }
 
+
+  /// Intrinsic image content for a layer: a box at the source pixel ratio.
+  ///
+  /// The box always matches the decoded image, so the image is never stretched
+  /// here. Frame cropping happens one level up in [musamiFrameWidgetLayerCore].
   Widget _buildGalleryStickerWidget(
     BuildContext context, {
     required ImageProvider image,
@@ -1306,7 +1957,7 @@ class _AddNewScreenState extends State<AddNewScreen> {
       height: height,
       child: Image(
         image: image,
-        fit: BoxFit.fill,
+        fit: BoxFit.contain,
         gaplessPlayback: true,
         errorBuilder: (_, _, _) => const Icon(Icons.broken_image, size: 48),
       ),
@@ -1318,9 +1969,23 @@ class _AddNewScreenState extends State<AddNewScreen> {
     return ListenableBuilder(
       listenable: appLocaleNotifier,
       builder: (context, _) {
-        return SafeArea(
-          child: BlocBuilder<AddNewBloc, AddNewState>(
-            builder: (context, state) {
+        return PopScope(
+          canPop: true,
+          onPopInvokedWithResult: (didPop, _) {
+            if (didPop) {
+              unawaited(_autoSaveLocalDraft(force: true));
+            }
+          },
+          child: SafeArea(
+            child: BlocListener<AddNewBloc, AddNewState>(
+              listenWhen: (prev, next) =>
+                  prev.canvasLocked != next.canvasLocked,
+              listener: (context, state) {
+                _syncCanvasZoomInteraction(state.canvasLocked);
+              },
+              child: BlocBuilder<AddNewBloc, AddNewState>(
+                builder: (context, state) {
+              _maybeLaunchInitialAi(state);
               final width = widget.width;
               final height = widget.height;
               if (state.transparentBytes == null) {
@@ -1333,6 +1998,9 @@ class _AddNewScreenState extends State<AddNewScreen> {
               return Scaffold(
                 key: _scaffoldKey,
                 backgroundColor: appTheme.blueGray90007,
+                // Keep the canvas/tool panels fixed when the soft keyboard opens
+                // (Select Size fields). Panels pad themselves via viewInsets.
+                resizeToAvoidBottomInset: false,
                 drawer: AppNavigationDrawer(
                   key: ValueKey<Object>(
                     Object.hash(
@@ -1342,6 +2010,17 @@ class _AddNewScreenState extends State<AddNewScreen> {
                   ),
                   homePopsToRootHome: true,
                 ),
+                // Selection frames use OverlayPortal (above the drawer). Clear
+                // selection when the drawer opens so the frame is not on top.
+                onDrawerChanged: (isOpened) {
+                  if (!isOpened) return;
+                  final editor = state.editorKey?.currentState;
+                  if (editor != null) {
+                    _editorClearAllSelection(editor);
+                  }
+                },
+                floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+                floatingActionButton: null,
                 body: Stack(
                   children: [
                     RepaintBoundary(
@@ -1365,8 +2044,11 @@ class _AddNewScreenState extends State<AddNewScreen> {
                           if (!state.isScreenColorPicking &&
                               state.showbottomContainer == '4')
                             _buildBgColorOverlay(context, state),
+                          // Hide tooltip tails while the keyboard is open — they
+                          // would otherwise float mid-screen above the inset panel.
                           if (!state.isScreenColorPicking &&
-                              state.showbottomContainer == '2')
+                              state.showbottomContainer == '2' &&
+                              MediaQuery.viewInsetsOf(context).bottom == 0)
                             CustomImageView(
                               imagePath: ImageConstant.imgPolygon1,
                               height: 47.v,
@@ -1376,7 +2058,8 @@ class _AddNewScreenState extends State<AddNewScreen> {
                               fit: BoxFit.cover,
                             ),
                           if (!state.isScreenColorPicking &&
-                              state.showbottomContainer == '1')
+                              state.showbottomContainer == '1' &&
+                              MediaQuery.viewInsetsOf(context).bottom == 0)
                             CustomImageView(
                               imagePath: ImageConstant.imgPolygon1,
                               height: 47.v,
@@ -1386,7 +2069,8 @@ class _AddNewScreenState extends State<AddNewScreen> {
                               fit: BoxFit.cover,
                             ),
                           if (!state.isScreenColorPicking &&
-                              state.showbottomContainer == '4')
+                              state.showbottomContainer == '4' &&
+                              MediaQuery.viewInsetsOf(context).bottom == 0)
                             CustomImageView(
                               imagePath: ImageConstant.imgPolygon1,
                               height: 47.v,
@@ -1415,33 +2099,23 @@ class _AddNewScreenState extends State<AddNewScreen> {
                           );
                         },
                       ),
-                    if (!state.isScreenColorPicking &&
-                        state.showbottomContainer == '0' &&
-                        state.activeToolbarMode == 'default')
+                    if (!state.isScreenColorPicking)
+                      DraggableEditorAiFab(
+                        fabKey: _aiFabKey,
+                        onOpenMode: _openAiBar,
+                      ),
+                    if (!state.isScreenColorPicking && _aiBarVisible)
                       Positioned(
-                        right: 16.h,
-                        bottom: 88.v,
-                        child: FloatingActionButton.extended(
-                          heroTag: 'editor_ai_compose_fab',
-                          backgroundColor:
-                              Theme.of(context).colorScheme.primary,
-                          foregroundColor: Colors.black,
-                          onPressed: () {
-                            final editor = state.editorKey?.currentState;
-                            if (editor == null) return;
-                            _openEditorAiCompose(context, editor);
-                          },
-                          icon: Icon(
-                            Icons.draw_rounded,
-                            size: AppDs.iconSm.adaptSize,
-                          ),
-                          label: Text(
-                            'lbl_ai_compose'.tr,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 12.fSize,
-                            ),
-                          ),
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        child: MusamiEditorAiOverlay(
+                          editorKey: state.editorKey,
+                          visible: true,
+                          mode: _aiBarMode,
+                          initialPrompt: _aiBarPrompt,
+                          autoSend: _aiBarAutoSend,
+                          onClose: _closeAiBar,
                         ),
                       ),
                   ],
@@ -1459,181 +2133,229 @@ class _AddNewScreenState extends State<AddNewScreen> {
                             maintainAnimation: true,
                             child: Padding(
                               padding: EdgeInsets.fromLTRB(16.h, 4.v, 16.h, 0),
-                              child: AdvertisementBanner(
-                                key: const ValueKey('design_editor_ad_banner'),
-                                placement: 'design_editor',
-                                limit: 3,
-                                height: 48.v,
-                                autoAdvanceSeconds: 8,
-                              ),
+                              // Transparent BG status replaces the ad strip so
+                              // users get clear feedback instead of a raw ad tile.
+                              child: state.isBackgroundTransparent
+                                  ? _TransparentBgStatusBar(
+                                      onRestore: () {
+                                        context.read<AddNewBloc>().add(
+                                          MakeTransparentEvent(),
+                                        );
+                                        showAppToast(
+                                          'msg_transparent_bg_off'.tr,
+                                          type: ToastificationType.success,
+                                        );
+                                      },
+                                    )
+                                  : AdvertisementBanner(
+                                      key: const ValueKey(
+                                        'design_editor_ad_banner',
+                                      ),
+                                      placement: 'design_editor',
+                                      limit: 3,
+                                      height: 48.v,
+                                      autoAdvanceSeconds: 8,
+                                    ),
                             ),
                           ),
                           Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 49.h,
-                          vertical: 10.v,
-                        ),
-                        child: SizedBox(
-                          height: 52,
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              InkWell(
-                                borderRadius: BorderRadius.circular(20),
-                                onTap: () {
-                                  BlocProvider.of<AddNewBloc>(context).add(
-                                    ShowContainerEvent(
-                                      ishow: state.showbottomContainer == '1'
-                                          ? '0'
-                                          : '1',
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 49.h,
+                              vertical: 10.v,
+                            ),
+                            child: SizedBox(
+                              height: 52,
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  InkWell(
+                                    borderRadius: BorderRadius.circular(20),
+                                    onTap: () {
+                                      BlocProvider.of<AddNewBloc>(context).add(
+                                        ShowContainerEvent(
+                                          ishow:
+                                              state.showbottomContainer == '1'
+                                              ? '0'
+                                              : '1',
+                                        ),
+                                      );
+                                    },
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        CustomIconButton(
+                                          height: 22.adaptSize,
+                                          width: 22.adaptSize,
+                                          child: CustomImageView(
+                                            imagePath:
+                                                state.showbottomContainer == '1'
+                                                ? ImageConstant
+                                                      .imgPlusSvgrepoCom
+                                                : ImageConstant
+                                                      .imgPlusSvgrepoComOnprimarycontainer,
+                                          ),
+                                        ),
+                                        SizedBox(height: 4.v),
+                                        Text(
+                                          "lbl_add_new".tr,
+                                          style:
+                                              state.showbottomContainer == '1'
+                                              ? CustomTextStyles
+                                                    .bodySmallYellowA400
+                                              : theme.textTheme.bodySmall,
+                                          overflow: TextOverflow.ellipsis,
+                                          maxLines: 1,
+                                        ),
+                                      ],
                                     ),
-                                  );
-                                },
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    CustomIconButton(
-                                      height: 22.adaptSize,
-                                      width: 22.adaptSize,
-                                      child: CustomImageView(
-                                        imagePath:
-                                            state.showbottomContainer == '1'
-                                            ? ImageConstant.imgPlusSvgrepoCom
-                                            : ImageConstant
-                                                  .imgPlusSvgrepoComOnprimarycontainer,
-                                      ),
+                                  ),
+                                  InkWell(
+                                    onTap: () {
+                                      BlocProvider.of<AddNewBloc>(context).add(
+                                        ShowContainerEvent(
+                                          ishow:
+                                              state.showbottomContainer != '0'
+                                              ? '0'
+                                              : '2',
+                                        ),
+                                      );
+                                    },
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        CustomIconButton(
+                                          height: 22.adaptSize,
+                                          width: 22.adaptSize,
+                                          child: CustomImageView(
+                                            imagePath:
+                                                state.showbottomContainer == '2'
+                                                ? ImageConstant
+                                                      .imgSlideSizeSvgrepoComPrimary
+                                                : ImageConstant
+                                                      .imgSlideSizeSvgrepoCom,
+                                          ),
+                                        ),
+                                        SizedBox(height: 4.v),
+                                        Text(
+                                          "lbl_resize_paper".tr,
+                                          style:
+                                              state.showbottomContainer == '2'
+                                              ? CustomTextStyles
+                                                    .bodySmallYellowA400
+                                              : theme.textTheme.bodySmall,
+                                          overflow: TextOverflow.ellipsis,
+                                          maxLines: 1,
+                                        ),
+                                      ],
                                     ),
-                                    SizedBox(height: 4.v),
-                                    Text(
-                                      "lbl_add_new".tr,
-                                      style: state.showbottomContainer == '1'
-                                          ? CustomTextStyles.bodySmallYellowA400
-                                          : theme.textTheme.bodySmall,
-                                      overflow: TextOverflow.ellipsis,
-                                      maxLines: 1,
+                                  ),
+                                  InkWell(
+                                    onTap: () {
+                                      final wasTransparent =
+                                          state.isBackgroundTransparent;
+                                      BlocProvider.of<AddNewBloc>(
+                                        context,
+                                      ).add(MakeTransparentEvent());
+                                      // Close other tool panels so the status bar is visible.
+                                      if (state.showbottomContainer != '0') {
+                                        BlocProvider.of<AddNewBloc>(
+                                          context,
+                                        ).add(ShowContainerEvent(ishow: '0'));
+                                      }
+                                      showAppToast(
+                                        wasTransparent
+                                            ? 'msg_transparent_bg_off'.tr
+                                            : 'msg_transparent_bg_on'.tr,
+                                        type: ToastificationType.success,
+                                      );
+                                    },
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        CustomIconButton(
+                                          height: 22.adaptSize,
+                                          width: 22.adaptSize,
+                                          child: CustomImageView(
+                                            imagePath:
+                                                state.isBackgroundTransparent
+                                                ? ImageConstant
+                                                      .imgBlockchainSvgrepoComPrimary
+                                                : ImageConstant
+                                                      .imgBlockchainSvgrepoCom,
+                                          ),
+                                        ),
+                                        SizedBox(height: 4.v),
+                                        Text(
+                                          "lbl_transparent_bg".tr,
+                                          style: state.isBackgroundTransparent
+                                              ? CustomTextStyles
+                                                    .bodySmallYellowA400
+                                              : theme.textTheme.bodySmall,
+                                          overflow: TextOverflow.ellipsis,
+                                          maxLines: 1,
+                                        ),
+                                      ],
                                     ),
-                                  ],
-                                ),
+                                  ),
+                                  InkWell(
+                                    onTap: () {
+                                      BlocProvider.of<AddNewBloc>(context).add(
+                                        ShowContainerEvent(
+                                          ishow:
+                                              state.showbottomContainer == '4'
+                                              ? '0'
+                                              : '4',
+                                        ),
+                                      );
+                                    },
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        CustomIconButton(
+                                          height: 22.adaptSize,
+                                          width: 22.adaptSize,
+                                          child: CustomImageView(
+                                            imagePath:
+                                                state.showbottomContainer == '4'
+                                                ? ImageConstant
+                                                      .imgColorFillSvgrepoComPrimary
+                                                : ImageConstant
+                                                      .imgColorFillSvgrepoCom,
+                                          ),
+                                        ),
+                                        SizedBox(height: 4.v),
+                                        Text(
+                                          "lbl_bg_color".tr,
+                                          style:
+                                              state.showbottomContainer == '4'
+                                              ? CustomTextStyles
+                                                    .bodySmallYellowA400
+                                              : theme.textTheme.bodySmall,
+                                          overflow: TextOverflow.ellipsis,
+                                          maxLines: 1,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                               ),
-                              InkWell(
-                                onTap: () {
-                                  BlocProvider.of<AddNewBloc>(context).add(
-                                    ShowContainerEvent(
-                                      ishow: state.showbottomContainer != '0'
-                                          ? '0'
-                                          : '2',
-                                    ),
-                                  );
-                                },
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    CustomIconButton(
-                                      height: 22.adaptSize,
-                                      width: 22.adaptSize,
-                                      child: CustomImageView(
-                                        imagePath:
-                                            state.showbottomContainer == '2'
-                                            ? ImageConstant
-                                                  .imgSlideSizeSvgrepoComPrimary
-                                            : ImageConstant
-                                                  .imgSlideSizeSvgrepoCom,
-                                      ),
-                                    ),
-                                    SizedBox(height: 4.v),
-                                    Text(
-                                      "lbl_resize_paper".tr,
-                                      style: state.showbottomContainer == '2'
-                                          ? CustomTextStyles.bodySmallYellowA400
-                                          : theme.textTheme.bodySmall,
-                                      overflow: TextOverflow.ellipsis,
-                                      maxLines: 1,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              InkWell(
-                                onTap: () {
-                                  BlocProvider.of<AddNewBloc>(
-                                    context,
-                                  ).add(MakeTransparentEvent());
-                                },
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    CustomIconButton(
-                                      height: 22.adaptSize,
-                                      width: 22.adaptSize,
-                                      child: CustomImageView(
-                                        imagePath:
-                                            state.showbottomContainer == '3'
-                                            ? ImageConstant
-                                                  .imgBlockchainSvgrepoComPrimary
-                                            : ImageConstant
-                                                  .imgBlockchainSvgrepoCom,
-                                      ),
-                                    ),
-                                    SizedBox(height: 4.v),
-                                    Text(
-                                      "lbl_transparent_bg".tr,
-                                      style: state.showbottomContainer == '3'
-                                          ? CustomTextStyles.bodySmallYellowA400
-                                          : theme.textTheme.bodySmall,
-                                      overflow: TextOverflow.ellipsis,
-                                      maxLines: 1,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              InkWell(
-                                onTap: () {
-                                  BlocProvider.of<AddNewBloc>(context).add(
-                                    ShowContainerEvent(
-                                      ishow: state.showbottomContainer == '4'
-                                          ? '0'
-                                          : '4',
-                                    ),
-                                  );
-                                },
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    CustomIconButton(
-                                      height: 22.adaptSize,
-                                      width: 22.adaptSize,
-                                      child: CustomImageView(
-                                        imagePath:
-                                            state.showbottomContainer == '4'
-                                            ? ImageConstant
-                                                  .imgColorFillSvgrepoComPrimary
-                                            : ImageConstant
-                                                  .imgColorFillSvgrepoCom,
-                                      ),
-                                    ),
-                                    SizedBox(height: 4.v),
-                                    Text(
-                                      "lbl_bg_color".tr,
-                                      style: state.showbottomContainer == '4'
-                                          ? CustomTextStyles.bodySmallYellowA400
-                                          : theme.textTheme.bodySmall,
-                                      overflow: TextOverflow.ellipsis,
-                                      maxLines: 1,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
-                        ),
-                      ),
                         ],
                       ),
               );
-            },
+                },
+              ),
+            ),
           ),
         );
       },
@@ -1679,14 +2401,19 @@ class _AddNewScreenState extends State<AddNewScreen> {
     void openSizeSheet() {
       final layer = selectedTextLayer();
       if (layer == null) return;
-      final style = layer.textStyle ?? const TextStyle();
-      final currentSize = (style.fontSize ?? 24.0).toDouble();
+      // Package renders text as initFontSize * scale * fontScale and ignores
+      // TextStyle.fontSize — drive size through fontScale (see helpers).
+      final initFontSize = editor.configs.textEditor.initFontSize;
+      final currentSize = musamiTextLayerVisualFontSize(
+        layer,
+        initFontSize: initFontSize,
+      );
 
       showAppModalBottomSheet<void>(
         context: context,
         builder: (ctx) {
           final t = Theme.of(context);
-          double v = currentSize.clamp(8.0, 160.0);
+          double v = currentSize;
           return AppDarkSheetTheme(
             child: AppSheetPagePadding(
               child: StatefulBuilder(
@@ -1715,12 +2442,17 @@ class _AddNewScreenState extends State<AddNewScreen> {
                         divisions: 152,
                         onChanged: (nv) {
                           setState(() => v = nv);
-                          applyTextStyle(
-                            layer,
-                            (layer.textStyle ?? const TextStyle()).copyWith(
-                              fontSize: nv,
+                          final live = selectedTextLayer();
+                          if (live == null) return;
+                          editor.applyTextLayerChanges(
+                            live,
+                            musamiTextLayerWithVisualFontSize(
+                              live,
+                              visualFontSize: nv,
+                              initFontSize: initFontSize,
                             ),
                           );
+                          editor.setState(() {});
                         },
                       ),
                       SizedBox(height: AppDs.space2.v),
@@ -2211,8 +2943,12 @@ class _AddNewScreenState extends State<AddNewScreen> {
                     ? <String, dynamic>{}
                     : Map<String, dynamic>.from(layer.meta!);
                 meta.removeWhere((k, _) => musamiIsCropMetaKey(k));
+                // Cropping produces new pixels: frame and image both adopt the
+                // ratio the user just cropped to.
                 if (decodedSize.width > 0 && decodedSize.height > 0) {
-                  meta['musamiAspect'] = decodedSize.height / decodedSize.width;
+                  final cropped = decodedSize.height / decodedSize.width;
+                  meta[kMusamiFrameAspectMetaKey] = cropped;
+                  meta[kMusamiImageAspectMetaKey] = cropped;
                 }
 
                 final newCore = _buildGalleryStickerWidget(
@@ -2272,14 +3008,23 @@ class _AddNewScreenState extends State<AddNewScreen> {
         : Map<String, dynamic>.from(layer.meta!);
     meta.removeWhere((k, _) => musamiIsCropMetaKey(k));
 
+    // Background removal keeps the source pixel ratio, so the image content is
+    // rebuilt at its own ratio and re-cropped into the frame the user has.
     final displayWidth = layer.width ?? 200.0;
-    final aspect = musamiWidgetLayerAspect(layer);
+    final frameAspect = musamiWidgetLayerAspect(layer);
+    final imageAspect = musamiWidgetLayerImageAspect(layer);
+    meta[kMusamiImageAspectMetaKey] = imageAspect;
 
-    final newCore = _buildGalleryStickerWidget(
-      context,
-      image: provider,
+    final newCore = musamiFrameWidgetLayerCore(
+      _buildGalleryStickerWidget(
+        context,
+        image: provider,
+        width: displayWidth,
+        height: displayWidth * imageAspect,
+      ),
       width: displayWidth,
-      height: displayWidth * aspect,
+      aspect: frameAspect,
+      cropAlignment: musamiLayerCropAlignment(meta),
     );
 
     final preliminary = layer.copyWith(
@@ -2316,70 +3061,702 @@ class _AddNewScreenState extends State<AddNewScreen> {
         return 'msg_bg_removal_timeout'.tr;
       case BackgroundRemovalErrorKind.network:
         return 'msg_bg_removal_network_error'.tr;
+      case BackgroundRemovalErrorKind.insufficientCoins:
+        return 'msg_insufficient_coins'.tr;
       case BackgroundRemovalErrorKind.apiFailure:
       case null:
         return 'msg_bg_removal_api_failure'.tr;
     }
   }
 
-  String _editorAiLanguageLabel() {
-    switch (appLocaleNotifier.languageCode) {
-      case 'ar':
-        return 'Arabic';
-      case 'ur':
-        return 'Urdu';
-      default:
-        return 'English';
+  // ─────────────────────────────────────────────────────────────────────────
+  // Layer context menu ("More")
+  //
+  // Every row delegates to the editor action that already exists (delete,
+  // duplicate, lock, align, background) — the menu adds presentation, never a
+  // second implementation. None of these actions touch frame/image geometry,
+  // so the crop-based resize model is unaffected.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /// Blocks re-entry while a slow menu action (export, background) is running.
+  bool _layerMenuBusy = false;
+
+  /// Keyboard hints are meaningless without a keyboard, so they are shown on
+  /// desktop only.
+  String? _layerMenuShortcut(BuildContext context, String mac, String pc) {
+    switch (Theme.of(context).platform) {
+      case TargetPlatform.macOS:
+        return mac;
+      case TargetPlatform.windows:
+      case TargetPlatform.linux:
+        return pc;
+      case TargetPlatform.android:
+      case TargetPlatform.iOS:
+      case TargetPlatform.fuchsia:
+        return null;
     }
   }
 
-  String _describeEditorBackground(AddNewState state) {
-    if (state.pickedImage != null) {
-      return 'user image background';
-    }
-    if (state.isBackgroundTransparent) {
-      return 'transparent / checkerboard';
-    }
-    final color = state.selectedBgColor;
-    if (color == null) return 'default background';
-    if ((color.a) == 0) return 'transparent';
-    final hex =
-        '#${color.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}';
-    return 'solid color $hex';
-  }
+  void _comingSoon() =>
+      showAppToast('msg_coming_soon'.tr, type: ToastificationType.info);
 
-  Future<void> _openEditorAiCompose(
-    BuildContext context,
-    ProImageEditorState editor,
-  ) async {
-    await _editorAiCompose.openCompose(
-      context: context,
-      editor: editor,
-    );
-  }
+  /// Opens the contextual menu for [layer], anchored to the More button.
+  void _openLayerContextMenu({
+    required BuildContext screenContext,
+    required BuildContext anchorContext,
+    required ProImageEditorState editor,
+    required Layer layer,
+  }) {
+    final anchor = musamiAnchorRectFromContext(anchorContext);
+    if (anchor == null) return;
 
-  Future<void> _openEditorAiAssist(
-    BuildContext context,
-    ProImageEditorState editor,
-  ) async {
-    final state = context.read<AddNewBloc>().state;
-    final lang = appLocaleNotifier.languageCode;
-    final rtl = lang == 'ar' || lang == 'ur';
-    await _editorAiAssistant.openAssist(
-      context: context,
-      editor: editor,
-      presetName: widget.presetName,
-      width: widget.width.round(),
-      height: widget.height.round(),
-      bgDescription: _describeEditorBackground(state),
-      languageLabel: _editorAiLanguageLabel(),
-      rtl: rtl,
-      onRemoveBackground: (layer) => _runEditorBackgroundRemoval(
-        context: context,
+    showMusamiLayerContextMenu(
+      context: anchorContext,
+      anchorRect: anchor,
+      sections: _buildLayerMenuSections(
+        menuContext: anchorContext,
+        screenContext: screenContext,
         editor: editor,
         layer: layer,
       ),
     );
+  }
+
+  MusamiLayerQuickBarActions _buildLayerQuickBarActions({
+    required BuildContext screenContext,
+    required GlobalKey<ProImageEditorState> editorKey,
+    required Layer layer,
+  }) {
+    return MusamiLayerQuickBarActions(
+      isLocked: _editorLayerTransformLocked(layer),
+      onComment: _comingSoon,
+      onLockToggle: () {
+        final editor = editorKey.currentState;
+        if (editor == null) return;
+        _editorToggleLayerTransformLock(editor, layer);
+      },
+      onDuplicate: () {
+        final editor = editorKey.currentState;
+        if (editor == null) return;
+        _layerMenuDuplicate(screenContext, editor, layer.id);
+      },
+      onDelete: () {
+        final editor = editorKey.currentState;
+        if (editor == null) return;
+        _layerMenuDelete(screenContext, editor, layer.id);
+      },
+      onMore: (anchorContext) {
+        final editor = editorKey.currentState;
+        if (editor == null) return;
+        _openLayerContextMenu(
+          screenContext: screenContext,
+          anchorContext: anchorContext,
+          editor: editor,
+          layer: layer,
+        );
+      },
+    );
+  }
+
+  Widget _wrapLayerSelectionChrome({
+    required OverlayChildLayoutInfo info,
+    required Layer layer,
+    required Size canvasBodySize,
+    required MusamiLayerQuickBarActions actions,
+    required Widget selectionOverlay,
+  }) {
+    return MusamiLayerSelectionChrome(
+      info: info,
+      layer: layer,
+      canvasBodySize: canvasBodySize,
+      actions: actions,
+      selectionOverlay: selectionOverlay,
+    );
+  }
+
+  List<MusamiContextMenuSection> _buildLayerMenuSections({
+    required BuildContext menuContext,
+    required BuildContext screenContext,
+    required ProImageEditorState editor,
+    required Layer layer,
+  }) {
+    final layerId = layer.id;
+    final isImage = layer is WidgetLayer;
+    final isLocked = _editorLayerTransformLocked(layer);
+    final hasClipboard = MusamiLayerClipboard.instance.hasContent;
+
+    return <MusamiContextMenuSection>[
+      MusamiContextMenuSection([
+        MusamiContextMenuItem(
+          icon: Icons.copy_rounded,
+          label: 'lbl_layer_menu_copy'.tr,
+          shortcut: _layerMenuShortcut(menuContext, '⌘C', 'Ctrl C'),
+          onSelected: () => _layerMenuCopy(editor, layerId),
+        ),
+        MusamiContextMenuItem(
+          icon: Icons.content_paste_rounded,
+          label: 'lbl_layer_menu_paste'.tr,
+          shortcut: _layerMenuShortcut(menuContext, '⌘V', 'Ctrl V'),
+          enabled: hasClipboard,
+          onSelected: () => _layerMenuPaste(screenContext, editor),
+        ),
+        MusamiContextMenuItem(
+          icon: Icons.control_point_duplicate_rounded,
+          label: 'lbl_layer_menu_duplicate'.tr,
+          shortcut: _layerMenuShortcut(menuContext, '⌘D', 'Ctrl D'),
+          onSelected: () => _layerMenuDuplicate(screenContext, editor, layerId),
+        ),
+        MusamiContextMenuItem(
+          icon: Icons.delete_outline_rounded,
+          label: 'lbl_layer_menu_delete'.tr,
+          shortcut: _layerMenuShortcut(menuContext, 'DELETE', 'DELETE'),
+          destructive: true,
+          onSelected: () => _layerMenuDelete(screenContext, editor, layerId),
+        ),
+      ]),
+      MusamiContextMenuSection([
+        MusamiContextMenuItem(
+          icon: Icons.align_horizontal_left_rounded,
+          label: 'lbl_layer_menu_align_page'.tr,
+          enabled: !isLocked,
+          submenu: () => _buildAlignSubmenuSections(editor, layerId),
+        ),
+      ]),
+      MusamiContextMenuSection([
+        MusamiContextMenuItem(
+          icon: Icons.hexagon_outlined,
+          label: 'lbl_layer_menu_create_component'.tr,
+          enabled: false,
+          onSelected: _comingSoon,
+        ),
+        MusamiContextMenuItem(
+          icon: Icons.mode_comment_outlined,
+          label: 'lbl_layer_menu_comment'.tr,
+          shortcut: _layerMenuShortcut(menuContext, '⌥⌘N', 'Ctrl Alt N'),
+          enabled: false,
+          onSelected: _comingSoon,
+        ),
+        MusamiContextMenuItem(
+          icon: isLocked ? Icons.lock_open_rounded : Icons.lock_outline_rounded,
+          label: isLocked
+              ? 'lbl_layer_menu_unlock'.tr
+              : 'lbl_layer_menu_lock'.tr,
+          shortcut: _layerMenuShortcut(menuContext, '⌥⇧L', 'Ctrl Shift L'),
+          onSelected: () => _layerMenuToggleLock(editor, layerId),
+        ),
+        MusamiContextMenuItem(
+          icon: Icons.link_rounded,
+          label: 'lbl_layer_menu_link'.tr,
+          shortcut: _layerMenuShortcut(menuContext, '⌘K', 'Ctrl K'),
+          onSelected: () => _layerMenuEditLink(screenContext, editor, layerId),
+        ),
+        MusamiContextMenuItem(
+          icon: Icons.schedule_rounded,
+          label: 'lbl_layer_menu_timings'.tr,
+          enabled: false,
+          onSelected: _comingSoon,
+        ),
+        if (isImage)
+          MusamiContextMenuItem(
+            icon: Icons.accessibility_new_rounded,
+            label: 'lbl_layer_menu_alt_text'.tr,
+            onSelected: () =>
+                _layerMenuEditAltText(screenContext, editor, layerId),
+          ),
+      ]),
+      if (isImage)
+        MusamiContextMenuSection([
+          MusamiContextMenuItem(
+            icon: Icons.wallpaper_rounded,
+            label: 'lbl_layer_menu_set_background'.tr,
+            onSelected: () =>
+                _layerMenuSetAsBackground(screenContext, editor, layerId),
+          ),
+          MusamiContextMenuItem(
+            icon: Icons.palette_outlined,
+            label: 'lbl_layer_menu_apply_colors'.tr,
+            onSelected: () =>
+                _layerMenuApplyColors(screenContext, editor, layerId),
+          ),
+        ]),
+      MusamiContextMenuSection([
+        if (isImage)
+          MusamiContextMenuItem(
+            icon: Icons.download_rounded,
+            label: 'lbl_layer_menu_download'.tr,
+            onSelected: () =>
+                _layerMenuDownload(screenContext, editor, layerId),
+          ),
+        MusamiContextMenuItem(
+          icon: Icons.info_outline_rounded,
+          label: 'lbl_layer_menu_info'.tr,
+          onSelected: () => _layerMenuShowInfo(screenContext, editor, layerId),
+        ),
+      ]),
+    ];
+  }
+
+  /// Align rows delegate to [musamiAlignLayerToPage] — the same canvas maths the
+  /// align sheet uses, so the two can never disagree.
+  List<MusamiContextMenuSection> _buildAlignSubmenuSections(
+    ProImageEditorState editor,
+    String layerId,
+  ) {
+    void align({int? xT, int? yT}) {
+      if (!musamiAlignLayerToPage(
+        editor: editor,
+        layerId: layerId,
+        xT: xT,
+        yT: yT,
+      )) {
+        showAppToast(
+          'msg_editor_align_no_canvas'.tr,
+          type: ToastificationType.warning,
+        );
+        return;
+      }
+      editor.setState(() {});
+    }
+
+    return <MusamiContextMenuSection>[
+      MusamiContextMenuSection([
+        MusamiContextMenuItem(
+          icon: Icons.align_horizontal_left_rounded,
+          label: 'lbl_editor_align_left'.tr,
+          onSelected: () => align(xT: -1),
+        ),
+        MusamiContextMenuItem(
+          icon: Icons.align_horizontal_center_rounded,
+          label: 'lbl_editor_align_center_h'.tr,
+          onSelected: () => align(xT: 0),
+        ),
+        MusamiContextMenuItem(
+          icon: Icons.align_horizontal_right_rounded,
+          label: 'lbl_editor_align_right'.tr,
+          onSelected: () => align(xT: 1),
+        ),
+      ]),
+      MusamiContextMenuSection([
+        MusamiContextMenuItem(
+          icon: Icons.align_vertical_top_rounded,
+          label: 'lbl_editor_align_top'.tr,
+          onSelected: () => align(yT: -1),
+        ),
+        MusamiContextMenuItem(
+          icon: Icons.align_vertical_center_rounded,
+          label: 'lbl_editor_align_middle'.tr,
+          onSelected: () => align(yT: 0),
+        ),
+        MusamiContextMenuItem(
+          icon: Icons.align_vertical_bottom_rounded,
+          label: 'lbl_editor_align_bottom'.tr,
+          onSelected: () => align(yT: 1),
+        ),
+      ]),
+      MusamiContextMenuSection([
+        MusamiContextMenuItem(
+          icon: Icons.filter_center_focus_rounded,
+          label: 'lbl_layer_align_center_page'.tr,
+          onSelected: () => align(xT: 0, yT: 0),
+        ),
+      ]),
+    ];
+  }
+
+  void _layerMenuCopy(ProImageEditorState editor, String layerId) {
+    final layer = _editorFindLayer(editor, layerId);
+    if (layer == null) return;
+    if (!MusamiLayerClipboard.instance.copy(layer)) return;
+    showAppToast('msg_layer_copied'.tr, type: ToastificationType.success);
+  }
+
+  void _layerMenuPaste(BuildContext context, ProImageEditorState editor) {
+    final pasted = MusamiLayerClipboard.instance.read();
+    if (pasted == null) {
+      showAppToast(
+        'msg_layer_clipboard_empty'.tr,
+        type: ToastificationType.warning,
+      );
+      return;
+    }
+    musamiAddAndSelectLayer(editor, pasted);
+    _syncEditorSelection(context, pasted);
+    showAppToast('msg_layer_pasted'.tr, type: ToastificationType.success);
+  }
+
+  void _layerMenuDuplicate(
+    BuildContext context,
+    ProImageEditorState editor,
+    String layerId,
+  ) {
+    final layer = _editorFindLayer(editor, layerId);
+    if (layer == null) return;
+    final copy = musamiCloneLayer(layer, nudge: kMusamiLayerDuplicateNudge);
+    if (copy == null) return;
+    musamiAddAndSelectLayer(editor, copy);
+    _syncEditorSelection(context, copy);
+  }
+
+  void _layerMenuDelete(
+    BuildContext context,
+    ProImageEditorState editor,
+    String layerId,
+  ) {
+    final layer = _editorFindLayer(editor, layerId);
+    if (layer == null) return;
+    if (_editorLayerTransformLocked(layer)) {
+      showAppToast(
+        'msg_layer_locked_action'.tr,
+        type: ToastificationType.warning,
+      );
+      return;
+    }
+    editor.removeLayer(layer);
+    if (!context.mounted) return;
+    context.read<AddNewBloc>().add(EditorClearSelectionEvent());
+  }
+
+  void _layerMenuToggleLock(ProImageEditorState editor, String layerId) {
+    final layer = _editorFindLayer(editor, layerId);
+    if (layer == null) return;
+    _editorToggleLayerTransformLock(editor, layer);
+  }
+
+  /// Keeps the bloc's selection in sync after the menu adds a layer.
+  void _syncEditorSelection(BuildContext context, Layer layer) {
+    if (!context.mounted) return;
+    context.read<AddNewBloc>().add(
+      EditorSelectionChangedEvent(
+        selectedElementId: layer.id,
+        selectedElementType: layer is TextLayer ? 'text' : 'image',
+      ),
+    );
+  }
+
+  /// Writes [mutate] into the layer's meta as a single history entry.
+  bool _layerMenuMutateMeta(
+    ProImageEditorState editor,
+    String layerId,
+    void Function(Map<String, dynamic> meta) mutate,
+  ) {
+    final layers = List<Layer>.from(editor.activeLayers);
+    final index = layers.indexWhere((l) => l.id == layerId);
+    if (index < 0) return false;
+
+    final target = layers[index];
+    final meta = Map<String, dynamic>.from(target.meta ?? <String, dynamic>{});
+    mutate(meta);
+    target.meta = meta;
+
+    editor.addHistory(layers: layers);
+    editor.layerInteractionManager.selectedLayerId = layerId;
+    editor.setState(() {});
+    return true;
+  }
+
+  Future<void> _layerMenuEditLink(
+    BuildContext context,
+    ProImageEditorState editor,
+    String layerId,
+  ) async {
+    final layer = _editorFindLayer(editor, layerId);
+    if (layer == null) return;
+
+    final edit = await showMusamiLayerLinkSheet(
+      context: context,
+      initialValue: musamiLayerLink(layer),
+    );
+    if (edit.result == MusamiLayerMetaResult.cancelled) return;
+
+    final removing = edit.result == MusamiLayerMetaResult.removed;
+    final saved = _layerMenuMutateMeta(editor, layerId, (meta) {
+      if (removing) {
+        meta.remove(kMusamiLayerLinkMetaKey);
+      } else {
+        meta[kMusamiLayerLinkMetaKey] = musamiNormalizeLayerLink(edit.value);
+      }
+    });
+    if (!saved) return;
+    showAppToast(
+      removing ? 'msg_layer_link_removed'.tr : 'msg_layer_link_saved'.tr,
+      type: ToastificationType.success,
+    );
+  }
+
+  Future<void> _layerMenuEditAltText(
+    BuildContext context,
+    ProImageEditorState editor,
+    String layerId,
+  ) async {
+    final layer = _editorFindLayer(editor, layerId);
+    if (layer == null) return;
+
+    final edit = await showMusamiLayerAltTextSheet(
+      context: context,
+      initialValue: musamiLayerAltText(layer),
+    );
+    if (edit.result == MusamiLayerMetaResult.cancelled) return;
+
+    final removing = edit.result == MusamiLayerMetaResult.removed;
+    final saved = _layerMenuMutateMeta(editor, layerId, (meta) {
+      if (removing) {
+        meta.remove(kMusamiLayerAltTextMetaKey);
+      } else {
+        meta[kMusamiLayerAltTextMetaKey] = edit.value;
+      }
+    });
+    if (!saved) return;
+    showAppToast(
+      removing
+          ? 'msg_layer_alt_text_removed'.tr
+          : 'msg_layer_alt_text_saved'.tr,
+      type: ToastificationType.success,
+    );
+  }
+
+  /// Source pixels behind an image layer, used for background + palette.
+  Future<Uint8List?> _layerMenuSourceBytes(WidgetLayer layer) {
+    return musamiResolveRasterBytesForBackgroundRemoval(layer.widget);
+  }
+
+  Future<void> _layerMenuSetAsBackground(
+    BuildContext context,
+    ProImageEditorState editor,
+    String layerId,
+  ) async {
+    if (_layerMenuBusy) return;
+    final layer = _editorFindLayer(editor, layerId);
+    if (layer is! WidgetLayer) return;
+
+    final bloc = context.read<AddNewBloc>();
+    final canvas = Size(
+      bloc.state.selectedwidth ?? widget.width ?? 1080,
+      bloc.state.selectedheight ?? widget.height ?? 1080,
+    );
+
+    _layerMenuBusy = true;
+    LoadingDialog.instance.show(context, configs: editor.configs);
+    await WidgetsBinding.instance.endOfFrame;
+    Uint8List? background;
+    try {
+      final source = await _layerMenuSourceBytes(layer);
+      if (source != null && source.isNotEmpty) {
+        background = await musamiRenderCoverBackgroundAsync(
+          imageBytes: source,
+          canvasSize: canvas,
+        );
+      }
+    } finally {
+      LoadingDialog.instance.hide();
+      _layerMenuBusy = false;
+    }
+
+    if (!context.mounted) return;
+    if (background == null || background.isEmpty) {
+      showAppToast(
+        'msg_layer_background_failed'.tr,
+        type: ToastificationType.warning,
+      );
+      return;
+    }
+
+    // Remove the layer first so the picture is not shown twice, then swap the
+    // page background.
+    editor.removeLayer(layer);
+    bloc
+      ..add(EditorClearSelectionEvent())
+      ..add(SetBackgroundImageEvent(imageBytes: background));
+    showAppToast(
+      'msg_layer_background_applied'.tr,
+      type: ToastificationType.success,
+    );
+  }
+
+  Future<void> _layerMenuApplyColors(
+    BuildContext context,
+    ProImageEditorState editor,
+    String layerId,
+  ) async {
+    if (_layerMenuBusy) return;
+    final layer = _editorFindLayer(editor, layerId);
+    if (layer is! WidgetLayer) return;
+
+    _layerMenuBusy = true;
+    LoadingDialog.instance.show(context, configs: editor.configs);
+    await WidgetsBinding.instance.endOfFrame;
+    List<Color> palette = const <Color>[];
+    try {
+      final source = await _layerMenuSourceBytes(layer);
+      if (source != null && source.isNotEmpty) {
+        palette = await musamiExtractDominantColorsAsync(source);
+      }
+    } finally {
+      LoadingDialog.instance.hide();
+      _layerMenuBusy = false;
+    }
+
+    if (!context.mounted) return;
+    if (palette.isEmpty) {
+      showAppToast('msg_layer_no_colors'.tr, type: ToastificationType.warning);
+      return;
+    }
+
+    final picked = await showMusamiPagePaletteSheet(
+      context: context,
+      colors: palette,
+    );
+    if (picked == null || !context.mounted) return;
+    context.read<AddNewBloc>().add(SetBgColorEvent(color: picked));
+  }
+
+  Future<void> _layerMenuDownload(
+    BuildContext context,
+    ProImageEditorState editor,
+    String layerId,
+  ) async {
+    if (_layerMenuBusy) return;
+    final layer = _editorFindLayer(editor, layerId);
+    if (layer is! WidgetLayer) return;
+
+    // No loading overlay here: the capture mounts its own overlay entry, and an
+    // opaque entry stacked above it would stop that entry from painting.
+    _layerMenuBusy = true;
+    Uint8List? bytes;
+    try {
+      // Capture the layer's own widget: the selection border and handles live
+      // in the editor overlay, not in the layer, so they cannot leak in.
+      bytes = await musamiCaptureWidgetPng(
+        context: context,
+        content: layer.widget,
+        logicalSize: musamiEstimateLayerPaintSize(layer, editor),
+      );
+    } finally {
+      _layerMenuBusy = false;
+    }
+
+    if (!context.mounted) return;
+    if (bytes == null || bytes.isEmpty) {
+      showAppToast(
+        'msg_layer_download_failed'.tr,
+        type: ToastificationType.warning,
+      );
+      return;
+    }
+    await saveExportedDesignToGallery(
+      context,
+      bytes: bytes,
+      exportFileType: DesignExportFileType.png,
+      preferredBaseName: 'musamimuk-selection',
+    );
+  }
+
+  Future<void> _layerMenuShowInfo(
+    BuildContext context,
+    ProImageEditorState editor,
+    String layerId,
+  ) {
+    final layer = _editorFindLayer(editor, layerId);
+    if (layer == null) return Future<void>.value();
+    return showMusamiLayerInfoSheet(
+      context: context,
+      entries: _buildLayerInfoEntries(editor, layer),
+    );
+  }
+
+  /// Reports FRAME size and IMAGE size separately: with the crop-based resize
+  /// model the two are independent, and conflating them would be misleading.
+  List<MusamiLayerInfoEntry> _buildLayerInfoEntries(
+    ProImageEditorState editor,
+    Layer layer,
+  ) {
+    String number(double value) => value.toStringAsFixed(
+      value.abs() >= 100 || value == value.roundToDouble() ? 0 : 1,
+    );
+
+    final entries = <MusamiLayerInfoEntry>[];
+
+    if (layer is WidgetLayer) {
+      final frame = musamiEstimateLayerPaintSize(layer, editor);
+      final frameAspect = musamiSanitizedLayerAspect(
+        musamiWidgetLayerAspect(layer),
+      );
+      final imageAspect = musamiWidgetLayerImageAspect(layer);
+      final kind = layer.meta?['musamiLayerKind']?.toString();
+
+      entries.add(
+        MusamiLayerInfoEntry(
+          'lbl_layer_info_type'.tr,
+          kind == null || kind.isEmpty ? 'lbl_layer_type_other'.tr : kind,
+        ),
+      );
+      entries.add(
+        MusamiLayerInfoEntry(
+          'lbl_layer_info_frame_size'.tr,
+          '${number(frame.width)} × ${number(frame.height)} px',
+        ),
+      );
+      entries.add(
+        MusamiLayerInfoEntry(
+          'lbl_layer_info_frame_ratio'.tr,
+          (1 / frameAspect).toStringAsFixed(3),
+        ),
+      );
+      entries.add(
+        MusamiLayerInfoEntry(
+          'lbl_layer_info_image_ratio'.tr,
+          (1 / imageAspect).toStringAsFixed(3),
+        ),
+      );
+      final url = musamiLayerFileUrl(layer);
+      if (url != null && url.isNotEmpty) {
+        entries.add(MusamiLayerInfoEntry('lbl_layer_info_source'.tr, url));
+      }
+    } else if (layer is TextLayer) {
+      entries.add(
+        MusamiLayerInfoEntry(
+          'lbl_layer_info_type'.tr,
+          'lbl_layer_type_text'.tr,
+        ),
+      );
+      entries.add(
+        MusamiLayerInfoEntry('lbl_layer_info_text'.tr, layer.text),
+      );
+    }
+
+    entries.add(
+      MusamiLayerInfoEntry(
+        'lbl_layer_info_position'.tr,
+        '${number(layer.offset.dx)}, ${number(layer.offset.dy)}',
+      ),
+    );
+    entries.add(
+      MusamiLayerInfoEntry(
+        'lbl_layer_info_rotation'.tr,
+        '${number(layer.rotation * 180 / math.pi)}°',
+      ),
+    );
+    entries.add(
+      MusamiLayerInfoEntry(
+        'lbl_layer_info_scale'.tr,
+        '${layer.scale.toStringAsFixed(2)}×',
+      ),
+    );
+    entries.add(
+      MusamiLayerInfoEntry(
+        'lbl_layer_info_locked'.tr,
+        _editorLayerTransformLocked(layer) ? 'lbl_yes'.tr : 'lbl_no'.tr,
+      ),
+    );
+
+    final link = musamiLayerLink(layer);
+    if (link != null) {
+      entries.add(MusamiLayerInfoEntry('lbl_layer_info_link'.tr, link));
+    }
+    final altText = musamiLayerAltText(layer);
+    if (altText != null) {
+      entries.add(MusamiLayerInfoEntry('lbl_layer_info_alt_text'.tr, altText));
+    }
+    return entries;
   }
 
   Future<void> _runEditorBackgroundRemoval({
@@ -2388,6 +3765,12 @@ class _AddNewScreenState extends State<AddNewScreen> {
     required WidgetLayer layer,
   }) async {
     if (_backgroundRemovalController.isBusy) return;
+
+    final allowed = await ensureCanSpendCoins(
+      context: context,
+      feature: WalletFeatureCost.removeBackground,
+    );
+    if (!allowed || !context.mounted) return;
 
     final bytes = await musamiResolveRasterBytesForBackgroundRemoval(
       layer.widget,
@@ -2435,6 +3818,7 @@ class _AddNewScreenState extends State<AddNewScreen> {
         bytes: resultBytes,
       );
       if (!context.mounted) return;
+      context.read<WalletBloc>().add(const WalletRefreshEvent());
       showAppToast(
         'msg_bg_removal_success'.tr,
         type: ToastificationType.success,
@@ -2446,10 +3830,7 @@ class _AddNewScreenState extends State<AddNewScreen> {
     final errorMessage = _localizedBackgroundRemovalError(
       _backgroundRemovalController.state,
     );
-    showAppToast(
-      errorMessage,
-      type: ToastificationType.error,
-    );
+    showAppToast(errorMessage, type: ToastificationType.error);
     _backgroundRemovalController.reset();
   }
 
@@ -2474,7 +3855,9 @@ class _AddNewScreenState extends State<AddNewScreen> {
         : Map<String, dynamic>.from(layer.meta!);
     meta.removeWhere((k, _) => musamiIsCropMetaKey(k));
     if (decodedSize.width > 0 && decodedSize.height > 0) {
-      meta['musamiAspect'] = decodedSize.height / decodedSize.width;
+      final decoded = decodedSize.height / decodedSize.width;
+      meta[kMusamiFrameAspectMetaKey] = decoded;
+      meta[kMusamiImageAspectMetaKey] = decoded;
     }
 
     final newCore = _buildGalleryStickerWidget(
@@ -2633,14 +4016,18 @@ class _AddNewScreenState extends State<AddNewScreen> {
           await applyPicked(
             WidgetLayer(
               width: decodedSize.width,
-              scale: _kGalleryLayerDefaultScale,
+              scale: layer.scale,
               widget: _buildGalleryStickerWidget(
                 context,
                 image: imageProvider,
                 width: decodedSize.width,
                 height: decodedSize.height,
               ),
-              meta: <String, dynamic>{'musamiLayerKind': 'gallery'},
+              meta: <String, dynamic>{
+                'musamiLayerKind': 'gallery',
+                if (decodedSize.width > 0)
+                  'musamiAspect': decodedSize.height / decodedSize.width,
+              },
             ),
           );
           break;
@@ -2784,11 +4171,26 @@ class _AddNewScreenState extends State<AddNewScreen> {
                     }
                   }
 
+                  void pickCustomColor() {
+                    musamiShowLayerTextColorPicker(
+                      ctx2,
+                      title: 'lbl_border_color'.tr,
+                      initialColor: bc,
+                      onColorChanged: (c) {
+                        setState(() {
+                          bc = c;
+                          if (bw <= 0.05) bw = 2.0;
+                        });
+                        applyToEditor();
+                      },
+                    );
+                  }
+
                   return Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'Border',
+                        'lbl_borders'.tr,
                         style: AppDs.sheetTitle(
                           sheetTheme,
                           color: Colors.white,
@@ -2807,6 +4209,17 @@ class _AddNewScreenState extends State<AddNewScreen> {
                           applyToEditor();
                         },
                       ),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'lbl_border_color'.tr,
+                          style: AppDs.sheetCaption(
+                            sheetTheme,
+                            color: Colors.white.withValues(alpha: 0.7),
+                          ),
+                        ),
+                      ),
+                      SizedBox(height: AppDs.space2.v),
                       Wrap(
                         spacing: 10,
                         runSpacing: 10,
@@ -2814,7 +4227,10 @@ class _AddNewScreenState extends State<AddNewScreen> {
                           for (final c in presets)
                             InkWell(
                               onTap: () {
-                                setState(() => bc = c);
+                                setState(() {
+                                  bc = c;
+                                  if (bw <= 0.05) bw = 2.0;
+                                });
                                 applyToEditor();
                               },
                               child: Container(
@@ -2824,14 +4240,48 @@ class _AddNewScreenState extends State<AddNewScreen> {
                                   color: c,
                                   shape: BoxShape.circle,
                                   border: Border.all(
-                                    color: bc == c
+                                    color: musamiColorToArgb32(bc) ==
+                                            musamiColorToArgb32(c)
                                         ? sheetTheme.colorScheme.primary
                                         : Colors.white24,
-                                    width: bc == c ? 3 : 1,
+                                    width: musamiColorToArgb32(bc) ==
+                                            musamiColorToArgb32(c)
+                                        ? 3
+                                        : 1,
                                   ),
                                 ),
                               ),
                             ),
+                          InkWell(
+                            onTap: pickCustomColor,
+                            child: Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: const SweepGradient(
+                                  colors: [
+                                    Color(0xFFFF0000),
+                                    Color(0xFFFFFF00),
+                                    Color(0xFF00FF00),
+                                    Color(0xFF00FFFF),
+                                    Color(0xFF0000FF),
+                                    Color(0xFFFF00FF),
+                                    Color(0xFFFF0000),
+                                  ],
+                                ),
+                                border: Border.all(
+                                  color: sheetTheme.colorScheme.primary,
+                                  width: 2,
+                                ),
+                              ),
+                              child: const Icon(
+                                Icons.colorize_rounded,
+                                size: 16,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                       SizedBox(height: AppDs.space2.v),
@@ -3101,10 +4551,15 @@ class _AddNewScreenState extends State<AddNewScreen> {
           final meta = current.meta == null
               ? <String, dynamic>{}
               : Map<String, dynamic>.from(current.meta!);
-          if (!musamiLayerImageTintAppliesFilterArgb(musamiColorToArgb32(c))) {
+          final allowWhite = musamiLayerUsesSilhouetteTint(meta);
+          final argb = musamiColorToArgb32(c);
+          if (!musamiLayerImageTintAppliesFilterArgb(
+            argb,
+            allowWhite: allowWhite,
+          )) {
             meta.remove(kMusamiImageTintArgbMetaKey);
           } else {
-            meta[kMusamiImageTintArgbMetaKey] = musamiColorToArgb32(c);
+            meta[kMusamiImageTintArgbMetaKey] = argb;
           }
           final updated = musamiRebuildWidgetLayerVisuals(
             current,
@@ -3122,6 +4577,12 @@ class _AddNewScreenState extends State<AddNewScreen> {
     }
 
     final selectedForCrop = selectedWidgetLayer();
+    final supportsClip =
+        selectedForCrop != null &&
+        musamiLayerSupportsClippingMaskAction(selectedForCrop);
+    final clipActive =
+        selectedForCrop != null &&
+        musamiLayerHasActiveClippingMask(selectedForCrop.meta);
 
     return ImageContextToolbar(
       theme: Theme.of(context),
@@ -3138,6 +4599,43 @@ class _AddNewScreenState extends State<AddNewScreen> {
       onShadow: showShadowSheet,
       onDuplicate: duplicate,
       onOpacity: showOpacitySheet,
+      onClippingMask: supportsClip
+          ? () {
+              final layer = selectedWidgetLayer();
+              if (layer == null) return;
+              final ok = musamiLayerHasActiveClippingMask(layer.meta)
+                  ? musamiReleaseClippingMask(
+                      editor: editor,
+                      clipped: layer,
+                      rebuildVisuals: (content, meta) =>
+                          musamiRebuildWidgetLayerVisuals(
+                        content,
+                        meta,
+                        tuneAdjustmentItems:
+                            musamiTuneItemsFromEditor(editor),
+                      ),
+                    )
+                  : musamiApplyShapeClippingMask(
+                      editor: editor,
+                      shape: layer,
+                      rebuildVisuals: (content, meta) =>
+                          musamiRebuildWidgetLayerVisuals(
+                        content,
+                        meta,
+                        tuneAdjustmentItems:
+                            musamiTuneItemsFromEditor(editor),
+                      ),
+                    );
+              if (!ok) {
+                showAppToast(
+                  musamiLayerHasActiveClippingMask(layer.meta)
+                      ? 'msg_clipping_mask_release_failed'.tr
+                      : 'msg_clipping_mask_need_content'.tr,
+                );
+              }
+            }
+          : null,
+      clippingMaskActive: clipActive,
       onReplace: () => replace(),
       onAiRemoveBg: () {
         final layer = selectedForCrop;
@@ -3222,6 +4720,14 @@ class _AddNewScreenState extends State<AddNewScreen> {
           }
         },
         mainEditorCallbacks: MainEditorCallbacks(
+          onAfterViewInit: () {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              _syncCanvasZoomInteraction(
+                context.read<AddNewBloc>().state.canvasLocked,
+              );
+            });
+          },
           onSelectedLayerChanged: (id) {
             final editor = state.editorKey?.currentState;
             if (editor == null) return;
@@ -3233,9 +4739,7 @@ class _AddNewScreenState extends State<AddNewScreen> {
                   'adjust') {
                 return;
               }
-              context.read<AddNewBloc>().add(
-                EditorClearSelectionEvent(),
-              );
+              context.read<AddNewBloc>().add(EditorClearSelectionEvent());
               return;
             }
             final Layer? layer = editor.activeLayers.cast<Layer?>().firstWhere(
@@ -3244,9 +4748,7 @@ class _AddNewScreenState extends State<AddNewScreen> {
             );
             if (layer != null && _editorLayerInteractionBlocked(layer)) {
               editor.layerInteractionManager.removeSelectedLayer(selectedId);
-              context.read<AddNewBloc>().add(
-                EditorClearSelectionEvent(),
-              );
+              context.read<AddNewBloc>().add(EditorClearSelectionEvent());
               return;
             }
             final type = switch (layer) {
@@ -3261,9 +4763,11 @@ class _AddNewScreenState extends State<AddNewScreen> {
                 selectedElementType: type,
               ),
             );
+            _scheduleAutoSave();
           },
           onLayerTapDown: (layer) {
             if (_editorLayerInteractionBlocked(layer)) return;
+            _scheduleAutoSave();
           },
           onLayerTapUp: (layer) {
             if (_editorLayerInteractionBlocked(layer)) return;
@@ -3277,6 +4781,7 @@ class _AddNewScreenState extends State<AddNewScreen> {
             editor.editTextLayer(layer);
           },
           onImportHistoryEnd: (editor, _) {
+            _restoreImportedWidgetLayerVisuals(editor);
             _ensureImportedLayersSelectable(editor);
             if (context.mounted) {
               context.read<AddNewBloc>().add(ClearPendingDesignHistoryEvent());
@@ -3287,6 +4792,45 @@ class _AddNewScreenState extends State<AddNewScreen> {
       configs: _musamiProImageEditorConfigs(context, state),
     );
     return editor;
+  }
+
+  /// Re-applies saved visual meta to [WidgetLayer]s after a state-history import.
+  ///
+  /// Import rebuilds [WidgetLayer.widget] as a bare image (network url /
+  /// widget-record raster), which drops the [musamiComposeImageLayerVisualCore]
+  /// wrappers — so reopened designs lost user tint (e.g. recoloured shapes),
+  /// tune, border, shadow and opacity. [Layer.meta] survives export/import,
+  /// so rebuild the compose shell from it, exactly like the live editor does.
+  void _restoreImportedWidgetLayerVisuals(ProImageEditorState editor) {
+    final tuneItems = musamiTuneItemsFromEditor(editor);
+    for (final layer in editor.activeLayers) {
+      if (layer is! WidgetLayer) continue;
+      final meta = layer.meta;
+      if (meta == null || meta.isEmpty) continue;
+
+      // Import rebuilds the widget as a bare image, which would fall back to
+      // the image's own ratio. Re-apply the saved frame so a cropped/reshaped
+      // layer reopens exactly as it was saved.
+      var core = _unwrapMusamiWidgetLayerBareCore(layer.widget);
+      final frameAspect = (meta[kMusamiFrameAspectMetaKey] as num?)?.toDouble();
+      if (frameAspect != null && frameAspect.isFinite && frameAspect > 0) {
+        core = musamiFrameWidgetLayerCore(
+          musamiUnwrapLayerFrameBox(core),
+          width: layer.width ?? editor.configs.stickerEditor.initWidth,
+          aspect: frameAspect,
+          cropAlignment: musamiLayerCropAlignment(meta),
+        );
+      }
+
+      final styled = musamiComposeImageLayerVisualCore(
+        core,
+        meta,
+        tuneAdjustmentItems: tuneItems,
+      );
+      final opacity =
+          (meta['musamiOpacity'] as num?)?.toDouble().clamp(0.0, 1.0) ?? 1.0;
+      layer.widget = Opacity(opacity: opacity, child: styled);
+    }
   }
 
   /// Restores selection/transform for layers that were not intentionally locked.
@@ -3304,12 +4848,54 @@ class _AddNewScreenState extends State<AddNewScreen> {
     editor.setState(() {});
   }
 
-  /// Paints the full editor workspace (checkerboard) behind the canvas so
-  /// letterboxed areas are not an empty black void.
-  Widget _musamiEditorWorkspaceBackground({required Widget child}) {
-    return CustomPaint(
-      painter: const _CheckerboardPainter(cellSize: 12),
-      child: SizedBox.expand(child: child),
+  /// Workspace surround behind the paper.
+  ///
+  /// Solid dark by default. Soft transparency grid only when Transparent BG is on.
+  Widget _musamiEditorWorkspaceBackground({
+    required Widget child,
+    required bool showTransparencyPreview,
+  }) {
+    if (!showTransparencyPreview) {
+      return ColoredBox(
+        color: AppDs.surfaceBase,
+        child: SizedBox.expand(child: child),
+      );
+    }
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        const CustomPaint(
+          painter: _SoftTransparencyGridPainter(cellSize: 14),
+          child: SizedBox.expand(),
+        ),
+        Positioned(
+          left: 12.h,
+          bottom: 12.v,
+          child: IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.55),
+                borderRadius: BorderRadius.circular(AppDs.radiusSm.adaptSize),
+                border: Border.all(
+                  color: AppDs.accentYellow.withValues(alpha: 0.45),
+                ),
+              ),
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 10.h, vertical: 6.v),
+                child: Text(
+                  'msg_transparent_bg_on'.tr,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 11.fSize,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        SizedBox.expand(child: child),
+      ],
     );
   }
 
@@ -3334,13 +4920,9 @@ class _AddNewScreenState extends State<AddNewScreen> {
           inputHintText: 'lbl_text_editor_hint_ltr'.tr,
         ),
       ),
-      stateHistory: StateHistoryConfigs(
-        initStateHistory: redesignImport,
-      ),
+      stateHistory: StateHistoryConfigs(initStateHistory: redesignImport),
       imageGeneration: redesignImport != null
-          ? const ImageGenerationConfigs(
-              enableUseOriginalBytes: false,
-            )
+          ? const ImageGenerationConfigs(enableUseOriginalBytes: false)
           : const ImageGenerationConfigs(),
       mainEditor: MainEditorConfigs(
         enableCloseButton: false,
@@ -3349,6 +4931,17 @@ class _AddNewScreenState extends State<AddNewScreen> {
         // Hide ProImageEditor built-in bottom toolbar (paint/crop/tune/filter/blur/etc.)
         // because we render our own "Add New Design" tool grid.
         tools: const [],
+        // Always keep zoom enabled so the InteractiveViewer stays mounted and
+        // the current scale/offset survive lock toggles. Gestures are gated via
+        // [ExtendedInteractiveViewerState.setEnableInteraction] instead.
+        enableZoom: true,
+        editorMinScale: 0.25,
+        editorMaxScale: 4,
+        enableDoubleTapZoom: !state.canvasLocked,
+        boundaryMargin: const EdgeInsets.all(80),
+        mobilePanInteraction: state.canvasLocked
+            ? MobilePanInteraction.none
+            : MobilePanInteraction.move,
         // Outer [SafeArea] + scaffold [bottomNavigationBar] already handle insets.
         safeArea: const EditorSafeArea(
           top: false,
@@ -3361,7 +4954,7 @@ class _AddNewScreenState extends State<AddNewScreen> {
             final topPad = MediaQuery.paddingOf(context).top;
             return ReactiveAppbar(
               stream: rebuildStream,
-              appbarSize: Size.fromHeight(topPad + 3 + 56),
+              appbarSize: Size.fromHeight(musamiEditorAppBarHeight(topPad)),
               builder: (ctx) => _buildSimplifiedEditorAppBar(ctx, editor),
             );
           },
@@ -3375,23 +4968,42 @@ class _AddNewScreenState extends State<AddNewScreen> {
           wrapBody: (editor, rebuildStream, content) {
             return ReactiveWidget(
               stream: rebuildStream,
-              builder: (_) => _musamiEditorWorkspaceBackground(child: content),
+              builder: (_) => BlocBuilder<AddNewBloc, AddNewState>(
+                buildWhen: (prev, next) =>
+                    prev.isBackgroundTransparent !=
+                    next.isBackgroundTransparent,
+                builder: (context, editorState) =>
+                    _musamiEditorWorkspaceBackground(
+                      showTransparencyPreview:
+                          editorState.isBackgroundTransparent,
+                      child: content,
+                    ),
+              ),
             );
           },
+          // AI command bar is hosted in the Scaffold Stack (not bodyItems)
+          // so ProImageEditor's translucent GestureDetector cannot steal taps.
         ),
+        // Opaque mask over the outside-canvas region so layers cannot paint
+        // onto the dark chrome (package layers use Clip.none).
         style: MainEditorStyle(
-          background: Colors.transparent,
+          background: AppDs.surfaceBase,
+          outsideCaptureAreaLayerOpacity: 1.0,
         ),
       ),
       layerInteraction: LayerInteractionConfigs(
         // On mobile, default "auto" makes layers NOT selectable, which causes
         // single-tap to edit text layers. Force selectable so single-tap selects.
         selectable: LayerInteractionSelectable.enabled,
+        // Route two-finger pinches to canvas zoom (gesture-centered) instead of
+        // scaling/rotating the selected layer. Layer resize uses custom overlays.
+        enableMobilePinchScale: false,
+        enableMobilePinchRotate: false,
         style: LayerInteractionStyle(
           borderColor: theme.colorScheme.primary,
           strokeWidth: 1.5,
-          // Tight selection bounds — default 24px padding inflates the overlay.
-          overlayPadding: EdgeInsets.zero,
+          // Slight padding improves grab / drag for small stickers & shapes.
+          overlayPadding: const EdgeInsets.all(12),
         ),
         widgets: LayerInteractionWidgets(
           // Disable the built-in edit button so single-tap won't open edit.
@@ -3400,25 +5012,38 @@ class _AddNewScreenState extends State<AddNewScreen> {
             stream: rebuildStream,
             builder: (_) => const SizedBox.shrink(),
           ),
-          rotateScaleButton: (rebuildStream, onScaleRotateDown, onScaleRotateUp,
-                  rotation) =>
-              ReactiveWidget(
-            stream: rebuildStream,
-            builder: (_) => const SizedBox.shrink(),
-          ),
+          rotateScaleButton:
+              (rebuildStream, onScaleRotateDown, onScaleRotateUp, rotation) =>
+                  ReactiveWidget(
+                    stream: rebuildStream,
+                    builder: (_) => const SizedBox.shrink(),
+                  ),
           overlayChildBuilder: (rebuildStream, info, layer, interactions) {
             final strokeColor = theme.colorScheme.primary;
             final editorKey = state.editorKey!;
+            final editor = editorKey.currentState;
+            final canvasBodySize = editor?.sizesManager.bodySize ?? Size.zero;
+            final quickBarActions = _buildLayerQuickBarActions(
+              screenContext: context,
+              editorKey: editorKey,
+              layer: layer,
+            );
             if (layer is TextLayer &&
                 layer.interaction.enableScale &&
                 layer.meta?[kMusamiLayerLockedMetaKey] != true) {
               return ReactiveWidget(
                 stream: rebuildStream,
-                builder: (_) => MusamiTextLayerTransformOverlay(
+                builder: (_) => _wrapLayerSelectionChrome(
                   info: info,
                   layer: layer,
-                  editorKey: editorKey,
-                  strokeColor: strokeColor,
+                  canvasBodySize: canvasBodySize,
+                  actions: quickBarActions,
+                  selectionOverlay: MusamiTextLayerTransformOverlay(
+                    info: info,
+                    layer: layer,
+                    editorKey: editorKey,
+                    strokeColor: strokeColor,
+                  ),
                 ),
               );
             }
@@ -3427,40 +5052,53 @@ class _AddNewScreenState extends State<AddNewScreen> {
                 layer.meta?[kMusamiLayerLockedMetaKey] != true) {
               return ReactiveWidget(
                 stream: rebuildStream,
-                builder: (_) => MusamiWidgetLayerTransformOverlay(
-                  key: ValueKey(layer.id),
+                builder: (_) => _wrapLayerSelectionChrome(
                   info: info,
                   layer: layer,
-                  editorKey: editorKey,
-                  strokeColor: strokeColor,
-                  onApplyGeometry: (
-                    updatedLayer, {
-                    required width,
-                    required aspect,
-                    required scale,
-                    required offset,
-                  }) {
-                    final editor = editorKey.currentState;
-                    if (editor == null) return;
-                    musamiMutateWidgetLayerGeometry(
-                      editor,
-                      updatedLayer,
-                      width: width,
-                      aspect: aspect,
-                      scale: scale,
-                      offset: offset,
-                    );
-                  },
+                  canvasBodySize: canvasBodySize,
+                  actions: quickBarActions,
+                  selectionOverlay: MusamiWidgetLayerTransformOverlay(
+                    key: ValueKey(layer.id),
+                    info: info,
+                    layer: layer,
+                    editorKey: editorKey,
+                    strokeColor: strokeColor,
+                    onApplyGeometry:
+                        (
+                          updatedLayer, {
+                          required width,
+                          required aspect,
+                          required scale,
+                          required offset,
+                        }) {
+                          final ed = editorKey.currentState;
+                          if (ed == null) return;
+                          musamiMutateWidgetLayerGeometry(
+                            ed,
+                            updatedLayer,
+                            width: width,
+                            aspect: aspect,
+                            scale: scale,
+                            offset: offset,
+                          );
+                        },
+                  ),
                 ),
               );
             }
             return ReactiveWidget(
               stream: rebuildStream,
-              builder: (_) => MusamiDefaultLayerTransformOverlay(
+              builder: (_) => _wrapLayerSelectionChrome(
                 info: info,
                 layer: layer,
-                interactions: interactions,
-                strokeColor: strokeColor,
+                canvasBodySize: canvasBodySize,
+                actions: quickBarActions,
+                selectionOverlay: MusamiDefaultLayerTransformOverlay(
+                  info: info,
+                  layer: layer,
+                  interactions: interactions,
+                  strokeColor: strokeColor,
+                ),
               ),
             );
           },
@@ -3469,14 +5107,14 @@ class _AddNewScreenState extends State<AddNewScreen> {
       stickerEditor: StickerEditorConfigs(builder: _buildStickerSelector),
       textEditor: TextEditorConfigs(
         initFontSize: 32,
-        initialInputTextDirection: initialRtl
-            ? TextDirection.rtl
-            : TextDirection.ltr,
+        // RTL/LTR script mode is app-managed via align (pub.dev has no
+        // initialInputTextDirection / setInputTextDirection).
         initialTextAlign: initialRtl ? TextAlign.right : TextAlign.left,
-        arabicScriptInputHint: 'lbl_text_editor_hint_rtl'.tr,
-        initialPrimaryColor: const Color(0xFF000000),
+        // Near-black so new text is visible on the white page canvas.
+        // Input field background is light (below) so typing stays readable.
+        initialPrimaryColor: const Color(0xFF111111),
         initialSecondaryColor: const Color(0x00000000),
-        // New text: black glyphs, no box fill (transparent). Colours editable on canvas.
+        // White input on dark editor chrome; no box fill by default.
         initialBackgroundColorMode: LayerBackgroundMode.onlyColor,
         enableTapOutsideToSave: false,
         showTextAlignButton: false,
@@ -3489,13 +5127,11 @@ class _AddNewScreenState extends State<AddNewScreen> {
           background: appTheme.blueGray90004,
           appBarBackground: appTheme.blueGray90004,
           appBarColor: theme.colorScheme.onPrimary,
-          inputHintColor: theme.colorScheme.onPrimary.withValues(alpha: 0.55),
-          inputTextFieldBackground: appTheme.gray90002,
+          inputHintColor: const Color(0xFF6B7280),
+          inputTextFieldBackground: Colors.white,
           inputTextFieldBorderColor: theme.colorScheme.primary.withValues(
             alpha: 0.4,
           ),
-          inputTextFieldBorderWidth: 1.5,
-          inputTextFieldMinHeight: 180,
           inputTextFieldBorderRadius: BorderRadius.circular(16.adaptSize),
           inputTextFieldPadding: EdgeInsets.symmetric(
             horizontal: 18.h,
@@ -3503,7 +5139,6 @@ class _AddNewScreenState extends State<AddNewScreen> {
           ),
           textFieldPadding: EdgeInsets.symmetric(horizontal: 16.h),
           textFieldMargin: EdgeInsets.only(bottom: 200.v),
-          textFieldKeyboardBottomInset: kMusamiTextEditorChromeHeightLtr,
           inputCursorColor: theme.colorScheme.primary,
           textHeight: 1.35,
         ),
@@ -3609,6 +5244,9 @@ class _AddNewScreenState extends State<AddNewScreen> {
     final selectedId = context.select(
       (AddNewBloc b) => b.state.selectedElementId,
     );
+    final canvasLocked = context.select(
+      (AddNewBloc b) => b.state.canvasLocked,
+    );
 
     Layer? selectedLayer() {
       final id = selectedId;
@@ -3623,7 +5261,7 @@ class _AddNewScreenState extends State<AddNewScreen> {
     final topInset = MediaQuery.paddingOf(context).top;
 
     return PreferredSize(
-      preferredSize: Size.fromHeight(topInset + 3 + 56),
+      preferredSize: Size.fromHeight(musamiEditorAppBarHeight(topInset)),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -3631,10 +5269,10 @@ class _AddNewScreenState extends State<AddNewScreen> {
           SizedBox(height: topInset),
           ColoredBox(
             color: primary,
-            child: SizedBox(height: 3.v),
+            child: const SizedBox(height: kMusamiEditorAppBarAccentHeight),
           ),
           SizedBox(
-            height: 56,
+            height: kMusamiEditorAppBarRowHeight,
             child: ColoredBox(
               color: Colors.white,
               child: Row(
@@ -3646,7 +5284,10 @@ class _AddNewScreenState extends State<AddNewScreen> {
                       minWidth: 44,
                       minHeight: 44,
                     ),
-                    onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                    onPressed: () {
+                      _editorClearAllSelection(editor);
+                      _scaffoldKey.currentState?.openDrawer();
+                    },
                     icon: const Icon(
                       Icons.menu_rounded,
                       color: Color(0xFF424242),
@@ -3667,7 +5308,8 @@ class _AddNewScreenState extends State<AddNewScreen> {
                           _editorTopBarLabeledAction(
                             icon: Icons.filter_center_focus,
                             label: 'lbl_editor_align'.tr,
-                            onPressed: sel != null &&
+                            onPressed:
+                                sel != null &&
                                     !_editorLayerInteractionBlocked(sel)
                                 ? () => showEditorAlignArrangeSheet(
                                     context: context,
@@ -3676,7 +5318,8 @@ class _AddNewScreenState extends State<AddNewScreen> {
                                   )
                                 : null,
                             enabled:
-                                sel != null && !_editorLayerInteractionBlocked(sel),
+                                sel != null &&
+                                !_editorLayerInteractionBlocked(sel),
                           ),
                           _editorTopBarLabeledAction(
                             icon: Icons.undo_rounded,
@@ -3691,13 +5334,51 @@ class _AddNewScreenState extends State<AddNewScreen> {
                             enabled: canRedo,
                           ),
                           _editorTopBarLabeledAction(
-                            icon: Icons.auto_awesome_rounded,
-                            label: 'lbl_ai_assist'.tr,
-                            onPressed: () =>
-                                _openEditorAiAssist(context, editor),
+                            icon: Icons.zoom_out_rounded,
+                            label: 'lbl_zoom_out'.tr,
+                            onPressed: canvasLocked
+                                ? null
+                                : () => _editorZoomBy(editor, 1 / 1.25),
+                            enabled: !canvasLocked,
+                          ),
+                          _editorTopBarLabeledAction(
+                            icon: Icons.zoom_in_rounded,
+                            label: 'lbl_zoom_in'.tr,
+                            onPressed: canvasLocked
+                                ? null
+                                : () => _editorZoomBy(editor, 1.25),
+                            enabled: !canvasLocked,
+                          ),
+                          _editorTopBarLabeledAction(
+                            icon: Icons.fit_screen_rounded,
+                            label: 'lbl_zoom_reset'.tr,
+                            onPressed: canvasLocked
+                                ? null
+                                : () => editor.resetZoom(),
+                            enabled: !canvasLocked,
+                          ),
+                          _editorTopBarLabeledAction(
+                            icon: canvasLocked
+                                ? Icons.lock_rounded
+                                : Icons.lock_open_rounded,
+                            label: canvasLocked
+                                ? 'lbl_canvas_unlock'.tr
+                                : 'lbl_canvas_lock'.tr,
+                            onPressed: () {
+                              context.read<AddNewBloc>().add(
+                                ToggleCanvasLockEvent(),
+                              );
+                            },
                           ),
                         ],
                       ),
+                    ),
+                  ),
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 4.h),
+                    child: const CoinBalanceChip(
+                      compact: true,
+                      lightBackground: true,
                     ),
                   ),
                   Material(
@@ -3757,7 +5438,7 @@ class _AddNewScreenState extends State<AddNewScreen> {
 
   /// True when the user must not select or edit this layer on the canvas.
   bool _editorLayerInteractionBlocked(Layer layer) {
-    return _editorLayerTransformLocked(layer);
+    return _editorLayerTransformLocked(layer) || _editorLayerHidden(layer);
   }
 
   Layer? _editorFindLayer(ProImageEditorState editor, String id) {
@@ -3768,8 +5449,12 @@ class _AddNewScreenState extends State<AddNewScreen> {
   }
 
   bool _editorDefaultEnableEditForLayer(Layer layer) {
-    if (layer is WidgetLayer && layer.meta?['musamiLayerKind'] == 'gallery') {
-      return false;
+    if (layer is WidgetLayer) {
+      final kind = layer.meta?['musamiLayerKind']?.toString();
+      // Stickers / gallery / AI images are transformable, not text-editable.
+      if (kind == 'gallery' || kind == 'sticker' || kind == 'png') {
+        return false;
+      }
     }
     return true;
   }
@@ -3883,7 +5568,33 @@ class _AddNewScreenState extends State<AddNewScreen> {
     if (ti < 0) return;
     final target = list[ti];
     target.meta = {...?target.meta, kMusamiLayerHiddenMetaKey: hidden};
+    if (hidden) {
+      _editorClearLayerFromSelection(editor, layer.id);
+      target.interaction = target.interaction.copyWith(
+        enableMove: false,
+        enableScale: false,
+        enableRotate: false,
+        enableSelection: false,
+        enableEdit: false,
+      );
+    } else if (!_editorLayerTransformLocked(target)) {
+      target.interaction = target.interaction.copyWith(
+        enableMove: true,
+        enableScale: true,
+        enableRotate: true,
+        enableSelection: true,
+        enableEdit: _editorDefaultEnableEditForLayer(target),
+      );
+    }
+    if (target is WidgetLayer) {
+      list[ti] = musamiRebuildWidgetLayerVisuals(
+        target,
+        Map<String, dynamic>.from(target.meta ?? {}),
+        tuneAdjustmentItems: musamiTuneItemsFromEditor(editor),
+      );
+    }
     editor.addHistory(layers: list);
+    editor.setState(() {});
   }
 
   void _editorToggleLockAllTransforms(ProImageEditorState editor) {
@@ -3907,10 +5618,39 @@ class _AddNewScreenState extends State<AddNewScreen> {
     final anyVisible = editor.activeLayers.any((l) => !_editorLayerHidden(l));
     final hide = anyVisible;
     final list = List<Layer>.from(editor.activeLayers);
-    for (final layer in list) {
+    for (var i = 0; i < list.length; i++) {
+      final layer = list[i];
       layer.meta = {...?layer.meta, kMusamiLayerHiddenMetaKey: hide};
+      if (hide) {
+        layer.interaction = layer.interaction.copyWith(
+          enableMove: false,
+          enableScale: false,
+          enableRotate: false,
+          enableSelection: false,
+          enableEdit: false,
+        );
+      } else if (!_editorLayerTransformLocked(layer)) {
+        layer.interaction = layer.interaction.copyWith(
+          enableMove: true,
+          enableScale: true,
+          enableRotate: true,
+          enableSelection: true,
+          enableEdit: _editorDefaultEnableEditForLayer(layer),
+        );
+      }
+      if (layer is WidgetLayer) {
+        list[i] = musamiRebuildWidgetLayerVisuals(
+          layer,
+          Map<String, dynamic>.from(layer.meta ?? {}),
+          tuneAdjustmentItems: musamiTuneItemsFromEditor(editor),
+        );
+      }
+    }
+    if (hide) {
+      _editorClearAllSelection(editor);
     }
     editor.addHistory(layers: list);
+    editor.setState(() {});
   }
 
   void _editorToggleSelectAllLayers(ProImageEditorState editor) {
@@ -4328,7 +6068,8 @@ class _AddNewScreenState extends State<AddNewScreen> {
                                         },
                                       ),
                                       Checkbox(
-                                        value: selected &&
+                                        value:
+                                            selected &&
                                             !_editorLayerInteractionBlocked(
                                               layer,
                                             ),
@@ -4336,18 +6077,22 @@ class _AddNewScreenState extends State<AddNewScreen> {
                                             _editorLayerInteractionBlocked(
                                               layer,
                                             )
-                                                ? null
-                                                : (_) {
-                                          final mgr =
-                                              editor.layerInteractionManager;
-                                          if (selected) {
-                                            mgr.removeSelectedLayer(layer.id);
-                                          } else {
-                                            mgr.addSelectedLayer(layer.id);
-                                          }
-                                          editor.setState(() {});
-                                          setModalState(() {});
-                                        },
+                                            ? null
+                                            : (_) {
+                                                final mgr = editor
+                                                    .layerInteractionManager;
+                                                if (selected) {
+                                                  mgr.removeSelectedLayer(
+                                                    layer.id,
+                                                  );
+                                                } else {
+                                                  mgr.addSelectedLayer(
+                                                    layer.id,
+                                                  );
+                                                }
+                                                editor.setState(() {});
+                                                setModalState(() {});
+                                              },
                                       ),
                                     ],
                                   ),
@@ -4374,114 +6119,158 @@ class _AddNewScreenState extends State<AddNewScreen> {
     required int width,
     required int height,
   }) async {
-    if (!context.mounted) return;
-    if (imageBytes.isEmpty) {
-      showAppToast('msg_export_failed'.tr, type: ToastificationType.error);
-      return;
-    }
-
-    // Pro Image Editor exportStateHistory → design_data for redesign.
-    String? designData;
-    final editor = context.read<AddNewBloc>().state.editorKey?.currentState;
-    if (editor != null) {
-      designData = await musamiExportDesignStateHistory(editor);
-    }
-    if (!context.mounted) return;
-
-    final suggestedName = widget.presetName.trim().isNotEmpty
-        ? widget.presetName.trim()
-        : null;
-    final form = await showDesignSaveFormDialog(
-      context,
-      initialWidth: width,
-      initialHeight: height,
-      suggestedName: suggestedName,
-      showVisibility: true,
-      showFileType: true,
-    );
-    if (!context.mounted || form == null) return;
-
-    final encoded = await encodeDesignForUpload(
-      imageBytes,
-      width: form.width,
-      height: form.height,
-      type: form.fileType,
-      jpgQuality: form.quality,
-    );
-    if (!context.mounted) return;
-    if (encoded == null) {
-      showAppToast('msg_export_failed'.tr, type: ToastificationType.error);
-      return;
-    }
-
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      useRootNavigator: true,
-      builder: (dialogContext) => PopScope(
-        canPop: false,
-        child: AlertDialog(
-          content: Row(
-            children: [
-              SizedBox(
-                width: 28.adaptSize,
-                height: 28.adaptSize,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.5,
-                  color: theme.colorScheme.primary,
-                ),
-              ),
-              SizedBox(width: 20.h),
-              Expanded(
-                child: Text(
-                  'msg_uploading_design'.tr,
-                  style: theme.textTheme.bodyLarge?.copyWith(
-                    color: const Color(0xFF1A1A1A),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    SaveDesignResult result;
+    if (_isSavingDesign) return;
+    _isSavingDesign = true;
     try {
-      result = await DesignRepository().saveDesign(
-        imageBytes: encoded,
+      if (!context.mounted) return;
+      if (imageBytes.isEmpty) {
+        showAppToast('msg_export_failed'.tr, type: ToastificationType.error);
+        return;
+      }
+
+      // Pro Image Editor exportStateHistory → design_data for redesign.
+      String? designData;
+      final editor = context.read<AddNewBloc>().state.editorKey?.currentState;
+      if (editor != null) {
+        designData = await musamiExportDesignStateHistory(editor);
+      }
+      if (!context.mounted) return;
+
+      final suggestedName = widget.presetName.trim().isNotEmpty
+          ? widget.presetName.trim()
+          : null;
+      final form = await showDesignSaveFormDialog(
+        context,
+        initialWidth: width,
+        initialHeight: height,
+        suggestedName: suggestedName,
+        showVisibility: true,
+        showFileType: true,
+      );
+      if (!context.mounted || form == null) return;
+
+      final encoded = await encodeDesignForUpload(
+        imageBytes,
         width: form.width,
         height: form.height,
-        title: form.title,
-        visibility: form.visibility,
-        filename: form.fileType.uploadFilename,
-        designData: designData,
+        type: form.fileType,
+        jpgQuality: form.quality,
       );
-    } catch (e, _) {
-      result = SaveDesignFailure(e.toString());
-    } finally {
-      if (context.mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
+      if (!context.mounted) return;
+      if (encoded == null) {
+        showAppToast('msg_export_failed'.tr, type: ToastificationType.error);
+        return;
       }
-    }
-    if (!context.mounted) return;
 
-    switch (result) {
-      case SaveDesignSuccess():
-        if (form.fileType != DesignExportFileType.pdf) {
-          await saveExportedDesignToGallery(
-            context,
-            bytes: encoded,
-            exportFileType: form.fileType,
-            preferredBaseName: form.title,
-            quietSuccess: true,
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        useRootNavigator: true,
+        builder: (dialogContext) => PopScope(
+          canPop: false,
+          child: AlertDialog(
+            content: Row(
+              children: [
+                SizedBox(
+                  width: 28.adaptSize,
+                  height: 28.adaptSize,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+                SizedBox(width: 20.h),
+                Expanded(
+                  child: Text(
+                    'msg_uploading_design'.tr,
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      color: const Color(0xFF1A1A1A),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      SaveDesignResult result;
+      try {
+        final assetIds = <String>{
+          ...widget.generatedAssetIds,
+          if (editor != null) ...EditorAiAssetRegistry.collect(editor),
+        }.toList(growable: false);
+        final repository = DesignRepository();
+        if (widget.designId == null) {
+          result = await repository.saveDesign(
+            imageBytes: encoded,
+            width: form.width,
+            height: form.height,
+            title: form.title,
+            visibility: form.visibility,
+            filename: form.fileType.uploadFilename,
+            designData: designData,
+            assetIds: assetIds,
           );
+        } else {
+          final update = await repository.update(
+            id: widget.designId!,
+            name: form.title.trim() == widget.presetName.trim()
+                ? null
+                : form.title,
+            visibility: form.visibility == widget.designVisibility
+                ? null
+                : form.visibility,
+            imageBytes: encoded,
+            filename: form.fileType.uploadFilename,
+            width: form.width,
+            height: form.height,
+            designData: designData,
+            assetIds: assetIds,
+          );
+          result = switch (update) {
+            DesignActionSuccess() => SaveDesignSuccess(
+              id: widget.designId.toString(),
+              width: form.width,
+              height: form.height,
+              title: form.title,
+            ),
+            DesignActionFailure(:final message) => SaveDesignFailure(message),
+          };
         }
-        if (!context.mounted) return;
-        await showDesignSaveSuccessDialog(context);
-      case SaveDesignFailure(:final message):
-        showAppToast(message, type: ToastificationType.error);
+      } catch (_) {
+        result = SaveDesignFailure('Unable to save design. Please try again.');
+      } finally {
+        if (context.mounted) {
+          Navigator.of(context, rootNavigator: true).pop();
+        }
+      }
+      if (!context.mounted) return;
+
+      switch (result) {
+        case SaveDesignSuccess():
+          final draftId = _localDraftId;
+          if (draftId != null && draftId.isNotEmpty) {
+            await LocalDesignStore.instance.deleteDraft(draftId);
+            _localDraftId = null;
+          }
+          if (form.fileType != DesignExportFileType.pdf) {
+            await saveExportedDesignToGallery(
+              context,
+              bytes: encoded,
+              exportFileType: form.fileType,
+              preferredBaseName: form.title,
+              quietSuccess: true,
+            );
+          }
+          if (!context.mounted) return;
+          await showDesignSaveSuccessDialog(context);
+        case SaveDesignFailure(:final message):
+          showAppToast(message, type: ToastificationType.error);
+      }
+    } finally {
+      _isSavingDesign = false;
     }
   }
 
@@ -4582,33 +6371,29 @@ class _AddNewScreenState extends State<AddNewScreen> {
 
   Widget _buildColumnSelectSize(BuildContext context, AddNewState state) {
     final screenSize = MediaQuery.sizeOf(context);
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+    // Match new-design custom size limits (device × 8, hard-capped at 8192).
+    final maxWidthPx = (screenSize.width * 8).clamp(1.0, 8192.0);
+    final maxHeightPx = (screenSize.height * 8).clamp(1.0, 8192.0);
     return Align(
       alignment: Alignment.bottomCenter,
-      child: CanvasResizeSizePanel(
-        editorWidthPx: state.selectedwidth ?? widget.width,
-        editorHeightPx: state.selectedheight ?? widget.height,
-        maxWidthPx: screenSize.width,
-        maxHeightPx: screenSize.height,
-        initialUnit: state.canvasUnit ?? widget.unit,
-        onApply: (width, height, unit) {
-          context.read<AddNewBloc>().add(
-                ApplyCustomSizeEvent(
-                  width: width,
-                  height: height,
-                  unit: unit,
-                ),
-              );
-        },
-        onHeightSliderEnd: (width, height) {
-          context.read<AddNewBloc>().add(
-                SliderHeightValueChangedEvent(width: width, height: height),
-              );
-        },
-        onWidthSliderEnd: (width, height) {
-          context.read<AddNewBloc>().add(
-                SliderwidthtValueChangedEvent(width: width, height: height),
-              );
-        },
+      child: Padding(
+        // Lift only this panel above the keyboard; scaffold itself does not resize.
+        padding: EdgeInsets.only(bottom: keyboardInset),
+        child: CanvasResizeSizePanel(
+          editorWidthPx: state.selectedwidth ?? widget.width,
+          editorHeightPx: state.selectedheight ?? widget.height,
+          maxWidthPx: maxWidthPx,
+          maxHeightPx: maxHeightPx,
+          initialUnit: state.canvasUnit ?? widget.unit,
+          isApplying: state.isResizingCanvas,
+          onApply: (width, height, unit) {
+            FocusScope.of(context).unfocus();
+            context.read<AddNewBloc>().add(
+              ApplyCustomSizeEvent(width: width, height: height, unit: unit),
+            );
+          },
+        ),
       ),
     );
   }
@@ -4789,7 +6574,7 @@ class _AddNewScreenState extends State<AddNewScreen> {
           final c = _swatchColors[index];
           final isSelected = c == null
               ? state.isBackgroundTransparent &&
-                  (state.selectedBgColor?.a ?? 0) == 0
+                    (state.selectedBgColor?.a ?? 0) == 0
               : state.selectedBgColor == c;
           return GestureDetector(
             onTap: () {
@@ -4926,21 +6711,24 @@ class _AddNewScreenState extends State<AddNewScreen> {
       Future<void> addDecodedLayer() async {
         final editor = editorKey.currentState;
         if (editor == null) return;
-        final body = editor.sizesManager.bodySize;
-        final canvasSize = body.isEmpty || body == Size.infinite
-            ? MediaQuery.sizeOf(stableContext)
-            : body;
-        final center = Offset(canvasSize.width / 2, canvasSize.height / 2);
+        final canvasSize = musamiEditorCanvasSize(
+          editor,
+          fallback: MediaQuery.sizeOf(stableContext),
+        );
         final layerW = decodedSize.width;
         final layerH = decodedSize.height;
-        final s = _kGalleryLayerDefaultScale;
+        // Offset.zero is the canvas center (layer coords are body-centered).
+        final s = musamiInsertedImageScale(
+          intrinsic: Size(layerW, layerH),
+          canvas: canvasSize,
+        );
         editor.addLayer(
           WidgetLayer(
             width: layerW,
             scale: s,
             // Allow user to zoom/resize the sticker (don't lock max size).
-            boxConstraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-            offset: center - Offset(layerW * s / 2, layerH * s / 2),
+            boxConstraints: kMusamiWidgetLayerBoxConstraints,
+            offset: Offset.zero,
             interaction: LayerInteraction(enableEdit: false),
             widget: _buildGalleryStickerWidget(
               stableContext,
@@ -4950,7 +6738,9 @@ class _AddNewScreenState extends State<AddNewScreen> {
             ),
             meta: <String, dynamic>{
               'musamiLayerKind': 'gallery',
-              if (layerW > 0) 'musamiAspect': layerH / layerW,
+              // Frame and image start identical; only the frame changes later.
+              if (layerW > 0) kMusamiFrameAspectMetaKey: layerH / layerW,
+              if (layerW > 0) kMusamiImageAspectMetaKey: layerH / layerW,
             },
           ),
         );
@@ -4984,6 +6774,10 @@ class _AddNewScreenState extends State<AddNewScreen> {
     return _FullScreenStickerSelector(
       setLayer: setLayer,
       scrollController: scrollController,
+      canvasSize: () {
+        final editor = context.read<AddNewBloc>().state.editorKey?.currentState;
+        return musamiEditorCanvasSize(editor);
+      },
     );
   }
 }
@@ -4992,10 +6786,12 @@ class _AddNewScreenState extends State<AddNewScreen> {
 class _FullScreenStickerSelector extends StatefulWidget {
   final void Function(WidgetLayer widget) setLayer;
   final ScrollController scrollController;
+  final Size Function() canvasSize;
 
   const _FullScreenStickerSelector({
     required this.setLayer,
     required this.scrollController,
+    required this.canvasSize,
   });
 
   @override
@@ -5112,14 +6908,18 @@ class _FullScreenStickerSelectorState
                     widget.setLayer(
                       WidgetLayer(
                         width: decodedSize.width,
-                        scale: _AddNewScreenState._kGalleryLayerDefaultScale,
-                        boxConstraints: const BoxConstraints(
-                          minWidth: 48,
-                          minHeight: 48,
+                        scale: musamiInsertedImageScale(
+                          intrinsic: decodedSize,
+                          canvas: widget.canvasSize(),
                         ),
+                        offset: Offset.zero,
+                        boxConstraints: kMusamiWidgetLayerBoxConstraints,
                         interaction: LayerInteraction(enableEdit: false),
-                        meta: const <String, dynamic>{
+                        meta: <String, dynamic>{
                           'musamiLayerKind': 'gallery',
+                          if (decodedSize.width > 0)
+                            'musamiAspect':
+                                decodedSize.height / decodedSize.width,
                         },
                         widget: SizedBox(
                           width: decodedSize.width,
@@ -5277,10 +7077,7 @@ class _FullScreenStickerSelectorState
                       meta: const <String, dynamic>{
                         'musamiLayerKind': 'sticker',
                       },
-                      widget: _buildStickerWidget(
-                        stickerType,
-                        stickerIndex,
-                      ),
+                      widget: _buildStickerWidget(stickerType, stickerIndex),
                     ),
                   );
                 },
@@ -5533,10 +7330,7 @@ class _ScreenColorPickerContent extends StatelessWidget {
             icon: Icon(Icons.colorize, size: 22.adaptSize),
             label: Text(
               'lbl_start_color_pick'.tr,
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 14.fSize,
-              ),
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14.fSize),
             ),
           ),
         ),
@@ -6041,7 +7835,87 @@ class _BlobPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-/// Checkerboard pattern for transparency preview
+/// Compact status strip shown above the editor toolbar while transparent BG is on.
+class _TransparentBgStatusBar extends StatelessWidget {
+  const _TransparentBgStatusBar({required this.onRestore});
+
+  final VoidCallback onRestore;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        height: 48.v,
+        padding: EdgeInsets.symmetric(horizontal: AppDs.space3.h),
+        decoration: BoxDecoration(
+          color: AppDs.surfaceRaised,
+          borderRadius: BorderRadius.circular(AppDs.radiusMd.adaptSize),
+          border: Border.all(color: AppDs.accentYellow.withValues(alpha: 0.55)),
+        ),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6.adaptSize),
+              child: SizedBox(
+                width: 28.adaptSize,
+                height: 28.adaptSize,
+                child: const CustomPaint(
+                  painter: _CheckerboardPainter(cellSize: 5),
+                ),
+              ),
+            ),
+            SizedBox(width: AppDs.space2.h),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'msg_transparent_bg_on'.tr,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      color: AppDs.textOnDarkPrimary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  Text(
+                    'msg_transparent_bg_hint'.tr,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: AppDs.textOnDarkSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            TextButton(
+              onPressed: onRestore,
+              style: TextButton.styleFrom(
+                foregroundColor: AppDs.accentYellow,
+                padding: EdgeInsets.symmetric(horizontal: 10.h),
+                minimumSize: Size(0, 36.v),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text(
+                'lbl_restore_background'.tr,
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: AppDs.accentYellow,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Classic high-contrast checkerboard for small UI chips / swatches.
 class _CheckerboardPainter extends CustomPainter {
   const _CheckerboardPainter({this.cellSize = 6});
 
@@ -6064,6 +7938,35 @@ class _CheckerboardPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _CheckerboardPainter oldDelegate) {
+    return oldDelegate.cellSize != cellSize;
+  }
+}
+
+/// Soft dark grid for the editor surround when Transparent BG is enabled.
+class _SoftTransparencyGridPainter extends CustomPainter {
+  const _SoftTransparencyGridPainter({this.cellSize = 14});
+
+  final double cellSize;
+
+  static const Color _a = Color(0xFF2A3038);
+  static const Color _b = Color(0xFF343B45);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paintA = Paint()..color = _a;
+    final paintB = Paint()..color = _b;
+    canvas.drawRect(Offset.zero & size, paintA);
+    for (var y = 0.0; y < size.height; y += cellSize) {
+      for (var x = 0.0; x < size.width; x += cellSize) {
+        final isAlt = ((x ~/ cellSize) + (y ~/ cellSize)) % 2 == 0;
+        if (!isAlt) continue;
+        canvas.drawRect(Rect.fromLTWH(x, y, cellSize, cellSize), paintB);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _SoftTransparencyGridPainter oldDelegate) {
     return oldDelegate.cellSize != cellSize;
   }
 }

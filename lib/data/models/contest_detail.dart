@@ -49,6 +49,23 @@ class ContestDetail {
     }
     final countdownRaw = payload['countdown'] ?? contestMap['countdown'];
     final prizeRaw = payload['prize'] ?? contestMap['prize'];
+    ContestPrize? prize;
+    if (prizeRaw is Map) {
+      prize = ContestPrize.fromJson(prizeRaw);
+    }
+    // Flat API shape: prize_amount + prize_currency on the contest object.
+    prize ??= contest.prize;
+    if (prize == null || prize.displayText().isEmpty) {
+      final amount = payload['prize_amount'] ?? contestMap['prize_amount'];
+      final currency =
+          payload['prize_currency'] ?? contestMap['prize_currency'];
+      if (amount != null || currency != null) {
+        prize = ContestPrize.fromJson(<String, dynamic>{
+          'prize_amount': amount,
+          'prize_currency': currency,
+        });
+      }
+    }
     final stats = ContestSubmissionStats.fromJsonMap(payload);
     return ContestDetail(
       contest: contest,
@@ -57,7 +74,7 @@ class ContestDetail {
           ? ContestCountdown.fromJson(countdownRaw)
           : contest.countdown,
       stats: stats.hasAny ? stats : ContestSubmissionStats.fromContestItem(contest),
-      prize: prizeRaw != null ? ContestPrize.fromJson(prizeRaw) : contest.prize,
+      prize: prize,
       participantsCount: parseOptionalCount(payload, const [
         'participants_count',
         'joined_count',

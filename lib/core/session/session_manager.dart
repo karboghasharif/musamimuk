@@ -6,6 +6,7 @@ import 'package:toastification/toastification.dart';
 import '../utils/app_toast.dart';
 import '../utils/navigator_service.dart';
 import '../utils/pref_utils.dart';
+import '../../data/models/wallet_models.dart';
 import '../../localization/app_localization.dart';
 import '../../routes/app_routes.dart';
 import 'app_route_observer.dart';
@@ -30,10 +31,18 @@ class SessionManager {
   bool _handlingExpiry = false;
   PendingNavigation? _pendingNavigation;
   DateTime? _lastGuestPromptAt;
+  DateTime? _lastInsufficientCoinsPromptAt;
 
   /// Presentation-layer hook that shows the "create a free account" prompt.
   /// Registered from the widget tree so this core class stays UI-agnostic.
   void Function(String message)? guestForbiddenHandler;
+
+  /// Presentation-layer hook for HTTP 402 / insufficient coins.
+  void Function(InsufficientCoinsInfo info)? insufficientCoinsHandler;
+
+  /// Called after auth is cleared (logout / session expiry) so UI can reset
+  /// in-memory wallet state.
+  void Function()? authClearedHandler;
 
   /// True while a session-expiry redirect is in progress.
   bool get isHandlingExpiry => _handlingExpiry;
@@ -65,10 +74,17 @@ class SessionManager {
     AppRoutes.profileScreen,
     AppRoutes.changePasswordScreen,
     AppRoutes.screen18MyDesignsScreen,
+    AppRoutes.openDesignDeepLinkScreen,
     AppRoutes.favoritesScreen,
     AppRoutes.notificationsScreen,
     AppRoutes.contestMySubmissionsScreen,
     AppRoutes.screen1SubcriptionScreen,
+    AppRoutes.coinStoreScreen,
+    AppRoutes.walletTransactionsScreen,
+    AppRoutes.aiStudioImageScreen,
+    AppRoutes.aiStudioDesignScreen,
+    AppRoutes.aiStudioChatScreen,
+    AppRoutes.aiStudioVisionScreen,
   };
 
   bool isAuthEndpoint(String path) {
@@ -130,6 +146,15 @@ class SessionManager {
     _pendingNavigation = PendingNavigation(route: route, arguments: args);
   }
 
+  /// Store a deep-link / feature destination for after a successful login.
+  void setPendingNavigation(String route, {dynamic arguments}) {
+    if (_nonRestorableRoutes.contains(route)) return;
+    _pendingNavigation = PendingNavigation(
+      route: route,
+      arguments: arguments,
+    );
+  }
+
   /// Consumes and clears the pending post-login navigation target.
   PendingNavigation? takePendingNavigation() {
     final pending = _pendingNavigation;
@@ -145,6 +170,7 @@ class SessionManager {
   Future<void> logout({bool callApi = false}) async {
     _pendingNavigation = null;
     await PrefUtils().clearAuth();
+    authClearedHandler?.call();
     _navigateToLogin();
   }
 
@@ -160,6 +186,7 @@ class SessionManager {
     try {
       rememberCurrentRouteAsPending();
       await PrefUtils().clearAuth();
+      authClearedHandler?.call();
 
       if (showMessage) {
         final text = (message != null && message.trim().isNotEmpty)
@@ -210,6 +237,42 @@ class SessionManager {
     // leaving their loader stuck.
     Future<void>.delayed(const Duration(milliseconds: 350), () {
       if (!PrefUtils().isGuestAccount()) return;
+      final scheduler = SchedulerBinding.instance;
+      if (scheduler.schedulerPhase == SchedulerPhase.idle) {
+        run();
+      } else {
+        scheduler.addPostFrameCallback((_) => run());
+      }
+    });
+  }
+
+  /// Not enough coins for a paid feature (HTTP 402). Debounced prompt → store.
+  void handleInsufficientCoins(InsufficientCoinsInfo info) {
+    if (PrefUtils().isGuestAccount()) {
+      handleGuestForbidden(message: info.message);
+      return;
+    }
+    final now = DateTime.now();
+    if (_lastInsufficientCoinsPromptAt != null &&
+        now.difference(_lastInsufficientCoinsPromptAt!) <
+            const Duration(seconds: 2)) {
+      return;
+    }
+    _lastInsufficientCoinsPromptAt = now;
+
+    final handler = insufficientCoinsHandler;
+    void run() {
+      if (handler != null) {
+        handler(info);
+      } else {
+        final text = info.message.trim().isNotEmpty
+            ? info.message.trim()
+            : AppLocalization.translate('msg_insufficient_coins');
+        _showToast(text, ToastificationType.warning);
+      }
+    }
+
+    Future<void>.delayed(const Duration(milliseconds: 350), () {
       final scheduler = SchedulerBinding.instance;
       if (scheduler.schedulerPhase == SchedulerPhase.idle) {
         run();

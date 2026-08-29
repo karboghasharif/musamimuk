@@ -1,6 +1,9 @@
 import 'dart:convert';
 import 'dart:math';
+import 'dart:ui' show Offset;
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../session/secure_token_storage.dart';
 
 class PrefUtils {
   PrefUtils() {
@@ -9,9 +12,22 @@ class PrefUtils {
     });
   }
   static SharedPreferences? _sharedPreferences;
+  static String? _tokenCache;
+
   Future<void> init() async {
     _sharedPreferences ??= await SharedPreferences.getInstance();
-    print('SharedPreference Initialized');
+    final secureStorage = SecureTokenStorage.instance;
+    _tokenCache = await secureStorage.readToken();
+
+    // One-time migration from legacy SharedPreferences token storage.
+    final legacyToken = _sharedPreferences?.getString(_keyToken);
+    if ((_tokenCache == null || _tokenCache!.isEmpty) &&
+        legacyToken != null &&
+        legacyToken.isNotEmpty) {
+      await secureStorage.writeToken(legacyToken);
+      _tokenCache = legacyToken;
+    }
+    await _sharedPreferences?.remove(_keyToken);
   }
 
   void clearPreferencesData() async {
@@ -35,13 +51,17 @@ class PrefUtils {
   static const String _keyLanguageCode = 'language_code';
   static const String _keyRememberSession = 'remember_session';
   static const String _keySavedLoginEmail = 'saved_login_email';
+
   /// Stable per-install identifier used to start/resume a backend guest session.
   static const String _keyDeviceId = 'device_id';
-  /// Local home access without API token: `guest` or `google` (server has no Google OAuth yet).
+
+  /// Local home access without API token: guest / google / apple
+  /// (backend has no social OAuth exchange yet).
   static const String _keyOfflineHomeKind = 'offline_home_kind';
 
   static const String offlineHomeKindGuest = 'guest';
   static const String offlineHomeKindGoogle = 'google';
+  static const String offlineHomeKindApple = 'apple';
 
   /// When `false`, a cold start clears persisted auth so the user must sign in again.
   /// Defaults to `true` when unset so existing installs keep their session.
@@ -106,17 +126,17 @@ class PrefUtils {
   }
 
   Future<void> setToken(String token) async {
-    final prefs = _sharedPreferences ?? await SharedPreferences.getInstance();
-    _sharedPreferences ??= prefs;
-    await prefs.setString(_keyToken, token);
+    final normalized = token.trim();
+    if (normalized.isEmpty) {
+      await removeToken();
+      return;
+    }
+    await SecureTokenStorage.instance.writeToken(normalized);
+    _tokenCache = normalized;
   }
 
   String? getToken() {
-    try {
-      return _sharedPreferences?.getString(_keyToken);
-    } catch (e) {
-      return null;
-    }
+    return _tokenCache;
   }
 
   /// Whether a non-empty auth token is stored (user can call authenticated APIs).
@@ -171,7 +191,9 @@ class PrefUtils {
 
   bool hasOfflineHomeAccess() {
     final k = getOfflineHomeKind();
-    return k == offlineHomeKindGuest || k == offlineHomeKindGoogle;
+    return k == offlineHomeKindGuest ||
+        k == offlineHomeKindGoogle ||
+        k == offlineHomeKindApple;
   }
 
   /// True when the current session is a guest.
@@ -217,15 +239,41 @@ class PrefUtils {
     await removeToken();
     await clearUserSession();
     await prefs.setString(_keyOfflineHomeKind, offlineHomeKindGuest);
-    await setUserSession({
-      'id': 0,
-      'name': localizedGuestName,
-      'email': '',
-    });
+    await setUserSession({'id': 0, 'name': localizedGuestName, 'email': ''});
   }
 
   /// After Google sign-in when the API cannot exchange tokens yet: local profile only.
   Future<void> setGoogleOfflineHomeSession({
+    required String? displayName,
+    required String? email,
+    String? photoUrl,
+  }) {
+    return setSocialOfflineHomeSession(
+      kind: offlineHomeKindGoogle,
+      fallbackName: 'Google',
+      displayName: displayName,
+      email: email,
+      photoUrl: photoUrl,
+    );
+  }
+
+  /// After Apple sign-in when the API cannot exchange tokens yet: local profile only.
+  Future<void> setAppleOfflineHomeSession({
+    required String? displayName,
+    required String? email,
+  }) {
+    return setSocialOfflineHomeSession(
+      kind: offlineHomeKindApple,
+      fallbackName: 'Apple',
+      displayName: displayName,
+      email: email,
+    );
+  }
+
+  /// Shared offline social session (no bearer token until backend OAuth exists).
+  Future<void> setSocialOfflineHomeSession({
+    required String kind,
+    required String fallbackName,
     required String? displayName,
     required String? email,
     String? photoUrl,
@@ -234,16 +282,18 @@ class PrefUtils {
     _sharedPreferences ??= prefs;
     await removeToken();
     await clearUserSession();
-    await prefs.setString(_keyOfflineHomeKind, offlineHomeKindGoogle);
+    await prefs.setString(_keyOfflineHomeKind, kind);
     final name = (displayName?.trim().isNotEmpty == true)
         ? displayName!.trim()
         : (email?.trim().isNotEmpty == true ? email!.trim() : null);
-    final resolvedName = (name != null && name.isNotEmpty) ? name : 'Google';
+    final resolvedName =
+        (name != null && name.isNotEmpty) ? name : fallbackName;
     await setUserSession({
       'id': 0,
       'name': resolvedName,
       'email': email?.trim().isNotEmpty == true ? email!.trim() : null,
       'image': photoUrl?.trim().isNotEmpty == true ? photoUrl!.trim() : null,
+      'auth_provider': kind,
     });
   }
 
@@ -254,9 +304,9 @@ class PrefUtils {
   }
 
   Future<void> removeToken() async {
-    final prefs = _sharedPreferences ?? await SharedPreferences.getInstance();
-    _sharedPreferences ??= prefs;
-    await prefs.remove(_keyToken);
+    await SecureTokenStorage.instance.deleteToken();
+    _tokenCache = null;
+    await _sharedPreferences?.remove(_keyToken);
   }
 
   /// Saves user session (from login or register). Pass a map with id, name, email, etc.
@@ -289,6 +339,28 @@ class PrefUtils {
     await removeToken();
     await clearUserSession();
     await clearOfflineHomeSession();
+  }
+
+  static const String _keyEditorFabDx = 'editor_fab_dx';
+  static const String _keyEditorFabDy = 'editor_fab_dy';
+
+  /// Last user-dragged position of the editor AI FAB (logical pixels).
+  Offset? getEditorFabOffset() {
+    try {
+      final dx = _sharedPreferences?.getDouble(_keyEditorFabDx);
+      final dy = _sharedPreferences?.getDouble(_keyEditorFabDy);
+      if (dx == null || dy == null) return null;
+      return Offset(dx, dy);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> setEditorFabOffset(Offset offset) async {
+    final prefs = _sharedPreferences ?? await SharedPreferences.getInstance();
+    _sharedPreferences ??= prefs;
+    await prefs.setDouble(_keyEditorFabDx, offset.dx);
+    await prefs.setDouble(_keyEditorFabDy, offset.dy);
   }
 
   static String? _encodeSession(Map<String, dynamic> json) {

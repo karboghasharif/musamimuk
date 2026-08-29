@@ -15,12 +15,14 @@ class Screen9BackgroundColorBloc
     Screen9BackgroundColorInitialEvent event,
     Emitter<Screen9BackgroundColorState> emit,
   ) async {
-    emit(state.copyWith(
-      edittextController: TextEditingController(),
-      edittextoneController: TextEditingController(),
-      edittexttwoController: TextEditingController(),
-      edittextthreeController: TextEditingController(),
-      edittextfourController: TextEditingController(),
-    ));
+    emit(
+      state.copyWith(
+        edittextController: TextEditingController(),
+        edittextoneController: TextEditingController(),
+        edittexttwoController: TextEditingController(),
+        edittextthreeController: TextEditingController(),
+        edittextfourController: TextEditingController(),
+      ),
+    );
   }
 }

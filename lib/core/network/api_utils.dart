@@ -46,28 +46,30 @@ String apiSiteOrigin() {
 
 /// Resolves `file_url`, `image_url`, or `file_path` from JSON to a loadable URL.
 String apiResolveDesignFileUrl(Map<String, dynamic> json) {
-  for (final key in ['file_url', 'image_url', 'banner_url', 'thumbnail_url']) {
-    final url = json[key]?.toString().trim();
-    if (url != null && url.isNotEmpty) {
-      if (url.startsWith('http://') || url.startsWith('https://')) {
-        return url;
-      }
+  String resolveToAbsolute(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return trimmed;
+    }
+    final origin = apiSiteOrigin();
+    final clean = trimmed.replaceFirst(RegExp(r'^/+'), '');
+    return '$origin/$clean';
+  }
+
+  for (final key in [
+    'file_url',
+    'image_url',
+    'banner_url',
+    'thumbnail_url',
+    'file_path',
+  ]) {
+    final raw = json[key]?.toString().trim();
+    if (raw != null && raw.isNotEmpty) {
+      return resolveToAbsolute(raw);
     }
   }
-  final fileUrl = json['file_url']?.toString().trim();
-  if (fileUrl != null && fileUrl.isNotEmpty) {
-    return fileUrl;
-  }
-  final filePath = json['file_path']?.toString().trim();
-  if (filePath == null || filePath.isEmpty) {
-    return fileUrl ?? '';
-  }
-  if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
-    return filePath;
-  }
-  final origin = apiSiteOrigin();
-  final clean = filePath.replaceFirst(RegExp(r'^/+'), '');
-  return '$origin/$clean';
+
+  return '';
 }
 
 /// Legacy helper kept for call sites; server files are served at `/storage/...`.
@@ -183,6 +185,10 @@ String _apiErrorForStatus(int? status, String? bodyMessage) {
       return bodyMessage?.isNotEmpty == true
           ? bodyMessage!
           : _apiErrorText('msg_session_expired');
+    case 402:
+      return bodyMessage?.isNotEmpty == true
+          ? bodyMessage!
+          : _apiErrorText('msg_insufficient_coins');
     case 403:
       return bodyMessage?.isNotEmpty == true
           ? bodyMessage!
@@ -250,6 +256,7 @@ String _apiErrorText(String key) {
   return switch (key) {
     'msg_session_expired' =>
       'Your session has expired. Please log in again.',
+    'msg_insufficient_coins' => 'Not enough coins.',
     'msg_error_forbidden' =>
       'You do not have permission to perform this action.',
     'msg_error_not_found' => 'The requested resource was not found.',

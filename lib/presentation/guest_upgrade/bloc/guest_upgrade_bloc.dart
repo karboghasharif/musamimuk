@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/app_export.dart';
 import '../../../data/repositories/auth_repository.dart';
+import '../../wallet/wallet_auth_sync.dart';
 
 part 'guest_upgrade_event.dart';
 part 'guest_upgrade_state.dart';
@@ -93,6 +94,7 @@ class GuestUpgradeBloc extends Bloc<GuestUpgradeEvent, GuestUpgradeState> {
         if (data.user != null) {
           await prefs.setUserSession(data.user!.toJson());
         }
+        syncWalletAfterAuth(walletFromAuth: data.wallet);
         emit(state.copyWith(
           isLoading: false,
           errorMessage: null,

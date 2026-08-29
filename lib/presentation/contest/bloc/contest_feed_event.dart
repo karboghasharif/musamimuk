@@ -19,6 +19,25 @@ class ContestFeedLoadMoreEvent extends ContestFeedEvent {
   const ContestFeedLoadMoreEvent();
 }
 
+class ContestFeedSortChangedEvent extends ContestFeedEvent {
+  const ContestFeedSortChangedEvent(this.sort);
+
+  /// `recent` or `likes`
+  final String sort;
+
+  @override
+  List<Object?> get props => [sort];
+}
+
+class ContestFeedFeaturedFilterEvent extends ContestFeedEvent {
+  const ContestFeedFeaturedFilterEvent(this.featuredOnly);
+
+  final bool featuredOnly;
+
+  @override
+  List<Object?> get props => [featuredOnly];
+}
+
 class ContestFeedToggleLikeEvent extends ContestFeedEvent {
   const ContestFeedToggleLikeEvent(this.submissionId);
 
@@ -28,15 +47,30 @@ class ContestFeedToggleLikeEvent extends ContestFeedEvent {
   List<Object?> get props => [submissionId];
 }
 
-class ContestFeedShareRecordedEvent extends ContestFeedEvent {
-  const ContestFeedShareRecordedEvent({
+class ContestFeedShareEvent extends ContestFeedEvent {
+  const ContestFeedShareEvent({
     required this.submissionId,
-    this.sharesCount,
+    this.channel,
+    this.source = 'contest_feed',
   });
 
   final int submissionId;
-  final int? sharesCount;
+  final String? channel;
+  final String source;
 
   @override
-  List<Object?> get props => [submissionId, sharesCount];
+  List<Object?> get props => [submissionId, channel, source];
+}
+
+class ContestFeedRecordViewEvent extends ContestFeedEvent {
+  const ContestFeedRecordViewEvent(this.submissionId);
+
+  final int submissionId;
+
+  @override
+  List<Object?> get props => [submissionId];
+}
+
+class ContestFeedClearErrorEvent extends ContestFeedEvent {
+  const ContestFeedClearErrorEvent();
 }

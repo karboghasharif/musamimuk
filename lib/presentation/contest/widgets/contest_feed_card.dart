@@ -5,7 +5,6 @@ import '../../../core/app_export.dart';
 import '../../../core/utils/app_toast.dart';
 import '../../../core/utils/contest_feed_share.dart';
 import '../../../data/models/contest_submission.dart';
-import '../../../data/repositories/contest_repository.dart';
 import 'contest_image_viewer.dart';
 
 class ContestFeedCard extends StatefulWidget {
@@ -13,15 +12,19 @@ class ContestFeedCard extends StatefulWidget {
     super.key,
     required this.submission,
     required this.onLike,
-    required this.onShareRecorded,
+    required this.onShare,
+    required this.onOpenPreview,
     this.isLiking = false,
+    this.isSharing = false,
     this.onOpenContest,
   });
 
   final ContestSubmission submission;
   final VoidCallback onLike;
-  final void Function(int? sharesCount) onShareRecorded;
+  final VoidCallback onShare;
+  final VoidCallback onOpenPreview;
   final bool isLiking;
+  final bool isSharing;
   final VoidCallback? onOpenContest;
 
   @override
@@ -42,89 +45,17 @@ class _ContestFeedCardState extends State<ContestFeedCard> {
         url.contains('/video/');
   }
 
-  Future<void> _share() async {
-    final url = ContestFeedShare.shareUrl(
-      contestId: s.contestId,
-      submissionId: s.id,
-    );
-    final contestTitle = s.contestTitle?.trim().isNotEmpty == true
-        ? s.contestTitle!.trim()
-        : 'lbl_contest'.tr;
-    final submitter = s.submitterName?.trim().isNotEmpty == true
-        ? s.submitterName!.trim()
-        : 'lbl_participant'.tr;
-    final message = ContestFeedShare.shareMessage(
-      contestTitle: contestTitle,
-      submitterName: submitter,
-      url: url,
-    );
-
-    await showAppModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) {
-        return AppDarkSheetTheme(
-          child: AppSheetPagePadding(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'lbl_share'.tr,
-                  style: AppDs.sheetTitle(theme, color: Colors.white),
-                ),
-                SizedBox(height: AppDs.space4.v),
-                _ShareOptionTile(
-                  icon: Icons.ios_share_outlined,
-                  label: 'lbl_share_via'.tr,
-                  onTap: () async {
-                    Navigator.of(ctx).pop();
-                    await ContestFeedShare.shareNative(
-                      message: message,
-                      subject: contestTitle,
-                    );
-                    await _recordShare();
-                  },
-                ),
-                _ShareOptionTile(
-                  icon: Icons.link_outlined,
-                  label: 'lbl_copy_link'.tr,
-                  onTap: () async {
-                    Navigator.of(ctx).pop();
-                    await ContestFeedShare.copyLink(url);
-                    showAppToast(
-                      'msg_link_copied'.tr,
-                      type: ToastificationType.success,
-                    );
-                    await _recordShare();
-                  },
-                ),
-                SizedBox(height: AppDs.space2.v),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _recordShare() async {
-    final result = await ContestRepository.instance.recordSubmissionShare(s.id);
-    if (result is ContestLikeResult) {
-      widget.onShareRecorded(result.likesCount);
-    } else if (result is ContestMessageResult) {
-      widget.onShareRecorded(null);
-    }
-  }
-
   void _openPreview() {
     final url = s.imageUrl.trim();
     if (url.isEmpty) return;
+    widget.onOpenPreview();
     showContestImageSheet(
       context,
       imageUrl: url,
-      title: s.contestTitle,
-      subtitle: s.submitterName,
+      title: s.contestDisplayName.isNotEmpty
+          ? s.contestDisplayName
+          : s.contestTitle,
+      subtitle: s.designerName.isNotEmpty ? s.designerName : s.submitterName,
     );
   }
 
@@ -134,15 +65,16 @@ class _ContestFeedCardState extends State<ContestFeedCard> {
     final liked = s.isLiked ?? false;
     final likes = s.likesCount ?? 0;
     final shares = s.sharesCount ?? 0;
-    final avatarUrl = s.submitterAvatarUrl ?? '';
-    final name = s.submitterName?.trim().isNotEmpty == true
-        ? s.submitterName!.trim()
+    final views = s.viewsCount ?? 0;
+    final avatarUrl = s.submitterAvatarUrl ?? s.userSummary?.avatarUrl ?? '';
+    final name = s.designerName.isNotEmpty
+        ? s.designerName
         : 'lbl_participant'.tr;
-    final contestTitle = s.contestTitle?.trim().isNotEmpty == true
-        ? s.contestTitle!.trim()
+    final contestTitle = s.contestDisplayName.isNotEmpty
+        ? s.contestDisplayName
         : 'lbl_contest'.tr;
     final timestamp = formatRelativeTimestamp(s.createdAt);
-    final description = s.description?.trim();
+    final comments = s.displayComments;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 220),
@@ -181,16 +113,17 @@ class _ContestFeedCardState extends State<ContestFeedCard> {
                         SizedBox(height: 2.v),
                         Text(
                           timestamp,
-                          style: AppTypography.caption(theme).copyWith(
-                            color: AppDs.textOnDarkSecondary,
-                          ),
+                          style: AppTypography.caption(
+                            theme,
+                          ).copyWith(color: AppDs.textOnDarkSecondary),
                         ),
                       ],
                       SizedBox(height: AppDs.space2.v),
                       InkWell(
                         onTap: widget.onOpenContest,
-                        borderRadius:
-                            BorderRadius.circular(AppDs.radiusSm.adaptSize),
+                        borderRadius: BorderRadius.circular(
+                          AppDs.radiusSm.adaptSize,
+                        ),
                         child: Padding(
                           padding: EdgeInsets.symmetric(vertical: 2.v),
                           child: Row(
@@ -213,6 +146,14 @@ class _ContestFeedCardState extends State<ContestFeedCard> {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
+                              if (s.isFeatured == true) ...[
+                                SizedBox(width: 6.h),
+                                Icon(
+                                  Icons.star_rounded,
+                                  size: 14.adaptSize,
+                                  color: cs.primary,
+                                ),
+                              ],
                             ],
                           ),
                         ),
@@ -267,23 +208,26 @@ class _ContestFeedCardState extends State<ContestFeedCard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (likes > 0 || shares > 0)
+                if (likes > 0 || shares > 0 || views > 0)
                   Padding(
                     padding: EdgeInsets.only(bottom: AppDs.space2.v),
                     child: Text(
-                      _engagementSummary(likes: likes, shares: shares),
-                      style: AppTypography.caption(theme).copyWith(
-                        color: AppDs.textOnDarkSecondary,
+                      _engagementSummary(
+                        likes: likes,
+                        shares: shares,
+                        views: views,
                       ),
+                      style: AppTypography.caption(
+                        theme,
+                      ).copyWith(color: AppDs.textOnDarkSecondary),
                     ),
                   ),
-                if (description != null && description.isNotEmpty) ...[
+                if (comments.isNotEmpty) ...[
                   Text(
-                    description,
-                    style: AppTypography.bodyMedium(theme).copyWith(
-                      color: AppDs.textOnDarkPrimary,
-                      height: 1.45,
-                    ),
+                    comments,
+                    style: AppTypography.bodyMedium(
+                      theme,
+                    ).copyWith(color: AppDs.textOnDarkPrimary, height: 1.45),
                   ),
                 ],
               ],
@@ -312,9 +256,10 @@ class _ContestFeedCardState extends State<ContestFeedCard> {
                   child: _FeedActionButton(
                     icon: Icons.share_outlined,
                     label: 'lbl_share'.tr,
+                    loading: widget.isSharing,
                     pressed: _sharePressed,
                     onHighlight: (v) => setState(() => _sharePressed = v),
-                    onTap: _share,
+                    onTap: widget.onShare,
                   ),
                 ),
               ],
@@ -325,8 +270,15 @@ class _ContestFeedCardState extends State<ContestFeedCard> {
     );
   }
 
-  String _engagementSummary({required int likes, required int shares}) {
+  String _engagementSummary({
+    required int likes,
+    required int shares,
+    required int views,
+  }) {
     final parts = <String>[];
+    if (views > 0) {
+      parts.add('$views ${'lbl_views'.tr}');
+    }
     if (likes > 0) {
       parts.add('$likes ${likes == 1 ? 'lbl_like'.tr : 'lbl_likes'.tr}');
     }
@@ -335,6 +287,78 @@ class _ContestFeedCardState extends State<ContestFeedCard> {
     }
     return parts.join(' · ');
   }
+}
+
+/// Opens the share sheet after the BLoC has recorded the share and provided
+/// a backend [shareUrl].
+Future<void> openContestFeedShareSheet({
+  required BuildContext context,
+  required ContestSubmission submission,
+  required String shareUrl,
+  String? preferredChannel,
+}) async {
+  final contestTitle = submission.contestDisplayName.isNotEmpty
+      ? submission.contestDisplayName
+      : 'lbl_contest'.tr;
+  final submitter = submission.designerName.isNotEmpty
+      ? submission.designerName
+      : 'lbl_participant'.tr;
+  final message = ContestFeedShare.shareMessage(
+    contestTitle: contestTitle,
+    submitterName: submitter,
+    url: shareUrl,
+  );
+
+  if (preferredChannel != null && preferredChannel.isNotEmpty) {
+    await ContestFeedShare.shareNative(message: message, subject: contestTitle);
+    return;
+  }
+
+  await showAppModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    builder: (ctx) {
+      return AppDarkSheetTheme(
+        child: AppSheetPagePadding(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'lbl_share'.tr,
+                style: AppDs.sheetTitle(theme, color: Colors.white),
+              ),
+              SizedBox(height: AppDs.space4.v),
+              _ShareOptionTile(
+                icon: Icons.ios_share_outlined,
+                label: 'lbl_share_via'.tr,
+                onTap: () async {
+                  Navigator.of(ctx).pop();
+                  await ContestFeedShare.shareNative(
+                    message: message,
+                    subject: contestTitle,
+                  );
+                },
+              ),
+              _ShareOptionTile(
+                icon: Icons.link_outlined,
+                label: 'lbl_copy_link'.tr,
+                onTap: () async {
+                  Navigator.of(ctx).pop();
+                  await ContestFeedShare.copyLink(shareUrl);
+                  showAppToast(
+                    'msg_link_copied'.tr,
+                    type: ToastificationType.success,
+                  );
+                },
+              ),
+              SizedBox(height: AppDs.space2.v),
+            ],
+          ),
+        ),
+      );
+    },
+  );
 }
 
 class _FeedActionButton extends StatelessWidget {
@@ -391,8 +415,9 @@ class _FeedActionButton extends StatelessWidget {
                         label,
                         style: AppTypography.navInactive(theme).copyWith(
                           color: color,
-                          fontWeight:
-                              active ? FontWeight.w700 : FontWeight.w500,
+                          fontWeight: active
+                              ? FontWeight.w700
+                              : FontWeight.w500,
                         ),
                       ),
                     ],
@@ -422,8 +447,7 @@ class _AvatarCircle extends StatelessWidget {
         radius: BorderRadius.circular(AppDs.radiusFull.adaptSize),
       );
     }
-    final initial =
-        name.trim().isNotEmpty ? name.trim()[0].toUpperCase() : '?';
+    final initial = name.trim().isNotEmpty ? name.trim()[0].toUpperCase() : '?';
     return CircleAvatar(
       radius: size / 2,
       backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.25),

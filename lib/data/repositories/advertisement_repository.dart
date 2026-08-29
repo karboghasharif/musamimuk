@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:musamimuk/core/network/api_client.dart';
 import 'package:musamimuk/core/network/api_utils.dart';
 import 'package:musamimuk/core/utils/advertisement_platform.dart';
@@ -19,20 +20,19 @@ class AdvertisementFailure<T> extends AdvertisementResult<T> {
 
 /// Public advertisement endpoints (no auth required).
 class AdvertisementRepository {
-  AdvertisementRepository() : _api = ApiClient();
+  AdvertisementRepository({Dio? dio}) : _dio = dio ?? ApiClient().dio;
 
-  final ApiClient _api;
+  final Dio _dio;
 
   static final Map<String, List<Advertisement>> _adsCache = {};
   static final Map<String, Future<AdvertisementResult<List<Advertisement>>>>
-      _adsInFlight = {};
+  _adsInFlight = {};
 
   static String _adsCacheKey({
     required String placement,
     String? platform,
     required int limit,
-  }) =>
-      '$placement|${platform ?? ''}|$limit';
+  }) => '$placement|${platform ?? ''}|$limit';
 
   /// Returns cached ads when already fetched this session (no network).
   static List<Advertisement>? peekCachedAds({
@@ -58,9 +58,24 @@ class AdvertisementRepository {
     );
   }
 
+  /// Clears in-memory ads cache (empty responses are never retained).
+  static void clearAdsCache({String? placement}) {
+    if (placement == null) {
+      _adsCache.clear();
+      return;
+    }
+    _adsCache.removeWhere((key, _) => key.startsWith('$placement|'));
+  }
+
+  @visibleForTesting
+  static void debugResetCache() {
+    _adsCache.clear();
+    _adsInFlight.clear();
+  }
+
   Future<AdvertisementResult<AdvertisementPlacements>> fetchPlacements() async {
     try {
-      final response = await _api.dio.get<Map<String, dynamic>>(
+      final response = await _dio.get<Map<String, dynamic>>(
         'public/advertisements/placements',
       );
       final data = response.data;
@@ -87,6 +102,7 @@ class AdvertisementRepository {
     required String placement,
     String? platform,
     int limit = 10,
+    bool forceRefresh = false,
   }) async {
     final key = _adsCacheKey(
       placement: placement,
@@ -94,9 +110,11 @@ class AdvertisementRepository {
       limit: limit,
     );
 
-    final cached = _adsCache[key];
-    if (cached != null) {
-      return AdvertisementSuccess(List<Advertisement>.from(cached));
+    if (!forceRefresh) {
+      final cached = _adsCache[key];
+      if (cached != null) {
+        return AdvertisementSuccess(List<Advertisement>.from(cached));
+      }
     }
 
     final inFlight = _adsInFlight[key];
@@ -112,7 +130,12 @@ class AdvertisementRepository {
     try {
       final result = await future;
       if (result is AdvertisementSuccess<List<Advertisement>>) {
-        _adsCache[key] = List<Advertisement>.from(result.data);
+        // Never cache an empty list permanently — revisit should refetch.
+        if (result.data.isNotEmpty) {
+          _adsCache[key] = List<Advertisement>.from(result.data);
+        } else {
+          _adsCache.remove(key);
+        }
       }
       return result;
     } finally {
@@ -126,7 +149,13 @@ class AdvertisementRepository {
     int limit = 10,
   }) async {
     try {
-      final response = await _api.dio.get<Map<String, dynamic>>(
+      if (kDebugMode) {
+        debugPrint(
+          '[ads] GET public/advertisements '
+          'placement=$placement platform=${platform ?? '-'} limit=$limit',
+        );
+      }
+      final response = await _dio.get<Map<String, dynamic>>(
         'public/advertisements',
         queryParameters: <String, dynamic>{
           'placement': placement,
@@ -134,25 +163,29 @@ class AdvertisementRepository {
           'limit': limit.clamp(1, 50).toString(),
         },
       );
-      final data = response.data;
-      if (data == null) return AdvertisementFailure('Empty response');
-      if (!apiResponseIsSuccess(data)) {
+      final body = response.data;
+      if (body == null) return AdvertisementFailure('Empty response');
+      if (!apiResponseIsSuccess(body)) {
         return AdvertisementFailure(
-          apiExtractMessage(data) ?? 'Could not load advertisements',
+          apiExtractMessage(body) ?? 'Could not load advertisements',
         );
       }
-      final inner = apiExtractPayloadMap(data);
-      final rawList = inner?['advertisements'];
-      final list = rawList is List
-          ? rawList
-                .whereType<Map>()
-                .map((e) => Advertisement.fromJson(e.cast<String, dynamic>()))
-                .toList()
-          : <Advertisement>[];
-      return AdvertisementSuccess(list, message: apiExtractMessage(data));
+
+      // Nested: data.advertisements — never parse top-level data as a list.
+      final list = Advertisement.parseListFromResponseBody(body);
+      if (kDebugMode) {
+        debugPrint('[ads] parsed ${list.length} advertisement(s)');
+      }
+      return AdvertisementSuccess(list, message: apiExtractMessage(body));
     } on DioException catch (e) {
+      if (kDebugMode) {
+        debugPrint('[ads] request failed status=${e.response?.statusCode}');
+      }
       return AdvertisementFailure(apiMessageFromDioException(e));
-    } catch (_) {
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[ads] parse/unknown error: $e');
+      }
       return AdvertisementFailure('Something went wrong');
     }
   }
@@ -160,29 +193,33 @@ class AdvertisementRepository {
   Future<AdvertisementResult<List<Advertisement>>> fetchAdsForCurrentPlatform({
     required String placement,
     int limit = 10,
+    bool forceRefresh = false,
   }) {
     return fetchAds(
       placement: placement,
       platform: advertisementPlatformParam(),
       limit: limit,
+      forceRefresh: forceRefresh,
     );
   }
 
   Future<void> recordImpression(int adId) async {
     try {
-      await _api.dio.post<void>('public/advertisements/$adId/impression');
+      await _dio.post<void>('public/advertisements/$adId/impression');
     } catch (_) {}
   }
 
   Future<String?> recordClick(int adId) async {
     try {
-      final response = await _api.dio.post<Map<String, dynamic>>(
+      final response = await _dio.post<Map<String, dynamic>>(
         'public/advertisements/$adId/click',
       );
       final data = response.data;
       if (data == null) return null;
       final inner = apiExtractPayloadMap(data);
-      return inner?['link_url']?.toString();
+      final link = inner?['link_url']?.toString().trim();
+      if (link == null || link.isEmpty) return null;
+      return link;
     } catch (_) {
       return null;
     }

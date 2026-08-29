@@ -108,7 +108,11 @@ class Screen16OnlineDesignsBloc
         return;
       }
 
-      final result = await _adminDesigns.list(perPage: 20, sort: 'latest');
+      final result = await _adminDesigns.list(
+        perPage: 50,
+        sort: 'latest',
+        visibility: 'public',
+      );
       if (generation != _loadGeneration) return;
 
       if (result is AdminDesignListFailure) {
@@ -133,7 +137,10 @@ class Screen16OnlineDesignsBloc
         );
         return;
       }
-      _allDesigns = (result as AdminDesignListSuccess).items;
+      // Online Designs is a public catalog — never show private saves.
+      _allDesigns = (result as AdminDesignListSuccess).items
+          .where((e) => !e.isPrivateDesign)
+          .toList();
       final categories = _distinctCategories(_allDesigns);
       _validateCategorySelection(categories);
       emit(

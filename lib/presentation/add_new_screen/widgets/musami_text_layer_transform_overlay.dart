@@ -45,10 +45,10 @@ enum TextTransformHandle {
         SystemMouseCursors.resizeUpLeftDownRight,
       TextTransformHandle.topRight || TextTransformHandle.bottomLeft =>
         SystemMouseCursors.resizeUpRightDownLeft,
-      TextTransformHandle.top || TextTransformHandle.bottom =>
-        SystemMouseCursors.resizeUpDown,
-      TextTransformHandle.left || TextTransformHandle.right =>
-        SystemMouseCursors.resizeLeftRight,
+      TextTransformHandle.top ||
+      TextTransformHandle.bottom => SystemMouseCursors.resizeUpDown,
+      TextTransformHandle.left ||
+      TextTransformHandle.right => SystemMouseCursors.resizeLeftRight,
     };
   }
 }
@@ -288,7 +288,10 @@ class _MusamiTextLayerTransformOverlayState
 
     _activePointer = event.pointer;
     _pointerRoute = _handlePointerRoute;
-    GestureBinding.instance.pointerRouter.addRoute(event.pointer, _pointerRoute!);
+    GestureBinding.instance.pointerRouter.addRoute(
+      event.pointer,
+      _pointerRoute!,
+    );
     GestureManager.instance.stopPropagation();
     _setEditorDragBlock(true);
 
@@ -310,9 +313,11 @@ class _MusamiTextLayerTransformOverlayState
       handle: handle,
       layerId: layerAfterHistory.id,
       startScale: layerAfterHistory.scale,
-      startMaxTextWidth: layerAfterHistory.maxTextWidth ??
+      startMaxTextWidth:
+          layerAfterHistory.maxTextWidth ??
           (visualSize.width / layerAfterHistory.scale).clamp(40, 4000),
-      startFontSize: layerAfterHistory.textStyle?.fontSize ??
+      startFontSize:
+          layerAfterHistory.textStyle?.fontSize ??
           (initFontSize * layerAfterHistory.fontScale),
       startOffset: layerAfterHistory.offset,
       startVisualSize: visualSize,
@@ -399,10 +404,7 @@ class _MusamiTextLayerTransformOverlayState
 
     layer.scale = newScale;
 
-    final newSize = Size(
-      startW * applied,
-      startH * applied,
-    );
+    final newSize = Size(startW * applied, startH * applied);
     _repositionKeepingAnchor(session, layer, newSize);
   }
 
@@ -418,8 +420,10 @@ class _MusamiTextLayerTransformOverlayState
     if (handle == TextTransformHandle.left ||
         handle == TextTransformHandle.right) {
       layer.maxTextWidth =
-          (session.startMaxTextWidth + grow.dx / session.startScale)
-              .clamp(24.0, 4000.0);
+          (session.startMaxTextWidth + grow.dx / session.startScale).clamp(
+            24.0,
+            4000.0,
+          );
 
       final newVisualW = layer.maxTextWidth! * session.startScale;
       _repositionKeepingAnchor(
@@ -431,9 +435,8 @@ class _MusamiTextLayerTransformOverlayState
     }
 
     // Top / bottom — adjust base font size (height axis).
-    final newFontSize =
-        (session.startFontSize + grow.dy / session.startScale)
-            .clamp(8.0, 400.0);
+    final newFontSize = (session.startFontSize + grow.dy / session.startScale)
+        .clamp(8.0, 400.0);
     _setFontSize(layer, newFontSize);
 
     final heightRatio = session.startFontSize > 0
@@ -516,10 +519,7 @@ class _MusamiTextLayerTransformOverlayState
 
     final cos = math.cos(rotation);
     final sin = math.sin(rotation);
-    return Offset(
-      dx * cos - dy * sin,
-      dx * sin + dy * cos,
-    );
+    return Offset(dx * cos - dy * sin, dx * sin + dy * cos);
   }
 
   void _setFontSize(TextLayer layer, double size) {
@@ -528,23 +528,35 @@ class _MusamiTextLayerTransformOverlayState
   }
 }
 
-typedef MusamiWidgetLayerGeometryCallback = void Function(
-  WidgetLayer layer, {
-  required double width,
-  required double aspect,
-  required double scale,
-  required Offset offset,
-});
+typedef MusamiWidgetLayerGeometryCallback =
+    void Function(
+      WidgetLayer layer, {
+      required double width,
+      required double aspect,
+      required double scale,
+      required Offset offset,
+    });
 
+/// Smallest / largest painted (on-canvas) frame size a resize may produce.
+///
+/// The frame is free to become any ratio inside these bounds — portrait,
+/// landscape, square, very wide or very tall — because the image content is
+/// cropped to the frame rather than stretched into it.
+const double _kMinFrameSizePx = 16;
+const double _kMaxFrameSizePx = 6000;
+
+/// Immutable snapshot taken on pointer-down.
+///
+/// Every move event derives the new frame from this snapshot instead of the
+/// already-modified layer, which keeps the drag jitter-free and stops rounding
+/// errors from accumulating over a long gesture.
 class _WidgetResizeSession {
   _WidgetResizeSession({
     required this.handle,
     required this.layerId,
-    required this.startWidth,
     required this.startScale,
-    required this.startAspect,
     required this.startOffset,
-    required this.startVisualSize,
+    required this.startFrameSize,
     required this.startPointerGlobal,
     required this.startRotation,
     required this.startFlipX,
@@ -553,11 +565,11 @@ class _WidgetResizeSession {
 
   final TextTransformHandle handle;
   final String layerId;
-  final double startWidth;
   final double startScale;
-  final double startAspect;
   final Offset startOffset;
-  final Size startVisualSize;
+
+  /// On-canvas size of the frame, selection chrome padding excluded.
+  final Size startFrameSize;
   final Offset startPointerGlobal;
   final double startRotation;
   final bool startFlipX;
@@ -600,12 +612,12 @@ class _MusamiWidgetLayerTransformOverlayState
   bool _isDisposing = false;
   bool _editorNotifyScheduled = false;
 
+  /// Frame size shown in the live badge; `null` hides it (no active drag).
+  final ValueNotifier<Size?> _liveFrameSize = ValueNotifier<Size?>(null);
+
   WidgetLayer get _layer => widget.layer;
 
   ProImageEditorState? get _editor => widget.editorKey.currentState;
-
-  double get _initWidth =>
-      _editor?.configs.stickerEditor.initWidth ?? 100.0;
 
   WidgetLayer? _resolveLiveLayer() {
     final editor = _editor;
@@ -623,6 +635,7 @@ class _MusamiWidgetLayerTransformOverlayState
   void dispose() {
     _isDisposing = true;
     _cleanupSessionResources(notifyEditor: false);
+    _liveFrameSize.dispose();
     super.dispose();
   }
 
@@ -647,6 +660,7 @@ class _MusamiWidgetLayerTransformOverlayState
     _removePointerRoute();
     _setEditorDragBlock(false);
     _session = null;
+    if (!_isDisposing) _liveFrameSize.value = null;
 
     final editor = widget.editorKey.currentState;
     if (editor == null) return;
@@ -705,9 +719,37 @@ class _MusamiWidgetLayerTransformOverlayState
                 ),
               ),
               ...TextTransformHandle.values.map(_buildHandle),
+              _buildLiveSizeBadge(),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  /// Live `W … H …` readout of the FRAME while a handle is being dragged.
+  Widget _buildLiveSizeBadge() {
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: -(widget.handleHitSize / 2) - 26,
+      height: 24,
+      child: ValueListenableBuilder<Size?>(
+        valueListenable: _liveFrameSize,
+        builder: (context, size, _) {
+          if (size == null) return const SizedBox.shrink();
+          // Counter-rotate so the readout stays upright on a rotated frame.
+          return Center(
+            child: Transform.rotate(
+              angle: -_frameRotation(
+                _layer.rotation,
+                _layer.flipX,
+                _layer.flipY,
+              ),
+              child: _FrameSizeBadge(size: size, color: widget.strokeColor),
+            ),
+          );
+        },
       ),
     );
   }
@@ -777,7 +819,10 @@ class _MusamiWidgetLayerTransformOverlayState
 
     _activePointer = event.pointer;
     _pointerRoute = _handlePointerRoute;
-    GestureBinding.instance.pointerRouter.addRoute(event.pointer, _pointerRoute!);
+    GestureBinding.instance.pointerRouter.addRoute(
+      event.pointer,
+      _pointerRoute!,
+    );
     GestureManager.instance.stopPropagation();
     _setEditorDragBlock(true);
 
@@ -786,12 +831,7 @@ class _MusamiWidgetLayerTransformOverlayState
       ..activeInteractionLayer = liveLayer
       ..layerWasTransformed = true;
 
-    final visualSize = widget.info.childSize;
-    final startWidth = liveLayer.width ?? _initWidth;
-    final startAspect = (liveLayer.meta?['musamiAspect'] as num?)?.toDouble() ??
-        (visualSize.width > 0
-            ? visualSize.height / visualSize.width
-            : 1.0);
+    final frameSize = _frameSize();
 
     editor.addHistory(blockCaptureScreenshot: true);
 
@@ -803,15 +843,31 @@ class _MusamiWidgetLayerTransformOverlayState
     _session = _WidgetResizeSession(
       handle: handle,
       layerId: layerAfterHistory.id,
-      startWidth: startWidth,
       startScale: layerAfterHistory.scale,
-      startAspect: startAspect,
       startOffset: layerAfterHistory.offset,
-      startVisualSize: visualSize,
+      startFrameSize: frameSize,
       startPointerGlobal: event.position,
       startRotation: layerAfterHistory.rotation,
       startFlipX: layerAfterHistory.flipX,
       startFlipY: layerAfterHistory.flipY,
+    );
+    _liveFrameSize.value = frameSize;
+  }
+
+  /// On-canvas frame size with the selection chrome padding removed.
+  ///
+  /// [OverlayChildLayoutInfo.childSize] measures the layer content *plus* the
+  /// [LayerInteractionStyle.overlayPadding] that `LayerWidget` inserts while a
+  /// layer is selected. Feeding that padded box into the resize math skews the
+  /// frame the user sees, so it is stripped here.
+  Size _frameSize() {
+    final raw = widget.info.childSize;
+    final padding = _editor?.configs.layerInteraction.style.overlayPadding;
+    final width = raw.width - (padding?.horizontal ?? 0);
+    final height = raw.height - (padding?.vertical ?? 0);
+    return Size(
+      width.isFinite && width > 0 ? width : math.max(raw.width, 1),
+      height.isFinite && height > 0 ? height : math.max(raw.height, 1),
     );
   }
 
@@ -833,23 +889,28 @@ class _MusamiWidgetLayerTransformOverlayState
     final editor = _editor;
     if (editor == null || !editor.mounted) return;
 
-    final deltaGlobal = event.position - _session!.startPointerGlobal;
+    final session = _session!;
+    final deltaGlobal = event.position - session.startPointerGlobal;
     final liveLayer = _resolveLiveLayer();
     if (liveLayer == null) return;
 
-    final deltaLocal = _globalDeltaToLayerLocal(deltaGlobal, liveLayer);
+    final deltaLocal = _globalDeltaToLayerLocal(deltaGlobal, session);
 
-    if (_session!.handle.isCorner) {
-      _applyCornerResize(_session!, liveLayer, deltaLocal);
+    if (session.handle.isCorner) {
+      _applyCornerResize(session, liveLayer, deltaLocal);
     } else {
-      _applyEdgeResize(_session!, liveLayer, deltaLocal);
+      _applyEdgeResize(session, liveLayer, deltaLocal);
     }
 
     _notifyLayerChanged(liveLayer);
   }
 
-  /// Coalesces editor rebuilds per frame; avoids layer.key setState (drops pointer).
+  /// Live-paints the layer via its GlobalKey; coalesces editor chrome rebuilds.
   void _notifyLayerChanged(WidgetLayer layer) {
+    // Same path as text overlay / pro_image_editor scale: LayerWidget paints
+    // from this setState. Editor setState alone only refreshes after canvas tap.
+    layer.key.currentState?.setState(() {});
+
     final editor = _editor;
     if (editor == null || !editor.mounted) return;
     editor.callbacks.mainEditorCallbacks?.handleUpdateLayer(layer);
@@ -868,88 +929,71 @@ class _MusamiWidgetLayerTransformOverlayState
     });
   }
 
+  /// Corner drag — width and height move independently, opposite corner pinned.
+  ///
+  /// The frame is free to take any ratio; the image inside is re-cropped by
+  /// [musamiFrameWidgetLayerCore], never stretched.
   void _applyCornerResize(
     _WidgetResizeSession session,
     WidgetLayer layer,
     Offset deltaLocal,
   ) {
-    const minScale = 0.05;
-    const maxScale = 8.0;
-
     final grow = _projectOntoHandle(session.handle, deltaLocal);
-    final startW = session.startVisualSize.width;
-    final startH = session.startVisualSize.height;
-
-    final sx = startW > 0 ? (startW + grow.dx) / startW : 1.0;
-    final sy = startH > 0 ? (startH + grow.dy) / startH : 1.0;
-    final factor = math.max(sx, sy).clamp(0.08, 12.0);
-
-    final newScale =
-        (session.startScale * factor).clamp(minScale, maxScale);
-    final applied = newScale / session.startScale;
-
-    final newSize = Size(
-      startW * applied,
-      startH * applied,
-    );
-    final newOffset = _offsetKeepingAnchor(session, newSize);
-
-    widget.onApplyGeometry(
+    _applyFrameSize(
+      session,
       layer,
-      width: session.startWidth,
-      aspect: session.startAspect,
-      scale: newScale,
-      offset: newOffset,
+      Size(
+        session.startFrameSize.width + grow.dx,
+        session.startFrameSize.height + grow.dy,
+      ),
     );
   }
 
+  /// Mid-edge drag — moves one axis of the frame and leaves the other alone.
   void _applyEdgeResize(
     _WidgetResizeSession session,
     WidgetLayer layer,
     Offset deltaLocal,
   ) {
     final handle = session.handle;
+    final isHorizontal =
+        handle == TextTransformHandle.left ||
+        handle == TextTransformHandle.right;
+
     final grow = _projectOntoHandle(handle, deltaLocal);
-
-    if (handle == TextTransformHandle.left ||
-        handle == TextTransformHandle.right) {
-      final newVisualW =
-          (session.startVisualSize.width + grow.dx).clamp(24.0, 4000.0);
-      final newWidth =
-          (newVisualW / session.startScale).clamp(8.0, 4000.0);
-      final newOffset = _offsetKeepingAnchor(
-        session,
-        Size(newVisualW, session.startVisualSize.height),
-      );
-
-      widget.onApplyGeometry(
-        layer,
-        width: newWidth,
-        aspect: session.startAspect,
-        scale: session.startScale,
-        offset: newOffset,
-      );
-      return;
-    }
-
-    final newVisualH =
-        (session.startVisualSize.height + grow.dy).clamp(24.0, 4000.0);
-    final startVisualW = session.startVisualSize.width;
-    final newAspect = startVisualW > 0
-        ? (newVisualH / startVisualW).clamp(0.05, 20.0)
-        : session.startAspect;
-    final newOffset = _offsetKeepingAnchor(
+    _applyFrameSize(
       session,
-      Size(startVisualW, newVisualH),
+      layer,
+      Size(
+        session.startFrameSize.width + (isHorizontal ? grow.dx : 0),
+        session.startFrameSize.height + (isHorizontal ? 0 : grow.dy),
+      ),
+    );
+  }
+
+  /// Commits a new frame size, keeping the anchor pinned and the layer scale
+  /// untouched — only the frame geometry changes.
+  void _applyFrameSize(
+    _WidgetResizeSession session,
+    WidgetLayer layer,
+    Size requested,
+  ) {
+    if (session.startScale <= 0 || !session.startScale.isFinite) return;
+    if (!requested.width.isFinite || !requested.height.isFinite) return;
+
+    final frame = Size(
+      requested.width.clamp(_kMinFrameSizePx, _kMaxFrameSizePx),
+      requested.height.clamp(_kMinFrameSizePx, _kMaxFrameSizePx),
     );
 
     widget.onApplyGeometry(
       layer,
-      width: session.startWidth,
-      aspect: newAspect,
+      width: frame.width / session.startScale,
+      aspect: frame.height / frame.width,
       scale: session.startScale,
-      offset: newOffset,
+      offset: _offsetKeepingAnchor(session, frame),
     );
+    _liveFrameSize.value = frame;
   }
 
   Offset _projectOntoHandle(TextTransformHandle handle, Offset deltaLocal) {
@@ -960,21 +1004,23 @@ class _MusamiWidgetLayerTransformOverlayState
     );
   }
 
+  /// Moves the layer centre so the corner/edge opposite the dragged handle
+  /// stays at the exact same canvas point while the frame grows or shrinks.
   Offset _offsetKeepingAnchor(
     _WidgetResizeSession session,
-    Size newVisualSize,
+    Size newFrameSize,
   ) {
     final anchor = session.handle.anchorSign;
-    final startW = session.startVisualSize.width;
-    final startH = session.startVisualSize.height;
+    final startW = session.startFrameSize.width;
+    final startH = session.startFrameSize.height;
 
     final startAnchorLocal = Offset(
       anchor.dx * startW / 2,
       anchor.dy * startH / 2,
     );
     final newAnchorLocal = Offset(
-      anchor.dx * newVisualSize.width / 2,
-      anchor.dy * newVisualSize.height / 2,
+      anchor.dx * newFrameSize.width / 2,
+      anchor.dy * newFrameSize.height / 2,
     );
 
     final shift = _localDeltaToEditor(
@@ -983,26 +1029,52 @@ class _MusamiWidgetLayerTransformOverlayState
       session.startFlipX,
       session.startFlipY,
     );
-    return session.startOffset + shift;
+    final next = session.startOffset + shift;
+    if (!next.dx.isFinite || !next.dy.isFinite) return session.startOffset;
+    return next;
   }
 
-  Offset _globalDeltaToLayerLocal(Offset deltaGlobal, WidgetLayer layer) {
-    final editor = _editor;
-    if (editor == null) return deltaGlobal;
+  /// Rotation between the overlay's local frame and canvas coordinates.
+  ///
+  /// The overlay re-applies the layer flip on top of
+  /// [OverlayChildLayoutInfo.childPaintTransform], which already carries it, so
+  /// the two mirrors cancel out (`F · R · F == R⁻¹` for a single-axis flip).
+  /// The frame is therefore never mirrored, only rotated.
+  double _frameRotation(double rotation, bool flipX, bool flipY) {
+    return flipX == flipY ? rotation : -rotation;
+  }
 
-    final scaleFactor =
-        editor.interactiveViewer.currentState?.scaleFactor ?? 1.0;
-    final scaled = deltaGlobal / scaleFactor;
-
-    final angle = -layer.rotation;
+  Offset _rotateOffset(Offset value, double angle) {
     final cos = math.cos(angle);
     final sin = math.sin(angle);
-    var dx = scaled.dx * cos - scaled.dy * sin;
-    var dy = scaled.dx * sin + scaled.dy * cos;
+    return Offset(
+      value.dx * cos - value.dy * sin,
+      value.dx * sin + value.dy * cos,
+    );
+  }
 
-    if (layer.flipX) dx = -dx;
-    if (layer.flipY) dy = -dy;
-    return Offset(dx, dy);
+  /// Screen pointer delta -> canvas delta -> layer-local delta.
+  Offset _globalDeltaToLayerLocal(
+    Offset deltaGlobal,
+    _WidgetResizeSession session,
+  ) {
+    if (!deltaGlobal.dx.isFinite || !deltaGlobal.dy.isFinite) return Offset.zero;
+
+    final editor = _editor;
+    final viewerScale =
+        editor?.interactiveViewer.currentState?.scaleFactor ?? 1.0;
+    final canvasDelta = (viewerScale.isFinite && viewerScale > 0)
+        ? deltaGlobal / viewerScale
+        : deltaGlobal;
+
+    return _rotateOffset(
+      canvasDelta,
+      -_frameRotation(
+        session.startRotation,
+        session.startFlipX,
+        session.startFlipY,
+      ),
+    );
   }
 
   Offset _localDeltaToEditor(
@@ -1011,17 +1083,7 @@ class _MusamiWidgetLayerTransformOverlayState
     bool flipX,
     bool flipY,
   ) {
-    var dx = localDelta.dx;
-    var dy = localDelta.dy;
-    if (flipX) dx = -dx;
-    if (flipY) dy = -dy;
-
-    final cos = math.cos(rotation);
-    final sin = math.sin(rotation);
-    return Offset(
-      dx * cos - dy * sin,
-      dx * sin + dy * cos,
-    );
+    return _rotateOffset(localDelta, _frameRotation(rotation, flipX, flipY));
   }
 }
 
@@ -1049,15 +1111,15 @@ class _TransformHandle extends StatelessWidget {
     final visualW = isCorner
         ? visualSize
         : (handle == TextTransformHandle.top ||
-                handle == TextTransformHandle.bottom
-            ? edgeLong
-            : edgeShort);
+                  handle == TextTransformHandle.bottom
+              ? edgeLong
+              : edgeShort);
     final visualH = isCorner
         ? visualSize
         : (handle == TextTransformHandle.left ||
-                handle == TextTransformHandle.right
-            ? edgeLong
-            : edgeShort);
+                  handle == TextTransformHandle.right
+              ? edgeLong
+              : edgeShort);
 
     return MouseRegion(
       cursor: handle.cursor,
@@ -1091,6 +1153,48 @@ class _TransformHandle extends StatelessWidget {
   }
 }
 
+/// Compact `W … H …` pill shown under a frame while it is being resized.
+class _FrameSizeBadge extends StatelessWidget {
+  const _FrameSizeBadge({required this.size, required this.color});
+
+  final Size size;
+  final Color color;
+
+  String _format(double value) {
+    final rounded = value.roundToDouble();
+    return (value - rounded).abs() < 0.05
+        ? rounded.toStringAsFixed(0)
+        : value.toStringAsFixed(1);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xE6000000),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color, width: 1),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        child: Text(
+          'W ${_format(size.width)}  H ${_format(size.height)}',
+          maxLines: 1,
+          softWrap: false,
+          textDirection: TextDirection.ltr,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 11,
+            height: 1.1,
+            fontWeight: FontWeight.w600,
+            decoration: TextDecoration.none,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _SelectionBorderPainter extends CustomPainter {
   const _SelectionBorderPainter({
     required this.color,
@@ -1111,8 +1215,7 @@ class _SelectionBorderPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _SelectionBorderPainter oldDelegate) {
-    return oldDelegate.color != color ||
-        oldDelegate.strokeWidth != strokeWidth;
+    return oldDelegate.color != color || oldDelegate.strokeWidth != strokeWidth;
   }
 }
 
@@ -1152,6 +1255,7 @@ class MusamiDefaultLayerTransformOverlay extends StatelessWidget {
           flipY: layer.flipY,
           child: Stack(
             fit: StackFit.passthrough,
+            clipBehavior: Clip.none,
             children: [
               CustomPaint(
                 foregroundPainter: _SelectionBorderPainter(

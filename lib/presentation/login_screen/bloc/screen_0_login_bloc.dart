@@ -3,30 +3,52 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:equatable/equatable.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import '../../../core/app_export.dart';
 import '../../../data/models/login_request.dart';
 import '../../../data/repositories/auth_repository.dart';
+import '../../wallet/wallet_auth_sync.dart';
 import '../models/screen_0_login_model.dart';
 part 'screen_0_login_event.dart';
 part 'screen_0_login_state.dart';
 
 class Screen0LoginBloc extends Bloc<Screen0LoginEvent, Screen0LoginState> {
-  Screen0LoginBloc(super.initialState)
-      : _authRepository = AuthRepository(),
-        _googleSignIn = GoogleSignIn(
-          scopes: const <String>['email', 'profile'],
+  Screen0LoginBloc({
+    AuthRepository? authRepository,
+    GoogleSignIn? googleSignIn,
+  })  : _authRepository = authRepository ?? AuthRepository(),
+        _googleSignIn = googleSignIn ??
+            GoogleSignIn(
+              scopes: const <String>['email', 'profile'],
+            ),
+        super(
+          Screen0LoginState(
+            screen0LoginModelObj: const Screen0LoginModel(),
+            emailController: TextEditingController(
+              text: PrefUtils().getSavedLoginEmail() ?? '',
+            ),
+            passwordController: TextEditingController(),
+            rememberMe: PrefUtils().getRememberSession(),
+          ),
         ) {
     on<Screen0LoginInitialEvent>(_onInitialize);
     on<ChangePasswordVisibilityEvent>(_changePasswordVisibility);
     on<RememberMeChangedEvent>(_onRememberMeChanged);
     on<LoginSubmitEvent>(_onLoginSubmit);
     on<LoginWithGoogleEvent>(_onLoginWithGoogle);
+    on<LoginWithAppleEvent>(_onLoginWithApple);
     on<ContinueAsGuestEvent>(_onContinueAsGuest);
   }
 
   final AuthRepository _authRepository;
   final GoogleSignIn _googleSignIn;
+
+  bool get _authBusy =>
+      state.isLoading ||
+      state.isLoadingGoogle ||
+      state.isLoadingApple ||
+      state.isLoadingGuest;
 
   Future<void> _persistLoginSuccess(
     LoginSuccess result, {
@@ -47,6 +69,7 @@ class Screen0LoginBloc extends Bloc<Screen0LoginEvent, Screen0LoginState> {
     if (result.data.user != null) {
       await prefs.setUserSession(result.data.user!.toJson());
     }
+    syncWalletAfterAuth(walletFromAuth: result.data.wallet);
   }
 
   @override
@@ -74,14 +97,20 @@ class Screen0LoginBloc extends Bloc<Screen0LoginEvent, Screen0LoginState> {
     Screen0LoginInitialEvent event,
     Emitter<Screen0LoginState> emit,
   ) async {
+    // Controllers are created in the constructor so Login never races prefs init.
+    // Clear any stuck app-wide overlay that would absorb taps on this screen.
+    GlobalLoadingController.instance.reset();
     await PrefUtils().init();
     final savedEmail = PrefUtils().getSavedLoginEmail();
-    final emailController = TextEditingController(text: savedEmail ?? '');
-    final passwordController = TextEditingController();
+    final emailController = state.emailController;
+    if (emailController != null &&
+        savedEmail != null &&
+        savedEmail.isNotEmpty &&
+        emailController.text.trim().isEmpty) {
+      emailController.text = savedEmail;
+    }
     emit(
       state.copyWith(
-        emailController: emailController,
-        passwordController: passwordController,
         isShowPassword: true,
         rememberMe: PrefUtils().getRememberSession(),
         loginError: null,
@@ -98,9 +127,7 @@ class Screen0LoginBloc extends Bloc<Screen0LoginEvent, Screen0LoginState> {
     LoginSubmitEvent event,
     Emitter<Screen0LoginState> emit,
   ) async {
-    if (state.isLoading || state.isLoadingGoogle || state.isLoadingGuest) {
-      return;
-    }
+    if (_authBusy) return;
     emit(state.copyWith(isLoading: true, loginError: null));
     try {
       final result = await _authRepository.login(
@@ -143,9 +170,7 @@ class Screen0LoginBloc extends Bloc<Screen0LoginEvent, Screen0LoginState> {
     LoginWithGoogleEvent event,
     Emitter<Screen0LoginState> emit,
   ) async {
-    if (state.isLoading || state.isLoadingGoogle || state.isLoadingGuest) {
-      return;
-    }
+    if (_authBusy) return;
     if (kIsWeb) {
       emit(
         state.copyWith(
@@ -161,6 +186,11 @@ class Screen0LoginBloc extends Bloc<Screen0LoginEvent, Screen0LoginState> {
       ),
     );
     try {
+      // Clear a stale Google session so the account picker appears again.
+      try {
+        await _googleSignIn.signOut();
+      } catch (_) {}
+
       final account = await _googleSignIn.signIn();
       if (account == null) {
         emit(state.copyWith(isLoadingGoogle: false));
@@ -181,15 +211,15 @@ class Screen0LoginBloc extends Bloc<Screen0LoginEvent, Screen0LoginState> {
         ),
       );
     } on PlatformException catch (e) {
+      debugPrint('GoogleSignIn PlatformException: code=${e.code} message=${e.message}');
       emit(
         state.copyWith(
           isLoadingGoogle: false,
-          loginError: e.message?.isNotEmpty == true
-              ? e.message
-              : AppLocalization.translate('msg_google_sign_in_failed'),
+          loginError: _googleSignInErrorMessage(e),
         ),
       );
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('GoogleSignIn failed: $e\n$st');
       emit(
         state.copyWith(
           isLoadingGoogle: false,
@@ -199,13 +229,112 @@ class Screen0LoginBloc extends Bloc<Screen0LoginEvent, Screen0LoginState> {
     }
   }
 
+  String _googleSignInErrorMessage(PlatformException e) {
+    final code = e.code.toLowerCase();
+    // Android DEVELOPER_ERROR / common misconfig codes.
+    if (code == 'sign_in_failed' ||
+        code == '10' ||
+        code.contains('developer') ||
+        (e.message?.contains('ApiException: 10') ?? false) ||
+        (e.message?.contains('DEVELOPER_ERROR') ?? false)) {
+      return AppLocalization.translate('msg_google_sign_in_misconfigured');
+    }
+    if (e.message?.isNotEmpty == true) return e.message!;
+    return AppLocalization.translate('msg_google_sign_in_failed');
+  }
+
+  Future<void> _onLoginWithApple(
+    LoginWithAppleEvent event,
+    Emitter<Screen0LoginState> emit,
+  ) async {
+    if (_authBusy) return;
+    if (kIsWeb ||
+        (defaultTargetPlatform != TargetPlatform.iOS &&
+            defaultTargetPlatform != TargetPlatform.macOS)) {
+      emit(
+        state.copyWith(
+          loginError: AppLocalization.translate('msg_apple_sign_in_unavailable'),
+        ),
+      );
+      return;
+    }
+
+    emit(
+      state.copyWith(
+        isLoadingApple: true,
+        loginError: null,
+      ),
+    );
+    try {
+      final available = await SignInWithApple.isAvailable();
+      if (!available) {
+        emit(
+          state.copyWith(
+            isLoadingApple: false,
+            loginError:
+                AppLocalization.translate('msg_apple_sign_in_unavailable'),
+          ),
+        );
+        return;
+      }
+
+      final credential = await SignInWithApple.getAppleIDCredential(
+        scopes: [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+      );
+
+      final given = credential.givenName?.trim() ?? '';
+      final family = credential.familyName?.trim() ?? '';
+      final displayName = [given, family]
+          .where((part) => part.isNotEmpty)
+          .join(' ')
+          .trim();
+
+      final prefs = PrefUtils();
+      await prefs.setRememberSession(true);
+      await prefs.setAppleOfflineHomeSession(
+        displayName: displayName.isEmpty ? null : displayName,
+        email: credential.email,
+      );
+      emit(
+        state.copyWith(
+          isLoadingApple: false,
+          loginError: null,
+          loginSuccess: true,
+        ),
+      );
+    } on SignInWithAppleAuthorizationException catch (e) {
+      debugPrint('AppleSignIn auth exception: ${e.code} ${e.message}');
+      if (e.code == AuthorizationErrorCode.canceled) {
+        emit(state.copyWith(isLoadingApple: false));
+        return;
+      }
+      emit(
+        state.copyWith(
+          isLoadingApple: false,
+          loginError: e.message.isNotEmpty
+              ? e.message
+              : AppLocalization.translate('msg_apple_sign_in_failed'),
+        ),
+      );
+    } catch (e, st) {
+      debugPrint('AppleSignIn failed: $e\n$st');
+      emit(
+        state.copyWith(
+          isLoadingApple: false,
+          loginError: AppLocalization.translate('msg_apple_sign_in_failed'),
+        ),
+      );
+    }
+  }
+
   Future<void> _onContinueAsGuest(
     ContinueAsGuestEvent event,
     Emitter<Screen0LoginState> emit,
   ) async {
-    if (state.isLoading || state.isLoadingGoogle || state.isLoadingGuest) {
-      return;
-    }
+    if (_authBusy) return;
     emit(
       state.copyWith(
         isLoadingGuest: true,
@@ -225,6 +354,7 @@ class Screen0LoginBloc extends Bloc<Screen0LoginEvent, Screen0LoginState> {
         if (result.data.user != null) {
           await prefs.setUserSession(result.data.user!.toJson());
         }
+        syncWalletAfterAuth();
         emit(
           state.copyWith(
             isLoadingGuest: false,

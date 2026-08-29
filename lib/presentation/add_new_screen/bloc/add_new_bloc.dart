@@ -25,6 +25,7 @@ class AddNewBloc extends Bloc<AddNewEvent, AddNewState> {
     on<SliderwidthtValueChangedEvent>(_onSliderWidthValueChanged);
     on<MakeTransparentEvent>(_onMakeTransparent);
     on<SetBgColorEvent>(_onSetBgColor);
+    on<SetBackgroundImageEvent>(_onSetBackgroundImage);
     on<ApplyCustomSizeEvent>(_onApplyCustomSize);
     on<SetBgColorToolModeEvent>(_onSetBgColorToolMode);
     on<StartScreenColorPickEvent>(_onStartScreenColorPick);
@@ -34,6 +35,7 @@ class AddNewBloc extends Bloc<AddNewEvent, AddNewState> {
     on<SetTextContextSecondaryPanelEvent>(_onSetTextContextSecondaryPanel);
     on<SetImageContextSecondaryPanelEvent>(_onSetImageContextSecondaryPanel);
     on<ClearPendingDesignHistoryEvent>(_onClearPendingDesignHistory);
+    on<ToggleCanvasLockEvent>(_onToggleCanvasLock);
   }
 
   /// Drops stale [SetBgColorEvent] completions when the slider moves quickly.
@@ -156,97 +158,23 @@ class AddNewBloc extends Bloc<AddNewEvent, AddNewState> {
     emit(state.copyWith(clearPendingDesignHistory: true));
   }
 
+  void _onToggleCanvasLock(
+    ToggleCanvasLockEvent event,
+    Emitter<AddNewState> emit,
+  ) {
+    emit(state.copyWith(canvasLocked: !state.canvasLocked));
+  }
+
+  /// Slider drafts stay in the size panel; canvas changes only on Apply.
   _onSliderHeightValueChanged(
     SliderHeightValueChangedEvent event,
     Emitter<AddNewState> emit,
-  ) async {
-    Uint8List image = await _createTransparentImage(
-      event.width!,
-      event.height!,
-    );
-    emit(state.copyWith(transparentBytes: image, selectedheight: event.height));
-    if (state.editorKey!.currentState != null) {
-      // Update the background image in the state manager
-      state.editorKey!.currentState!.stateManager.updateBackgroundImages(
-        oldImage:
-            state.editorKey!.currentState!.stateManager.activeBackgroundImage ??
-            EditorImage(byteArray: image),
-        newImage: EditorImage(byteArray: image),
-      );
-
-      /// Force to rebuild everything
-      int pos = state.editorKey!.currentState!.stateManager.historyPointer;
-      EditorStateHistory oldHistory =
-          state.editorKey!.currentState!.stateManager.stateHistory[pos];
-
-      state.editorKey!.currentState!.stateManager.stateHistory[pos] =
-          EditorStateHistory(
-            layers: oldHistory.layers,
-            transformConfigs: oldHistory.transformConfigs,
-            blur: oldHistory.blur,
-            filters: [...oldHistory.filters],
-          );
-
-      /// Ensure that in the case the editor generated
-      /// in the background a screenshot it will generate
-      /// it again with the new picture.
-      if (pos > 0) {
-        state
-                .editorKey!
-                .currentState!
-                .stateManager
-                .screenshots[pos - 1]
-                .broken =
-            true;
-      }
-    }
-  }
+  ) {}
 
   _onSliderWidthValueChanged(
     SliderwidthtValueChangedEvent event,
     Emitter<AddNewState> emit,
-  ) async {
-    Uint8List image = await _createTransparentImage(
-      event.width!,
-      event.height!,
-    );
-    emit(state.copyWith(transparentBytes: image, selectedwidth: event.width));
-    if (state.editorKey!.currentState != null) {
-      // Update the background image in the state manager
-      state.editorKey!.currentState!.stateManager.updateBackgroundImages(
-        oldImage:
-            state.editorKey!.currentState!.stateManager.activeBackgroundImage ??
-            EditorImage(byteArray: image),
-        newImage: EditorImage(byteArray: image),
-      );
-
-      /// Force to rebuild everything
-      int pos = state.editorKey!.currentState!.stateManager.historyPointer;
-      EditorStateHistory oldHistory =
-          state.editorKey!.currentState!.stateManager.stateHistory[pos];
-
-      state.editorKey!.currentState!.stateManager.stateHistory[pos] =
-          EditorStateHistory(
-            layers: oldHistory.layers,
-            transformConfigs: oldHistory.transformConfigs,
-            blur: oldHistory.blur,
-            filters: [...oldHistory.filters],
-          );
-
-      /// Ensure that in the case the editor generated
-      /// in the background a screenshot it will generate
-      /// it again with the new picture.
-      if (pos > 0) {
-        state
-                .editorKey!
-                .currentState!
-                .stateManager
-                .screenshots[pos - 1]
-                .broken =
-            true;
-      }
-    }
-  }
+  ) {}
 
   // late Uint8List transparentBytes;
   // double _transparentAspectRatio = -1;
@@ -317,21 +245,46 @@ class AddNewBloc extends Bloc<AddNewEvent, AddNewState> {
     ApplyCustomSizeEvent event,
     Emitter<AddNewState> emit,
   ) async {
+    if (state.isResizingCanvas) return;
     final unit =
         CanvasUnitUtils.isSupported(event.unit) ? event.unit : state.canvasUnit;
     state.valueoneController?.text = event.width.toInt().toString();
     state.valueTwoController?.text = event.height.toInt().toString();
-    Uint8List image = await _createTransparentImage(event.width, event.height);
-    emit(
-      state.copyWith(
-        transparentBytes: image,
-        selectedheight: event.height,
-        selectedwidth: event.width,
-        canvasUnit: unit,
-      ),
+    await _resizeCanvas(
+      emit,
+      width: event.width,
+      height: event.height,
+      unit: unit,
     );
-    if (state.editorKey?.currentState != null) {
-      _applyBackgroundToEditor(image);
+  }
+
+  /// Rebuilds the paper pixels, updates both selected dimensions, swaps the
+  /// editor background, then re-decodes so [SizesManager] picks up the new size.
+  Future<void> _resizeCanvas(
+    Emitter<AddNewState> emit, {
+    required double width,
+    required double height,
+    String? unit,
+  }) async {
+    final w = width.clamp(1.0, 8192.0);
+    final h = height.clamp(1.0, 8192.0);
+    emit(state.copyWith(isResizingCanvas: true));
+    try {
+      final image = await _createTransparentImage(w, h);
+      emit(
+        state.copyWith(
+          transparentBytes: image,
+          selectedwidth: w,
+          selectedheight: h,
+          canvasUnit: unit,
+          isResizingCanvas: true,
+        ),
+      );
+      await _applyBackgroundToEditor(image);
+    } finally {
+      if (!isClosed) {
+        emit(state.copyWith(isResizingCanvas: false));
+      }
     }
   }
 
@@ -390,7 +343,7 @@ class AddNewBloc extends Bloc<AddNewEvent, AddNewState> {
             previousBackgroundBytes: null,
           ),
         );
-        _applyBackgroundToEditor(prevBytes);
+        await _applyBackgroundToEditor(prevBytes);
       }
       return;
     }
@@ -409,30 +362,34 @@ class AddNewBloc extends Bloc<AddNewEvent, AddNewState> {
             state.selectedBgColor?.withValues(alpha: 0) ?? Colors.transparent,
       ),
     );
-    _applyBackgroundToEditor(transparentImage);
+    await _applyBackgroundToEditor(transparentImage);
   }
 
-  void _applyBackgroundToEditor(Uint8List imageBytes) {
-    if (state.editorKey?.currentState == null) return;
-    state.editorKey!.currentState!.stateManager.updateBackgroundImages(
+  Future<void> _applyBackgroundToEditor(Uint8List imageBytes) async {
+    final editor = state.editorKey?.currentState;
+    if (editor == null) return;
+    editor.stateManager.updateBackgroundImages(
       oldImage:
-          state.editorKey!.currentState!.stateManager.activeBackgroundImage ??
+          editor.stateManager.activeBackgroundImage ??
           EditorImage(byteArray: imageBytes),
       newImage: EditorImage(byteArray: imageBytes),
     );
-    int pos = state.editorKey!.currentState!.stateManager.historyPointer;
-    EditorStateHistory oldHistory =
-        state.editorKey!.currentState!.stateManager.stateHistory[pos];
-    state.editorKey!.currentState!.stateManager.stateHistory[pos] =
-        EditorStateHistory(
-          layers: oldHistory.layers,
-          transformConfigs: oldHistory.transformConfigs,
-          blur: oldHistory.blur,
-          filters: [...oldHistory.filters],
-        );
+    final pos = editor.stateManager.historyPointer;
+    final oldHistory = editor.stateManager.stateHistory[pos];
+    editor.stateManager.stateHistory[pos] = EditorStateHistory(
+      layers: oldHistory.layers,
+      transformConfigs: oldHistory.transformConfigs,
+      blur: oldHistory.blur,
+      filters: [...oldHistory.filters],
+    );
     if (pos > 0) {
-      state.editorKey!.currentState!.stateManager.screenshots[pos - 1].broken =
-          true;
+      editor.stateManager.screenshots[pos - 1].broken = true;
+    }
+    // Background bytes alone do not resize the paper — re-decode so layout
+    // and hit-testing use the new dimensions.
+    await editor.decodeImage();
+    if (editor.mounted) {
+      editor.setState(() {});
     }
   }
 
@@ -485,7 +442,28 @@ class AddNewBloc extends Bloc<AddNewEvent, AddNewState> {
             usesCheckerboard ? state.previousBackgroundBytes : null,
       ),
     );
-    _applyBackgroundToEditor(imageBytes);
+    await _applyBackgroundToEditor(imageBytes);
+  }
+
+  /// Applies pre-cropped raster bytes as the page background.
+  ///
+  /// Clears the transparent-background state because the page now shows an
+  /// opaque image, and keeps the previous bytes so the transparency toggle can
+  /// still restore them.
+  Future<void> _onSetBackgroundImage(
+    SetBackgroundImageEvent event,
+    Emitter<AddNewState> emit,
+  ) async {
+    if (event.imageBytes.isEmpty) return;
+    _bgColorApplyGeneration++;
+    emit(
+      state.copyWith(
+        transparentBytes: event.imageBytes,
+        isBackgroundTransparent: false,
+        previousBackgroundBytes: null,
+      ),
+    );
+    await _applyBackgroundToEditor(event.imageBytes);
   }
 
   List<GridgalleryPicItemModel> fillGridgalleryPicItemList() {

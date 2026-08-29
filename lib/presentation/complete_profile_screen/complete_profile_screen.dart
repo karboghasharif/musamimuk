@@ -58,8 +58,9 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
         'country': _countryController.text.trim().isEmpty
             ? null
             : _countryController.text.trim(),
-        'bio':
-            _bioController.text.trim().isEmpty ? null : _bioController.text.trim(),
+        'bio': _bioController.text.trim().isEmpty
+            ? null
+            : _bioController.text.trim(),
         if (_photoPath != null && _photoPath!.isNotEmpty)
           'image': 'file://$_photoPath',
       },

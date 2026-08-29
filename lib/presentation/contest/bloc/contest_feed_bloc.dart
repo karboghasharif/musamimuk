@@ -8,15 +8,17 @@ part 'contest_feed_event.dart';
 part 'contest_feed_state.dart';
 
 class ContestFeedBloc extends Bloc<ContestFeedEvent, ContestFeedState> {
-  ContestFeedBloc(
-    super.initialState, {
-    ContestRepository? repository,
-  }) : _repo = repository ?? ContestRepository.instance {
+  ContestFeedBloc(super.initialState, {ContestRepository? repository})
+    : _repo = repository ?? ContestRepository.instance {
     on<ContestFeedInitialEvent>(_onInitial);
     on<ContestFeedRefreshEvent>(_onRefresh);
     on<ContestFeedLoadMoreEvent>(_onLoadMore);
+    on<ContestFeedSortChangedEvent>(_onSortChanged);
+    on<ContestFeedFeaturedFilterEvent>(_onFeaturedFilter);
     on<ContestFeedToggleLikeEvent>(_onToggleLike);
-    on<ContestFeedShareRecordedEvent>(_onShareRecorded);
+    on<ContestFeedShareEvent>(_onShare);
+    on<ContestFeedRecordViewEvent>(_onRecordView);
+    on<ContestFeedClearErrorEvent>(_onClearError);
   }
 
   final ContestRepository _repo;
@@ -44,6 +46,25 @@ class ContestFeedBloc extends Bloc<ContestFeedEvent, ContestFeedState> {
     await _fetchPage(emit, reset: false);
   }
 
+  Future<void> _onSortChanged(
+    ContestFeedSortChangedEvent event,
+    Emitter<ContestFeedState> emit,
+  ) async {
+    final sort = event.sort == 'likes' ? 'likes' : 'recent';
+    if (state.sort == sort) return;
+    emit(state.copyWith(sort: sort));
+    await _fetchPage(emit, reset: true, showInitialLoader: true);
+  }
+
+  Future<void> _onFeaturedFilter(
+    ContestFeedFeaturedFilterEvent event,
+    Emitter<ContestFeedState> emit,
+  ) async {
+    if (state.featuredOnly == event.featuredOnly) return;
+    emit(state.copyWith(featuredOnly: event.featuredOnly));
+    await _fetchPage(emit, reset: true, showInitialLoader: true);
+  }
+
   Future<void> _fetchPage(
     Emitter<ContestFeedState> emit, {
     required bool reset,
@@ -58,10 +79,17 @@ class ContestFeedBloc extends Bloc<ContestFeedEvent, ContestFeedState> {
         isRefreshing: !showInitialLoader && reset,
         isLoadingMore: !reset,
         clearError: reset,
+        clearLoadMoreError: true,
       ),
     );
 
-    final result = await _repo.feedSubmissions(page: nextPage);
+    final result = await _repo.feedSubmissions(
+      page: nextPage,
+      perPage: 20,
+      contestId: state.contestId,
+      featured: state.featuredOnly ? true : null,
+      sort: state.sort,
+    );
     if (generation != _loadGeneration) return;
 
     if (result is ContestFailure) {
@@ -70,7 +98,8 @@ class ContestFeedBloc extends Bloc<ContestFeedEvent, ContestFeedState> {
           isLoading: false,
           isRefreshing: false,
           isLoadingMore: false,
-          errorMessage: result.message,
+          errorMessage: reset ? result.message : null,
+          loadMoreError: reset ? null : result.message,
         ),
       );
       return;
@@ -81,6 +110,7 @@ class ContestFeedBloc extends Bloc<ContestFeedEvent, ContestFeedState> {
         ? success.submissions
         : [...state.items, ...success.submissions];
     final pageMeta = success.page;
+    final hasMore = pageMeta?.hasMore ?? (success.submissions.length >= 20);
 
     emit(
       state.copyWith(
@@ -88,9 +118,10 @@ class ContestFeedBloc extends Bloc<ContestFeedEvent, ContestFeedState> {
         isLoading: false,
         isRefreshing: false,
         isLoadingMore: false,
-        hasMore: pageMeta?.hasMore ?? false,
+        hasMore: hasMore,
         page: pageMeta?.nextPage ?? (reset ? 2 : state.page + 1),
         clearError: true,
+        clearLoadMoreError: true,
       ),
     );
   }
@@ -107,12 +138,16 @@ class ContestFeedBloc extends Bloc<ContestFeedEvent, ContestFeedState> {
 
     final current = state.items[index];
     final currentlyLiked = current.isLiked ?? false;
+    final previousLikes = current.likesCount ?? 0;
 
-    emit(state.copyWith(likingIds: {...state.likingIds, id}));
+    emit(state.copyWith(likingIds: {...state.likingIds, id}, clearError: true));
 
+    final optimisticLikes = currentlyLiked
+        ? (previousLikes > 0 ? previousLikes - 1 : 0)
+        : previousLikes + 1;
     final optimistic = current.copyWith(
       isLiked: !currentlyLiked,
-      likesCount: (current.likesCount ?? 0) + (currentlyLiked ? -1 : 1),
+      likesCount: optimisticLikes,
     );
     final optimisticItems = [...state.items];
     optimisticItems[index] = optimistic;
@@ -124,21 +159,32 @@ class ContestFeedBloc extends Bloc<ContestFeedEvent, ContestFeedState> {
     );
 
     final likingIds = {...state.likingIds}..remove(id);
-    if (result is ContestLikeResult) {
-      final resolved = current.copyWith(
-        isLiked: result.isLiked,
-        likesCount: result.likesCount,
-      );
+
+    if (result is ContestInteractionResult) {
       final items = [...state.items];
       final idx = items.indexWhere((s) => s.id == id);
-      if (idx >= 0) items[idx] = resolved;
+      if (idx >= 0) {
+        items[idx] = items[idx].applyInteraction(result.state);
+      }
       emit(state.copyWith(items: items, likingIds: likingIds));
       return;
     }
 
     if (result is ContestFailure) {
+      if (result.statusCode == 404) {
+        final items = [...state.items]..removeWhere((s) => s.id == id);
+        emit(
+          state.copyWith(
+            items: items,
+            likingIds: likingIds,
+            errorMessage: result.message,
+          ),
+        );
+        return;
+      }
       final reverted = [...state.items];
-      reverted[index] = current;
+      final idx = reverted.indexWhere((s) => s.id == id);
+      if (idx >= 0) reverted[idx] = current;
       emit(
         state.copyWith(
           items: reverted,
@@ -146,23 +192,109 @@ class ContestFeedBloc extends Bloc<ContestFeedEvent, ContestFeedState> {
           errorMessage: result.message,
         ),
       );
-    } else {
-      emit(state.copyWith(likingIds: likingIds));
+      return;
+    }
+
+    emit(state.copyWith(likingIds: likingIds));
+  }
+
+  Future<void> _onShare(
+    ContestFeedShareEvent event,
+    Emitter<ContestFeedState> emit,
+  ) async {
+    final id = event.submissionId;
+    if (state.sharingIds.contains(id)) return;
+
+    emit(
+      state.copyWith(
+        sharingIds: {...state.sharingIds, id},
+        clearPendingShare: true,
+        clearError: true,
+      ),
+    );
+
+    final result = await _repo.recordSubmissionShare(
+      id,
+      channel: event.channel,
+      source: event.source,
+    );
+
+    final sharingIds = {...state.sharingIds}..remove(id);
+
+    if (result is ContestInteractionResult) {
+      final items = [...state.items];
+      final idx = items.indexWhere((s) => s.id == id);
+      if (idx >= 0) {
+        items[idx] = items[idx].applyInteraction(result.state);
+      }
+      final shareUrl = result.shareUrl?.trim();
+      emit(
+        state.copyWith(
+          items: items,
+          sharingIds: sharingIds,
+          pendingShareUrl: (shareUrl != null && shareUrl.isNotEmpty)
+              ? shareUrl
+              : null,
+          pendingShareSubmissionId: id,
+        ),
+      );
+      return;
+    }
+
+    if (result is ContestFailure) {
+      if (result.statusCode == 404) {
+        final items = [...state.items]..removeWhere((s) => s.id == id);
+        emit(
+          state.copyWith(
+            items: items,
+            sharingIds: sharingIds,
+            errorMessage: result.message,
+          ),
+        );
+        return;
+      }
+      emit(
+        state.copyWith(sharingIds: sharingIds, errorMessage: result.message),
+      );
+      return;
+    }
+
+    emit(state.copyWith(sharingIds: sharingIds));
+  }
+
+  Future<void> _onRecordView(
+    ContestFeedRecordViewEvent event,
+    Emitter<ContestFeedState> emit,
+  ) async {
+    final id = event.submissionId;
+    if (id <= 0 || state.viewedIds.contains(id)) return;
+
+    emit(state.copyWith(viewedIds: {...state.viewedIds, id}));
+
+    final result = await _repo.interactSubmission(id, action: 'view');
+    if (result is ContestInteractionResult) {
+      final items = [...state.items];
+      final idx = items.indexWhere((s) => s.id == id);
+      if (idx >= 0) {
+        items[idx] = items[idx].applyInteraction(result.state);
+        emit(state.copyWith(items: items));
+      }
+    } else if (result is ContestFailure && result.statusCode == 404) {
+      final items = [...state.items]..removeWhere((s) => s.id == id);
+      emit(state.copyWith(items: items));
     }
   }
 
-  void _onShareRecorded(
-    ContestFeedShareRecordedEvent event,
+  void _onClearError(
+    ContestFeedClearErrorEvent event,
     Emitter<ContestFeedState> emit,
   ) {
-    final index = state.items.indexWhere((s) => s.id == event.submissionId);
-    if (index < 0) return;
-
-    final current = state.items[index];
-    final nextCount = event.sharesCount ??
-        ((current.sharesCount ?? 0) + 1);
-    final items = [...state.items];
-    items[index] = current.copyWith(sharesCount: nextCount);
-    emit(state.copyWith(items: items));
+    emit(
+      state.copyWith(
+        clearError: true,
+        clearLoadMoreError: true,
+        clearPendingShare: true,
+      ),
+    );
   }
 }

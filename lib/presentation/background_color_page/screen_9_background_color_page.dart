@@ -11,11 +11,11 @@ class Screen9BackgroundColorPage extends StatefulWidget {
       Screen9BackgroundColorPageState();
   static Widget builder(BuildContext context) {
     return BlocProvider<Screen9BackgroundColorBloc>(
-      create: (context) =>
-          Screen9BackgroundColorBloc(Screen9BackgroundColorState(
-        screen9BackgroundColorModelObj: const Screen9BackgroundColorModel(),
-      ))
-            ..add(Screen9BackgroundColorInitialEvent()),
+      create: (context) => Screen9BackgroundColorBloc(
+        Screen9BackgroundColorState(
+          screen9BackgroundColorModelObj: const Screen9BackgroundColorModel(),
+        ),
+      )..add(Screen9BackgroundColorInitialEvent()),
       child: const Screen9BackgroundColorPage(),
     );
   }
@@ -200,10 +200,7 @@ class Screen9BackgroundColorPageState extends State<Screen9BackgroundColorPage>
                       // ),
                       // SizedBox(height: 8.v),
                       Padding(
-                        padding: EdgeInsets.only(
-                          left: 28.h,
-                          right: 50.h,
-                        ),
+                        padding: EdgeInsets.only(left: 28.h, right: 50.h),
                         child: Row(
                           children: [
                             Column(
@@ -228,7 +225,7 @@ class Screen9BackgroundColorPageState extends State<Screen9BackgroundColorPage>
                                     "lbl_add_new".tr,
                                     style: theme.textTheme.bodySmall,
                                   ),
-                                )
+                                ),
                               ],
                             ),
                             Column(
@@ -251,7 +248,7 @@ class Screen9BackgroundColorPageState extends State<Screen9BackgroundColorPage>
                                     "lbl_resize_paper".tr,
                                     style: theme.textTheme.bodySmall,
                                   ),
-                                )
+                                ),
                               ],
                             ),
                             Column(
@@ -274,7 +271,7 @@ class Screen9BackgroundColorPageState extends State<Screen9BackgroundColorPage>
                                     "lbl_transparent_bg".tr,
                                     style: theme.textTheme.bodySmall,
                                   ),
-                                )
+                                ),
                               ],
                             ),
                             Padding(
@@ -295,17 +292,17 @@ class Screen9BackgroundColorPageState extends State<Screen9BackgroundColorPage>
                                   Text(
                                     "lbl_bg_color".tr,
                                     style: CustomTextStyles.bodySmallPrimary,
-                                  )
+                                  ),
                                 ],
                               ),
-                            )
+                            ),
                           ],
                         ),
-                      )
+                      ),
                     ],
                   ),
                 ),
-              )
+              ),
             ],
           ),
         ),
@@ -314,43 +311,31 @@ class Screen9BackgroundColorPageState extends State<Screen9BackgroundColorPage>
   }
 
   onTapBtnPlussvgrepoone(BuildContext context) {
-    NavigatorService.pushNamed(
-      AppRoutes.screen3AddNewScreen,
-    );
+    NavigatorService.pushNamed(AppRoutes.screen3AddNewScreen);
   }
 
   /// Navigates to the screen3AddNewScreen when the action is triggered.
   onTapTxtAddnew(BuildContext context) {
-    NavigatorService.pushNamed(
-      AppRoutes.screen3AddNewScreen,
-    );
+    NavigatorService.pushNamed(AppRoutes.screen3AddNewScreen);
   }
 
   /// Navigates to the screen7ResizePaperScreen when the action is triggered.
   onTapImgSlidesizeone(BuildContext context) {
-    NavigatorService.pushNamed(
-      AppRoutes.screen7ResizePaperScreen,
-    );
+    NavigatorService.pushNamed(AppRoutes.screen7ResizePaperScreen);
   }
 
   /// Navigates to the screen7ResizePaperScreen when the action is triggered.
   onTapTxtResizepaper(BuildContext context) {
-    NavigatorService.pushNamed(
-      AppRoutes.screen7ResizePaperScreen,
-    );
+    NavigatorService.pushNamed(AppRoutes.screen7ResizePaperScreen);
   }
 
   /// Navigates to the screen8TransperantBgScreen when the action is triggered.
   onTapImgBlockchainone(BuildContext context) {
-    NavigatorService.pushNamed(
-      AppRoutes.screen8TransperantBgScreen,
-    );
+    NavigatorService.pushNamed(AppRoutes.screen8TransperantBgScreen);
   }
 
   /// Navigates to the screen8TransperantBgScreen when the action is triggered.
   onTapTxtTransparentbg(BuildContext context) {
-    NavigatorService.pushNamed(
-      AppRoutes.screen8TransperantBgScreen,
-    );
+    NavigatorService.pushNamed(AppRoutes.screen8TransperantBgScreen);
   }
 }

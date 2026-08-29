@@ -6,6 +6,13 @@
     <string name="fb_login_protocol_scheme" translatable="false">fbREPLACE_WITH_FACEBOOK_APP_ID</string>
     <string name="facebook_display_name" translatable="false">Musamimuk</string>
 
-    <!-- Optional: Web OAuth client ID from Google Cloud Console (used by google_sign_in server auth). -->
-    <string name="default_web_client_id" translatable="false">REPLACE_WITH_GOOGLE_WEB_CLIENT_ID.apps.googleusercontent.com</string>
+    <!--
+      Do NOT ship a placeholder default_web_client_id.
+      google_sign_in on Android auto-reads this string and calls requestIdToken().
+      A fake "….apps.googleusercontent.com" value causes DEVELOPER_ERROR (code 10)
+      and SignInHubActivity closes immediately.
+
+      When you have a real Web OAuth client ID from Google Cloud Console, add:
+      <string name="default_web_client_id" translatable="false">YOUR_WEB_CLIENT_ID.apps.googleusercontent.com</string>
+    -->
 </resources>

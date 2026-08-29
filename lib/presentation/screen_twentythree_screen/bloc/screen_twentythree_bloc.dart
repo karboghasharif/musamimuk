@@ -1,5 +1,9 @@
 import 'package:equatable/equatable.dart';
+import 'package:flutter/material.dart';
 import '../../../core/app_export.dart';
+import '../../../core/deeplink/app_deep_link_service.dart';
+import '../../../data/repositories/app_version_repository.dart';
+import '../../force_update/force_update_screen.dart';
 import '../models/screen_twentythree_model.dart';
 part 'screen_twentythree_event.dart';
 part 'screen_twentythree_state.dart';
@@ -10,15 +14,31 @@ class ScreenTwentythreeBloc
   ScreenTwentythreeBloc(super.initialState) {
     on<ScreenTwentythreeInitialEvent>(_onInitialize);
   }
+
   _onInitialize(
     ScreenTwentythreeInitialEvent event,
     Emitter<ScreenTwentythreeState> emit,
   ) async {
+    final gate = await AppVersionRepository().evaluateGate(
+      arabic: AppLocalization.activeLanguageCode() == 'ar',
+    );
+    if (gate.blocked) {
+      await NavigatorService.navigatorKey.currentState?.pushAndRemoveUntil(
+        MaterialPageRoute<void>(
+          builder: (_) => ForceUpdateScreen(decision: gate),
+        ),
+        (_) => false,
+      );
+      return;
+    }
+
     await Future.delayed(const Duration(milliseconds: 3000));
     if (PrefUtils().isLoggedIn() || PrefUtils().hasOfflineHomeAccess()) {
-      NavigatorService.popAndPushNamed(AppRoutes.screen1HomeScreen);
+      await NavigatorService.popAndPushNamed(AppRoutes.screen1HomeScreen);
     } else {
-      NavigatorService.popAndPushNamed(AppRoutes.screen0LoginScreen);
+      await NavigatorService.popAndPushNamed(AppRoutes.screen0LoginScreen);
     }
+    // Apply any cold-start / pending App Link after the root screen is ready.
+    AppDeepLinkService.instance.markNavigationReady();
   }
 }

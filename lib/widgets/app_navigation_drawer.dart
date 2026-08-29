@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../core/app_export.dart';
 import '../core/utils/app_toast.dart';
 import '../data/repositories/auth_repository.dart';
+import '../presentation/wallet/wallet_auth_sync.dart';
 
 const _kGooglePlayListingUrl =
     'https://play.google.com/store/apps/details?id=com.musamimuk.app';
@@ -175,6 +176,37 @@ class AppNavigationDrawer extends StatelessWidget {
                       NavigatorService.pushNamed(
                         AppRoutes.screen19RemoveBackgroundScreen,
                       );
+                    },
+                  ),
+                  _DrawerNavTile(
+                    icon: Icons.monetization_on_outlined,
+                    label: 'lbl_coin_store'.tr,
+                    onTap: () {
+                      Navigator.pop(context);
+                      NavigatorService.pushNamed(AppRoutes.coinStoreScreen);
+                    },
+                  ),
+                  _DrawerNavTile(
+                    icon: Icons.workspace_premium_outlined,
+                    label: 'lbl_premium_plan'.tr,
+                    onTap: () {
+                      Navigator.pop(context);
+                      NavigatorService.pushNamed(
+                        AppRoutes.screen1SubcriptionScreen,
+                      );
+                    },
+                  ),
+                  _DrawerNavTile(
+                    icon: Icons.tune_rounded,
+                    label: 'lbl_settings'.tr,
+                    onTap: () => _showLanguageDialog(context),
+                  ),
+                  _DrawerNavTile(
+                    icon: Icons.help_outline_rounded,
+                    label: 'lbl_help'.tr,
+                    onTap: () {
+                      Navigator.pop(context);
+                      NavigatorService.pushNamed(AppRoutes.aboutUsScreen);
                     },
                   ),
                   _DrawerNavTile(
@@ -415,5 +447,6 @@ Future<void> _drawerLogout(BuildContext context) async {
   try {
     await GoogleSignIn().signOut();
   } catch (_) {}
+  syncWalletAfterAuth(forceReset: true);
   await SessionManager.instance.logout();
 }

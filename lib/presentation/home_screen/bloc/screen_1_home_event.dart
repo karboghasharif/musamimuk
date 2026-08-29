@@ -9,3 +9,8 @@ class Screen1HomeInitialEvent extends Screen1HomeEvent {
   @override
   List<Object?> get props => [];
 }
+
+class Screen1HomeRefreshEvent extends Screen1HomeEvent {
+  @override
+  List<Object?> get props => [];
+}

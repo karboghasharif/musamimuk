@@ -3,11 +3,15 @@
 .packages
 build/
 # Local AI debug keys (never commit)
-lib/core/config/ai_debug_secrets.dart
+**/ai_debug_secrets.dart
+**/pinterest_secrets.dart
+.env
+.env.*
 # IDE
 .idea/
 *.iml
 .vscode/
+.cursor/*.log
 # OS
 .DS_Store
 # Flutter

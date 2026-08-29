@@ -8,7 +8,6 @@ import '../../core/utils/app_toast.dart';
 import '../../core/utils/validation_functions.dart';
 import '../../widgets/google_brand_logo.dart';
 import 'bloc/screen_0_login_bloc.dart';
-import 'models/screen_0_login_model.dart';
 
 class Screen0LoginScreen extends StatelessWidget {
   Screen0LoginScreen({super.key});
@@ -17,9 +16,8 @@ class Screen0LoginScreen extends StatelessWidget {
 
   static Widget builder(BuildContext context) {
     return BlocProvider<Screen0LoginBloc>(
-      create: (context) => Screen0LoginBloc(
-        Screen0LoginState(screen0LoginModelObj: const Screen0LoginModel()),
-      )..add(Screen0LoginInitialEvent()),
+      create: (context) =>
+          Screen0LoginBloc()..add(Screen0LoginInitialEvent()),
       child: Screen0LoginScreen(),
     );
   }
@@ -46,10 +44,12 @@ class Screen0LoginScreen extends StatelessWidget {
             buildWhen: (prev, curr) =>
                 prev.isLoading != curr.isLoading ||
                 prev.isLoadingGoogle != curr.isLoadingGoogle ||
+                prev.isLoadingApple != curr.isLoadingApple ||
                 prev.isLoadingGuest != curr.isLoadingGuest,
             builder: (context, state) {
               final authBusy = state.isLoading ||
                   state.isLoadingGoogle ||
+                  state.isLoadingApple ||
                   state.isLoadingGuest;
               return AppLoadingOverlay(
                 isLoading: authBusy,
@@ -269,9 +269,12 @@ class Screen0LoginScreen extends StatelessWidget {
           prev.loginError != curr.loginError ||
           prev.isLoading != curr.isLoading ||
           prev.isLoadingGoogle != curr.isLoadingGoogle ||
+          prev.isLoadingApple != curr.isLoadingApple ||
           prev.isLoadingGuest != curr.isLoadingGuest,
       builder: (context, state) {
-        final socialBusy = state.isLoadingGoogle || state.isLoadingGuest;
+        final socialBusy = state.isLoadingGoogle ||
+            state.isLoadingApple ||
+            state.isLoadingGuest;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
@@ -330,10 +333,12 @@ class Screen0LoginScreen extends StatelessWidget {
             buildWhen: (prev, curr) =>
                 prev.isLoading != curr.isLoading ||
                 prev.isLoadingGoogle != curr.isLoadingGoogle ||
+                prev.isLoadingApple != curr.isLoadingApple ||
                 prev.isLoadingGuest != curr.isLoadingGuest,
             builder: (context, state) {
               final authBusy = state.isLoading ||
                   state.isLoadingGoogle ||
+                  state.isLoadingApple ||
                   state.isLoadingGuest;
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -372,9 +377,14 @@ class Screen0LoginScreen extends StatelessWidget {
                         AppSocialIconButton(
                           semanticsLabel: 'lbl_continue_with_apple'.tr,
                           icon: Icons.apple,
+                          isLoading: state.isLoadingApple,
                           onPressed: authBusy
                               ? null
-                              : () => _showSocialComingSoon(context),
+                              : () {
+                                  context.read<Screen0LoginBloc>().add(
+                                        LoginWithAppleEvent(),
+                                      );
+                                },
                         ),
                       ],
                     ],
@@ -437,14 +447,23 @@ class Screen0LoginScreen extends StatelessWidget {
     final bloc = context.read<Screen0LoginBloc>();
     if (bloc.state.isLoading ||
         bloc.state.isLoadingGoogle ||
+        bloc.state.isLoadingApple ||
         bloc.state.isLoadingGuest) {
       return;
     }
+    // Never let a stuck global overlay swallow the tap / block the request.
+    GlobalLoadingController.instance.reset();
     final formValid = _formKey.currentState?.validate() ?? false;
     if (!formValid) return;
     final email = bloc.state.emailController?.text.trim() ?? '';
     final password = bloc.state.passwordController?.text ?? '';
-    if (email.isEmpty || password.isEmpty) return;
+    if (email.isEmpty || password.isEmpty) {
+      showAppToast(
+        'err_msg_please_enter_valid_email'.tr,
+        type: ToastificationType.warning,
+      );
+      return;
+    }
     bloc.add(
       LoginSubmitEvent(
         email: email,
@@ -452,9 +471,5 @@ class Screen0LoginScreen extends StatelessWidget {
         rememberMe: bloc.state.rememberMe,
       ),
     );
-  }
-
-  void _showSocialComingSoon(BuildContext context) {
-    showAppToast('msg_social_login_coming_soon'.tr);
   }
 }

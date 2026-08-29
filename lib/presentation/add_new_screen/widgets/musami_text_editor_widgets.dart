@@ -5,9 +5,10 @@ import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:pro_image_editor/pro_image_editor.dart';
 
 import '../../../core/app_export.dart';
-import '../../add_text_screen/add_text_ai_actions.dart';
 import 'arabic_custom_keyboard.dart';
+import 'musami_text_editor_ai_sheet.dart';
 import 'musami_text_editor_arabic_fonts.dart';
+import 'musami_text_editor_script.dart';
 
 /// Swatches for **text** (foreground).
 const List<Color> kMusamiTextColorPalette = [
@@ -380,7 +381,7 @@ ReactiveAppbar musamiTextEditorAppBar({
     stream: rebuildStream,
     appbarSize: Size.fromHeight(52.v),
     builder: (context) {
-      final rtl = editor.inputTextDirection == TextDirection.rtl;
+      final rtl = editor.isMusamiRtl;
       return PreferredSize(
         preferredSize: Size.fromHeight(52.v),
         child: Material(
@@ -394,7 +395,9 @@ ReactiveAppbar musamiTextEditorAppBar({
                 children: [
                   IconButton(
                     icon: const Icon(Icons.arrow_back),
-                    tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+                    tooltip: MaterialLocalizations.of(
+                      context,
+                    ).backButtonTooltip,
                     onPressed: editor.close,
                   ),
                   Expanded(
@@ -428,7 +431,7 @@ class _MusamiScriptToggle extends StatelessWidget {
               context,
               label: 'lbl_text_editor_english'.tr,
               selected: !rtl,
-              onTap: () => editor.setInputTextDirection(TextDirection.ltr),
+              onTap: () => editor.setMusamiScriptDirection(TextDirection.ltr),
               selectedBg: cs.primary,
               unselectedBg: appTheme.blueGray90002,
               selectedFg: cs.onPrimary,
@@ -441,7 +444,7 @@ class _MusamiScriptToggle extends StatelessWidget {
               context,
               label: 'lbl_text_editor_arabic_script'.tr,
               selected: rtl,
-              onTap: () => editor.setInputTextDirection(TextDirection.rtl),
+              onTap: () => editor.setMusamiScriptDirection(TextDirection.rtl),
               selectedBg: cs.primary,
               unselectedBg: appTheme.yellow500,
               selectedFg: cs.onPrimary,
@@ -567,9 +570,6 @@ class _MusamiTextEditorFloatingChrome extends StatefulWidget {
 
 class _MusamiTextEditorFloatingChromeState
     extends State<_MusamiTextEditorFloatingChrome> {
-  final AddTextAiActions _aiActions = AddTextAiActions();
-  bool _aiBusy = false;
-
   /// Body stack bottom — scaffold already insets above the keyboard.
   double _overlayBottom(BuildContext context) => 8.v;
 
@@ -591,6 +591,7 @@ class _MusamiTextEditorFloatingChromeState
   }
 
   void _openFontsSheet(BuildContext context, TextEditorState editor) {
+    final preferArabic = editor.isMusamiRtl;
     showAppModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -602,6 +603,7 @@ class _MusamiTextEditorFloatingChromeState
               child: MusamiArabicFontPickerStrip(
                 editor: editor,
                 theme: widget.theme,
+                preferArabic: preferArabic,
               ),
             ),
           ),
@@ -680,87 +682,12 @@ class _MusamiTextEditorFloatingChromeState
     required bool rtl,
     required bool keyboardOpen,
   }) {
-    final aiBusy = _aiBusy;
     return [
       _toolbarButton(
         theme: theme,
-        icon: Icons.auto_awesome_rounded,
+        icon: Icons.auto_awesome,
         label: 'lbl_text_editor_ai'.tr,
-        enabled: !aiBusy,
-        onTap: () {
-          _aiActions.showSuggestions(
-            context: context,
-            controller: editor.textCtrl,
-            isUrdu: rtl,
-            isMounted: () => mounted,
-            isBusy: _aiBusy,
-            setBusy: (v) => setState(() => _aiBusy = v),
-          ).then((_) => editor.focusNode.requestFocus());
-        },
-      ),
-      _toolbarButton(
-        theme: theme,
-        icon: Icons.auto_fix_high_rounded,
-        label: 'lbl_toolbar_beautify'.tr,
-        enabled: !aiBusy,
-        onTap: () {
-          _aiActions.beautify(
-            context: context,
-            controller: editor.textCtrl,
-            isUrdu: rtl,
-            isMounted: () => mounted,
-            isBusy: _aiBusy,
-            setBusy: (v) => setState(() => _aiBusy = v),
-          ).then((_) => editor.focusNode.requestFocus());
-        },
-      ),
-      _toolbarButton(
-        theme: theme,
-        icon: Icons.translate_rounded,
-        label: 'lbl_text_editor_translate'.tr,
-        enabled: !aiBusy,
-        onTap: () {
-          _aiActions.translateWithLanguagePicker(
-            context: context,
-            controller: editor.textCtrl,
-            isUrdu: rtl,
-            isMounted: () => mounted,
-            isBusy: _aiBusy,
-            setBusy: (v) => setState(() => _aiBusy = v),
-          ).then((_) => editor.focusNode.requestFocus());
-        },
-      ),
-      _toolbarButton(
-        theme: theme,
-        icon: Icons.compress_rounded,
-        label: 'lbl_toolbar_shorten'.tr,
-        enabled: !aiBusy,
-        onTap: () {
-          _aiActions.shorten(
-            context: context,
-            controller: editor.textCtrl,
-            isUrdu: rtl,
-            isMounted: () => mounted,
-            isBusy: _aiBusy,
-            setBusy: (v) => setState(() => _aiBusy = v),
-          ).then((_) => editor.focusNode.requestFocus());
-        },
-      ),
-      _toolbarButton(
-        theme: theme,
-        icon: Icons.bolt_rounded,
-        label: 'lbl_toolbar_make_punchy'.tr,
-        enabled: !aiBusy,
-        onTap: () {
-          _aiActions.makePunchy(
-            context: context,
-            controller: editor.textCtrl,
-            isUrdu: rtl,
-            isMounted: () => mounted,
-            isBusy: _aiBusy,
-            setBusy: (v) => setState(() => _aiBusy = v),
-          ).then((_) => editor.focusNode.requestFocus());
-        },
+        onTap: () => musamiShowTextEditorAiSheet(context, editor),
       ),
       _toolbarButton(
         theme: theme,
@@ -793,28 +720,18 @@ class _MusamiTextEditorFloatingChromeState
         label: 'lbl_text_editor_larger'.tr,
         onTap: () => _nudgeFontScale(editor, 0.1),
       ),
-      if (rtl)
-        _toolbarButton(
-          theme: theme,
-          icon: Icons.font_download_rounded,
-          label: 'lbl_text_editor_fonts_toolbar'.tr,
-          onTap: () => _openFontsSheet(context, editor),
-        ),
+      _toolbarButton(
+        theme: theme,
+        icon: Icons.font_download_rounded,
+        label: 'lbl_text_editor_fonts_toolbar'.tr,
+        onTap: () => _openFontsSheet(context, editor),
+      ),
       if (rtl && keyboardOpen)
         _toolbarButton(
           theme: theme,
           icon: Icons.spellcheck_rounded,
           label: 'lbl_keyboard_tashkeela'.tr,
           onTap: () => _openTashkeelaSheet(context, editor),
-        ),
-      if (aiBusy)
-        Padding(
-          padding: EdgeInsets.symmetric(horizontal: 8.h),
-          child: SizedBox(
-            width: 22.adaptSize,
-            height: 22.adaptSize,
-            child: const CircularProgressIndicator(strokeWidth: 2),
-          ),
         ),
     ];
   }
@@ -827,7 +744,7 @@ class _MusamiTextEditorFloatingChromeState
     return ValueListenableBuilder<TextEditingValue>(
       valueListenable: editor.textCtrl,
       builder: (context, value, _) {
-        final rtl = editor.inputTextDirection == TextDirection.rtl;
+        final rtl = editor.isMusamiRtl;
         final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
         final bottomPad = _overlayBottom(context);
         final showInlineTashkeela = rtl && !keyboardOpen;

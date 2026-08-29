@@ -12,6 +12,7 @@ import '../../core/country_names.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../widgets/app_bar/appbar_leading_image.dart';
 import '../../widgets/app_bar/custom_app_bar.dart';
+import '../wallet/wallet_auth_sync.dart';
 
 /// Profile settings: labeled fields, photo, country selector, change password.
 class ProfileScreen extends StatefulWidget {
@@ -273,6 +274,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       await GoogleSignIn().signOut();
     } catch (_) {}
+    syncWalletAfterAuth(forceReset: true);
     await SessionManager.instance.logout();
   }
 
@@ -332,6 +334,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       'msg_delete_account_session_cleared'.tr,
       type: ToastificationType.success,
     );
+    syncWalletAfterAuth(forceReset: true);
     await SessionManager.instance.logout();
   }
 

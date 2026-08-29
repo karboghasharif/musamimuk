@@ -1,4 +1,5 @@
 import 'package:musamimuk/core/network/api_utils.dart';
+import 'package:musamimuk/data/models/wallet_models.dart';
 
 /// Response from POST `user/register` (multipart).
 class RegisterResponse {
@@ -30,8 +31,9 @@ class RegisterResponse {
 class RegisterData {
   final String token;
   final RegisterUser? user;
+  final WalletBalance? wallet;
 
-  RegisterData({required this.token, this.user});
+  RegisterData({required this.token, this.user, this.wallet});
 
   factory RegisterData.fromJson(Map<String, dynamic> json) {
     return RegisterData(
@@ -39,6 +41,7 @@ class RegisterData {
       user: json['user'] != null
           ? RegisterUser.fromJson(json['user'] as Map<String, dynamic>)
           : null,
+      wallet: walletBalanceFromPayload(json),
     );
   }
 }

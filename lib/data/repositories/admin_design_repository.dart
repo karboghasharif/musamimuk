@@ -58,10 +58,12 @@ class AdminDesignRepository {
   final ApiClient _api;
 
   /// [sort] e.g. `latest` — matches backend query param.
+  /// [visibility] optional filter (`public` / `private`) when the API supports it.
   Future<AdminDesignListResult> list({
     int perPage = 20,
     String sort = 'latest',
     int page = 1,
+    String? visibility,
   }) async {
     try {
       final response = await _api.dio.get<Map<String, dynamic>>(
@@ -70,6 +72,8 @@ class AdminDesignRepository {
           'per_page': perPage,
           'sort': sort,
           if (page > 1) 'page': page,
+          if (visibility != null && visibility.trim().isNotEmpty)
+            'visibility': visibility.trim().toLowerCase(),
         },
       );
       final data = response.data;

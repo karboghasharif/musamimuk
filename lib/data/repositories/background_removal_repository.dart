@@ -1,7 +1,9 @@
 import 'package:dio/dio.dart';
 import 'package:musamimuk/core/network/api_client.dart';
+import 'package:musamimuk/core/network/api_error_mapper.dart';
 import 'package:musamimuk/core/network/api_utils.dart';
 import 'package:musamimuk/data/models/background_removal_api_models.dart';
+import 'package:musamimuk/data/models/wallet_models.dart';
 
 class BackgroundRemovalRepository {
   BackgroundRemovalRepository({ApiClient? apiClient})
@@ -70,8 +72,20 @@ class BackgroundRemovalRepository {
       return BackgroundRemovalApiSuccess(
         data: data,
         message: apiExtractMessage(envelope),
+        wallet: walletBalanceFromPayload(payload) ??
+            walletBalanceFromPayload(envelope),
       );
     } on DioException catch (e) {
+      if (ApiErrorMapper.isInsufficientCoins(e)) {
+        return BackgroundRemovalApiFailure(
+          kind: BackgroundRemovalErrorKind.insufficientCoins,
+          message: _messageFromDio(e),
+          insufficient: InsufficientCoinsInfo.fromResponse(
+            body: e.response?.data,
+            fallbackMessage: _messageFromDio(e),
+          ),
+        );
+      }
       return BackgroundRemovalApiFailure(
         kind: _kindFromDio(e),
         message: _messageFromDio(e),
@@ -97,8 +111,7 @@ class BackgroundRemovalRepository {
       final data = response.data;
       if (data == null || data.isEmpty) return null;
       return data;
-    } on DioException catch (e) {
-      if (_isNetworkIssue(e)) return null;
+    } on DioException catch (_) {
       return null;
     } catch (_) {
       return null;

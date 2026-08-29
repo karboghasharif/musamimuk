@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:musamimuk/data/models/background_removal_api_models.dart';
+import 'package:musamimuk/data/models/wallet_models.dart';
 import 'package:musamimuk/data/repositories/background_removal_repository.dart';
 
 /// Orchestrates validation, caching, API upload, and PNG download for
@@ -68,7 +69,7 @@ class BackgroundRemovalService {
       );
 
       switch (apiResult) {
-        case BackgroundRemovalApiSuccess(:final data):
+        case BackgroundRemovalApiSuccess(:final data, :final wallet):
           final downloaded = await _repository.downloadProcessedImage(
             data.imageUrl,
           );
@@ -84,6 +85,7 @@ class BackgroundRemovalService {
             return BackgroundRemovalProcessResult.success(
               bytes: pngBytes,
               imageUrl: data.imageUrl,
+              wallet: wallet,
             );
           }
         case BackgroundRemovalApiFailure(:final kind, :final message):
@@ -175,29 +177,34 @@ class BackgroundRemovalProcessResult {
     this.kind,
     this.message,
     this.fromCache = false,
+    this.wallet,
   });
 
   factory BackgroundRemovalProcessResult.success({
     required Uint8List bytes,
     String? imageUrl,
     bool fromCache = false,
+    WalletBalance? wallet,
   }) {
     return BackgroundRemovalProcessResult._(
       isSuccess: true,
       bytes: bytes,
       imageUrl: imageUrl,
       fromCache: fromCache,
+      wallet: wallet,
     );
   }
 
   factory BackgroundRemovalProcessResult.failure({
     required BackgroundRemovalErrorKind kind,
     required String message,
+    WalletBalance? wallet,
   }) {
     return BackgroundRemovalProcessResult._(
       isSuccess: false,
       kind: kind,
       message: message,
+      wallet: wallet,
     );
   }
 
@@ -207,4 +214,5 @@ class BackgroundRemovalProcessResult {
   final BackgroundRemovalErrorKind? kind;
   final String? message;
   final bool fromCache;
+  final WalletBalance? wallet;
 }

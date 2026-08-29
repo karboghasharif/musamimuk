@@ -6,6 +6,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../core/design_system/app_design_tokens.dart';
+import '../core/network/authenticated_image.dart';
 
 extension ImageTypeExtension on String {
   ImageType get imageType {
@@ -24,19 +25,20 @@ extension ImageTypeExtension on String {
 enum ImageType { svg, png, network, file, unknown }
 
 class CustomImageView extends StatelessWidget {
-  CustomImageView(
-      {super.key,
-      this.imagePath,
-      this.height,
-      this.width,
-      this.color,
-      this.fit,
-      this.alignment,
-      this.onTap,
-      this.radius,
-      this.margin,
-      this.border,
-      this.placeHolder = 'assets/images/image_not_found.png'});
+  CustomImageView({
+    super.key,
+    this.imagePath,
+    this.height,
+    this.width,
+    this.color,
+    this.fit,
+    this.alignment,
+    this.onTap,
+    this.radius,
+    this.margin,
+    this.border,
+    this.placeHolder = 'assets/images/image_not_found.png',
+  });
   String? imagePath;
   double? height;
   double? width;
@@ -58,10 +60,7 @@ class CustomImageView extends StatelessWidget {
   Widget _buildWidget() {
     return Padding(
       padding: margin ?? EdgeInsets.zero,
-      child: InkWell(
-        onTap: onTap,
-        child: _buildCircleImage(),
-      ),
+      child: InkWell(onTap: onTap, child: _buildCircleImage()),
     );
   }
 
@@ -79,10 +78,7 @@ class CustomImageView extends StatelessWidget {
   _buildImageWithBorder() {
     if (border != null) {
       return Container(
-        decoration: BoxDecoration(
-          border: border,
-          borderRadius: radius,
-        ),
+        decoration: BoxDecoration(border: border, borderRadius: radius),
         child: _buildImageView(),
       );
     } else {
@@ -105,7 +101,9 @@ class CustomImageView extends StatelessWidget {
               fit: fit ?? BoxFit.contain,
               colorFilter: color != null
                   ? ColorFilter.mode(
-                      color ?? Colors.transparent, BlendMode.srcIn)
+                      color ?? Colors.transparent,
+                      BlendMode.srcIn,
+                    )
                   : null,
             ),
           );
@@ -123,6 +121,7 @@ class CustomImageView extends StatelessWidget {
             width: width,
             fit: fit,
             imageUrl: path,
+            httpHeaders: musamiAuthenticatedHeadersForUrl(path),
             color: color,
             fadeInDuration: AppDs.motionNormal,
             fadeOutDuration: AppDs.motionFast,

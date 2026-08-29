@@ -5,7 +5,10 @@ import 'package:url_launcher/url_launcher.dart';
 import '../core/app_export.dart';
 import '../core/utils/app_toast.dart';
 import '../core/utils/open_design_redesign.dart';
+import '../data/models/wallet_models.dart';
 import '../data/repositories/design_interaction_repository.dart';
+import '../presentation/wallet/bloc/wallet_bloc.dart';
+import '../presentation/wallet/wallet_cost_guard.dart';
 
 bool designPreviewIsNetworkUrl(String? s) {
   if (s == null || s.isEmpty) return false;
@@ -20,8 +23,10 @@ Future<void> showDesignPreviewSheet(
   int? designId,
   String? title,
   String? subtitle,
+
   /// Multi-line catalog metadata (kept for non-online callers).
   String? detailsBody,
+
   /// Preferred compact stats for online designs.
   String? categoryName,
   int? downloadsCount,
@@ -31,8 +36,12 @@ Future<void> showDesignPreviewSheet(
   int? designHeight,
   Widget? footer,
   bool showRemoveBackground = true,
+
   /// When true, shows Redesign instead of Open in browser.
   bool enableRedesign = false,
+
+  /// Public catalog designs are cloned before opening so originals stay intact.
+  bool cloneBeforeRedesign = false,
 }) async {
   final parentContext = context;
   await showAppModalBottomSheet<void>(
@@ -66,10 +75,12 @@ Future<void> showDesignPreviewSheet(
             showAppToast(msg);
           }
 
-          final hasStructuredStats = categoryName != null ||
+          final hasStructuredStats =
+              categoryName != null ||
               downloadsCount != null ||
               trendingScore != null;
-          final showLegacyDetails = !hasStructuredStats &&
+          final showLegacyDetails =
+              !hasStructuredStats &&
               detailsBody != null &&
               detailsBody.trim().isNotEmpty;
 
@@ -103,8 +114,9 @@ Future<void> showDesignPreviewSheet(
                       SizedBox(height: AppDs.space3.v),
                     ],
                     ClipRRect(
-                      borderRadius:
-                          BorderRadius.circular(AppDs.radiusMd.adaptSize),
+                      borderRadius: BorderRadius.circular(
+                        AppDs.radiusMd.adaptSize,
+                      ),
                       child: ColoredBox(
                         color: Colors.black.withValues(alpha: 0.25),
                         child: InteractiveViewer(
@@ -134,8 +146,7 @@ Future<void> showDesignPreviewSheet(
                           if (downloadsCount != null)
                             _PreviewStatChip(
                               icon: Icons.download_outlined,
-                              label:
-                                  '${'lbl_downloads'.tr}: $downloadsCount',
+                              label: '${'lbl_downloads'.tr}: $downloadsCount',
                             ),
                           if (trendingScore != null)
                             _PreviewStatChip(
@@ -164,8 +175,9 @@ Future<void> showDesignPreviewSheet(
                         padding: EdgeInsets.all(AppDs.space3.adaptSize),
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: 0.07),
-                          borderRadius:
-                              BorderRadius.circular(AppDs.radiusMd.adaptSize),
+                          borderRadius: BorderRadius.circular(
+                            AppDs.radiusMd.adaptSize,
+                          ),
                         ),
                         child: SelectableText(
                           detailsBody.trim(),
@@ -185,17 +197,16 @@ Future<void> showDesignPreviewSheet(
                       SizedBox(
                         height: 52.v,
                         child: FilledButton.icon(
-                          onPressed: isWorking
+                          onPressed: isWorking || designId == null
                               ? null
                               : () async {
+                                  if (isWorking) return;
+                                  setState(() => isWorking = true);
                                   Navigator.of(context).pop();
                                   await openDesignForRedesign(
                                     parentContext,
-                                    imageUrl: imageRef,
-                                    designName: title,
-                                    designHistoryJson: designHistoryJson,
-                                    width: designWidth,
-                                    height: designHeight,
+                                    designId: designId,
+                                    cloneBeforeOpening: cloneBeforeRedesign,
                                   );
                                 },
                           icon: const Icon(Icons.auto_fix_high_outlined),
@@ -219,27 +230,22 @@ Future<void> showDesignPreviewSheet(
                               onPressed: (!canCallApi || isWorking)
                                   ? null
                                   : () => run(() async {
-                                        final repo =
-                                            DesignInteractionRepository();
-                                        final res = isFavorite
-                                            ? await repo
-                                                .removeFavorite(designId)
-                                            : await repo.addFavorite(designId);
-                                        if (res
-                                            is DesignInteractionFailure) {
-                                          toast(res.message);
-                                          return;
-                                        }
-                                        setState(
-                                          () => isFavorite = !isFavorite,
-                                        );
-                                        toast(
-                                          isFavorite
-                                              ? 'msg_added_to_favorites'.tr
-                                              : 'msg_removed_from_favorites'
-                                                  .tr,
-                                        );
-                                      }),
+                                      final repo =
+                                          DesignInteractionRepository();
+                                      final res = isFavorite
+                                          ? await repo.removeFavorite(designId)
+                                          : await repo.addFavorite(designId);
+                                      if (res is DesignInteractionFailure) {
+                                        toast(res.message);
+                                        return;
+                                      }
+                                      setState(() => isFavorite = !isFavorite);
+                                      toast(
+                                        isFavorite
+                                            ? 'msg_added_to_favorites'.tr
+                                            : 'msg_removed_from_favorites'.tr,
+                                      );
+                                    }),
                               icon: Icon(
                                 isFavorite
                                     ? Icons.favorite
@@ -259,34 +265,31 @@ Future<void> showDesignPreviewSheet(
                               onPressed: (!canCallApi || isWorking)
                                   ? null
                                   : () => run(() async {
-                                        final repo =
-                                            DesignInteractionRepository();
-                                        final res = await repo
-                                            .recordDownload(designId);
-                                        if (res
-                                            is DesignInteractionFailure) {
-                                          toast(res.message);
-                                          return;
-                                        }
-                                        if (!designPreviewIsNetworkUrl(
-                                          imageRef,
-                                        )) {
-                                          toast(
-                                            'msg_download_link_unavailable'
-                                                .tr,
-                                          );
-                                          return;
-                                        }
-                                        final uri =
-                                            Uri.parse(imageRef.trim());
-                                        try {
-                                          await launchUrl(
-                                            uri,
-                                            mode: LaunchMode
-                                                .externalApplication,
-                                          );
-                                        } catch (_) {}
-                                      }),
+                                      final repo =
+                                          DesignInteractionRepository();
+                                      final res = await repo.recordDownload(
+                                        designId,
+                                      );
+                                      if (res is DesignInteractionFailure) {
+                                        toast(res.message);
+                                        return;
+                                      }
+                                      if (!designPreviewIsNetworkUrl(
+                                        imageRef,
+                                      )) {
+                                        toast(
+                                          'msg_download_link_unavailable'.tr,
+                                        );
+                                        return;
+                                      }
+                                      final uri = Uri.parse(imageRef.trim());
+                                      try {
+                                        await launchUrl(
+                                          uri,
+                                          mode: LaunchMode.externalApplication,
+                                        );
+                                      } catch (_) {}
+                                    }),
                               icon: const Icon(
                                 Icons.download_outlined,
                                 size: 20,
@@ -302,18 +305,26 @@ Future<void> showDesignPreviewSheet(
                           onPressed: (!canCallApi || isWorking)
                               ? null
                               : () => run(() async {
-                                    final repo =
-                                        DesignInteractionRepository();
-                                    final res = await repo
-                                        .removeBackground(designId);
-                                    if (res is DesignInteractionFailure) {
-                                      toast(res.message);
-                                      return;
-                                    }
-                                    toast(
-                                      'msg_background_removal_requested'.tr,
-                                    );
-                                  }),
+                                  final allowed = await ensureCanSpendCoins(
+                                    context: context,
+                                    feature: WalletFeatureCost.removeBackground,
+                                  );
+                                  if (!allowed) return;
+                                  final repo = DesignInteractionRepository();
+                                  final res = await repo.removeBackground(
+                                    designId,
+                                  );
+                                  if (res is DesignInteractionFailure) {
+                                    toast(res.message);
+                                    return;
+                                  }
+                                  if (context.mounted) {
+                                    context
+                                        .read<WalletBloc>()
+                                        .add(const WalletRefreshEvent());
+                                  }
+                                  toast('msg_background_removal_requested'.tr);
+                                }),
                           icon: const Icon(
                             Icons.auto_fix_high_outlined,
                             size: 20,
@@ -348,13 +359,11 @@ Future<void> showDesignPreviewSheet(
                             child: FilledButton.icon(
                               onPressed: designPreviewIsNetworkUrl(imageRef)
                                   ? () async {
-                                      final uri =
-                                          Uri.parse(imageRef.trim());
+                                      final uri = Uri.parse(imageRef.trim());
                                       try {
                                         await launchUrl(
                                           uri,
-                                          mode:
-                                              LaunchMode.externalApplication,
+                                          mode: LaunchMode.externalApplication,
                                         );
                                       } catch (_) {}
                                     }

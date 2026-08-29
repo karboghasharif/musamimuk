@@ -9,6 +9,7 @@ import '../../widgets/advertisement_banner.dart';
 import '../../widgets/custom_icon_button.dart';
 import 'bloc/screen_1_home_bloc.dart';
 import 'models/screen_1_home_model.dart';
+import 'widgets/home_ai_studio_section.dart';
 
 /// Musamimuk (مصممك) tutorials on YouTube.
 const String _kTutorialsYoutubeChannelUrl =
@@ -68,6 +69,7 @@ class Screen1HomeScreen extends StatelessWidget {
       listenable: appLocaleNotifier,
       builder: (context, _) {
         return SafeArea(
+          bottom: false,
           child: Scaffold(
             resizeToAvoidBottomInset: false,
             drawer: AppNavigationDrawer(
@@ -86,100 +88,110 @@ class Screen1HomeScreen extends StatelessWidget {
                     horizontal: AppDs.space4.h,
                     vertical: AppDs.space6.v,
                   ),
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _buildRowView(context),
-                        SizedBox(height: AppDs.space4.v),
-                        AdvertisementBanner(
-                          placement: 'home_banner',
-                          limit: 5,
-                          height: 120.v,
-                        ),
-                        SizedBox(height: AppDs.space6.v),
-                        _buildFeaturedDesigns(context),
-                        SizedBox(height: AppDs.space8.v),
-                        // AppSectionHeader(
-                        //   title: 'lbl_new_design'.tr,
-                        //   subtitle: 'msg_choose_from_below'.tr,
-                        // ),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            AppQuickActionTile(
-                              imagePath: ImageConstant.imgPlus,
-                              label: 'lbl_new_design'.tr,
-                              highlighted: true,
-                              onTap: () => onTapBtnPlusone(context),
-                            ),
-                            AppQuickActionTile(
-                              imagePath: ImageConstant.imgAppsAdd1,
-                              label: 'lbl_online_designs'.tr,
-                              onTap: () => onTapImgAppsaddoneone(context),
-                            ),
-                            isGuest
-                                ? AppQuickActionTile(
-                                    icon: Icons.login,
-                                    label: 'lbl_sign_in'.tr,
-                                    onTap: () => NavigatorService.pushNamed(
-                                      AppRoutes.screen0LoginScreen,
-                                    ),
-                                  )
-                                : AppQuickActionTile(
-                                    imagePath: ImageConstant.imgAppsAdd2,
-                                    label: 'lbl_my_designs'.tr,
-                                    onTap: () => onTapEyeImage(context),
-                                  ),
-                          ],
-                        ),
-                        SizedBox(height: AppDs.space8.v),
-                        // AppSectionHeader(title: 'lbl_help'.tr),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            AppQuickActionTile(
-                              imagePath: ImageConstant.imgOverflowMenu,
-                              label: 'lbl_tutorials'.tr,
-                              onTap: () => _openTutorialsYoutube(context),
-                            ),
-                            AppQuickActionTile(
-                              imagePath: ImageConstant.imgQrCodeSvgrepoCom,
-                              label: 'msg_generate_qr_code'.tr,
-                              onTap: () => NavigatorService.pushNamed(
-                                AppRoutes.enhancedQrGeneratorScreen,
-                              ),
-                            ),
-                            AppQuickActionTile(
-                              imagePath: ImageConstant.imgEyeOnprimarycontainer,
-                              label: 'msg_remove_background'.tr,
-                              onTap: () => onTapEyeImage1(context),
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: AppDs.space8.v),
-                        Center(
-                          child: AppQuickActionTile(
-                            imagePath: ImageConstant.imgCupStarSvgrepoCom,
-                            label: 'lbl_contest'.tr,
-                            highlighted: true,
-                            onTap: () => NavigatorService.pushNamed(
-                              AppRoutes.screenContestScreen,
-                            ),
+                  child: RefreshIndicator(
+                    onRefresh: () async {
+                      final bloc = context.read<Screen1HomeBloc>();
+                      bloc.add(Screen1HomeRefreshEvent());
+                      await bloc.stream.firstWhere(
+                        (state) => !state.isLoadingFeatured,
+                      );
+                    },
+                    child: SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _buildRowView(context),
+                          SizedBox(height: AppDs.space4.v),
+                          BlocBuilder<Screen1HomeBloc, Screen1HomeState>(
+                            buildWhen: (prev, next) =>
+                                prev.adsRefreshToken != next.adsRefreshToken,
+                            builder: (context, state) {
+                              return AdvertisementBanner(
+                                placement: 'home_banner',
+                                limit: 5,
+                                aspectRatio: 16 / 5,
+                                refreshToken: state.adsRefreshToken,
+                              );
+                            },
                           ),
-                        ),
-                        SizedBox(height: AppDs.space8.v),
-                        if (!isGuest) ...[
-                          _buildRowPremiumPlan(context),
+                          SizedBox(height: AppDs.space6.v),
+                          _buildFeaturedDesigns(context),
+                          SizedBox(height: AppDs.space8.v),
+                          // AppSectionHeader(
+                          //   title: 'lbl_new_design'.tr,
+                          //   subtitle: 'msg_choose_from_below'.tr,
+                          // ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: [
+                              AppQuickActionTile(
+                                imagePath: ImageConstant.imgPlus,
+                                label: 'lbl_new_design'.tr,
+                                highlighted: true,
+                                onTap: () => onTapBtnPlusone(context),
+                              ),
+                              AppQuickActionTile(
+                                imagePath: ImageConstant.imgAppsAdd1,
+                                label: 'lbl_online_designs'.tr,
+                                onTap: () => onTapImgAppsaddoneone(context),
+                              ),
+                              isGuest
+                                  ? AppQuickActionTile(
+                                      icon: Icons.login,
+                                      label: 'lbl_sign_in'.tr,
+                                      onTap: () => NavigatorService.pushNamed(
+                                        AppRoutes.screen0LoginScreen,
+                                      ),
+                                    )
+                                  : AppQuickActionTile(
+                                      imagePath: ImageConstant.imgAppsAdd2,
+                                      label: 'lbl_my_designs'.tr,
+                                      onTap: () => onTapEyeImage(context),
+                                    ),
+                            ],
+                          ),
+                          SizedBox(height: AppDs.space8.v),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: [
+                              AppQuickActionTile(
+                                imagePath: ImageConstant.imgOverflowMenu,
+                                label: 'lbl_tutorials'.tr,
+                                onTap: () => _openTutorialsYoutube(context),
+                              ),
+                              AppQuickActionTile(
+                                imagePath: ImageConstant.imgQrCodeSvgrepoCom,
+                                label: 'msg_generate_qr_code'.tr,
+                                onTap: () => NavigatorService.pushNamed(
+                                  AppRoutes.enhancedQrGeneratorScreen,
+                                ),
+                              ),
+                              AppQuickActionTile(
+                                imagePath: ImageConstant.imgCupStarSvgrepoCom,
+                                label: 'lbl_contest'.tr,
+                                highlighted: true,
+                                onTap: () => NavigatorService.pushNamed(
+                                  AppRoutes.screenContestScreen,
+                                ),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: AppDs.space8.v),
+                          HomeAiStudioSection(isPro: _homeUserIsPro()),
                           SizedBox(height: AppDs.space4.v),
                         ],
-                        _buildRowSettingsAndHelp(context),
-                        SizedBox(height: AppDs.space4.v),
-                      ],
+                      ),
                     ),
                   ),
                 );
               },
+            ),
+            bottomNavigationBar: _HomeBottomNavBar(isGuest: isGuest),
+            floatingActionButtonLocation:
+                FloatingActionButtonLocation.centerDocked,
+            floatingActionButton: _HomeNewDesignFab(
+              onPressed: () => onTapBtnPlusone(context),
             ),
           ),
         );
@@ -300,179 +312,182 @@ class Screen1HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildRowPremiumPlan(BuildContext context) {
-    final primary = theme.colorScheme.primary;
-    final onPrimary = theme.colorScheme.onPrimary;
-    final isPro = _homeUserIsPro();
-
-    return AppCard(
-      elevated: true,
-      onTap: () => onTapRowPremiumPlan(context),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          CustomImageView(
-            imagePath: ImageConstant.imgStarCircleSvgrepoCom,
-            height: 46.adaptSize,
-            width: 46.adaptSize,
-          ),
-          SizedBox(width: AppDs.space3.h),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: AppText(
-                        'lbl_premium_plan'.tr,
-                        variant: AppTextVariant.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: AppDs.space2.h,
-                        vertical: AppDs.space1.v,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isPro
-                            ? primary
-                            : Colors.white.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(
-                          AppDs.radiusFull.adaptSize,
-                        ),
-                      ),
-                      child: AppText(
-                        isPro ? 'lbl_pro'.tr : 'lbl_free'.tr,
-                        variant: AppTextVariant.caption,
-                        color: isPro ? onPrimary : AppDs.textOnDarkPrimary,
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: AppDs.space1.v),
-                AppText(
-                  'msg_upgrade_to_access'.tr,
-                  variant: AppTextVariant.secondary,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-          Icon(Icons.chevron_right_rounded, color: primary, size: 28.adaptSize),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRowSettingsAndHelp(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: _HomeFooterActionCard(
-            icon: Icons.tune_rounded,
-            title: 'lbl_settings'.tr,
-            subtitle: 'msg_home_settings_subtitle'.tr,
-            onTap: () => Scaffold.of(context).openDrawer(),
-          ),
-        ),
-        SizedBox(width: AppDs.space3.h),
-        Expanded(
-          child: _HomeFooterActionCard(
-            icon: Icons.help_outline_rounded,
-            title: 'lbl_help'.tr,
-            subtitle: 'msg_home_help_subtitle'.tr,
-            onTap: () => NavigatorService.pushNamed(AppRoutes.aboutUsScreen),
-          ),
-        ),
-      ],
-    );
-  }
-
-  onTapBtnPlusone(BuildContext context) {
+  void onTapBtnPlusone(BuildContext context) {
     NavigatorService.pushNamed(AppRoutes.screen2NewDesignScreen);
   }
 
-  onTapTxtNewdesign(BuildContext context) {
+  void onTapTxtNewdesign(BuildContext context) {
     NavigatorService.pushNamed(AppRoutes.screen2NewDesignScreen);
   }
 
-  onTapImgAppsaddoneone(BuildContext context) {
+  void onTapImgAppsaddoneone(BuildContext context) {
     NavigatorService.pushNamed(AppRoutes.screen16OnlineDesignsScreen);
   }
 
-  onTapTxtOnlinedesigns(BuildContext context) {
+  void onTapTxtOnlinedesigns(BuildContext context) {
     NavigatorService.pushNamed(AppRoutes.screen16OnlineDesignsScreen);
   }
 
-  onTapEyeImage(BuildContext context) {
+  void onTapEyeImage(BuildContext context) {
     NavigatorService.pushNamed(AppRoutes.screen18MyDesignsScreen);
   }
 
-  onTapTxtRemoveText(BuildContext context) {
+  void onTapTxtRemoveText(BuildContext context) {
     NavigatorService.pushNamed(AppRoutes.screen18MyDesignsScreen);
   }
 
-  onTapEyeImage1(BuildContext context) {
+  void onTapEyeImage1(BuildContext context) {
     NavigatorService.pushNamed(AppRoutes.screen19RemoveBackgroundScreen);
   }
 
-  onTapTxtRemoveText1(BuildContext context) {
+  void onTapTxtRemoveText1(BuildContext context) {
     NavigatorService.pushNamed(AppRoutes.screen19RemoveBackgroundScreen);
   }
 
-  onTapRowPremiumPlan(BuildContext context) {
+  void onTapRowPremiumPlan(BuildContext context) {
     NavigatorService.pushNamed(AppRoutes.screen1SubcriptionScreen);
   }
 }
 
-class _HomeFooterActionCard extends StatelessWidget {
-  const _HomeFooterActionCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
+class _HomeNewDesignFab extends StatelessWidget {
+  const _HomeNewDesignFab({required this.onPressed});
 
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
+  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
     final primary = theme.colorScheme.primary;
-    return AppCard(
-      onTap: onTap,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: EdgeInsets.all(AppDs.space2.adaptSize),
-            decoration: BoxDecoration(
-              color: primary.withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(AppDs.radiusMd.adaptSize),
+
+    return Tooltip(
+      message: 'lbl_new_design'.tr,
+      child: SizedBox(
+        width: 60.adaptSize,
+        height: 60.adaptSize,
+        child: FloatingActionButton(
+          onPressed: onPressed,
+          elevation: 4,
+          highlightElevation: 8,
+          backgroundColor: primary,
+          foregroundColor: AppDs.onAccent,
+          shape: const CircleBorder(),
+          child: Icon(Icons.add_rounded, size: 32.adaptSize),
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeBottomNavBar extends StatelessWidget {
+  const _HomeBottomNavBar({required this.isGuest});
+
+  final bool isGuest;
+
+  @override
+  Widget build(BuildContext context) {
+    return BottomAppBar(
+      color: AppDs.surfaceRaised,
+      elevation: 8,
+      height: 68.v,
+      padding: EdgeInsets.zero,
+      shape: const CircularNotchedRectangle(),
+      notchMargin: 8,
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            Expanded(
+              child: _HomeNavItem(
+                icon: Icons.home_outlined,
+                selectedIcon: Icons.home_rounded,
+                label: 'lbl_home'.tr,
+                selected: true,
+                onTap: () {},
+              ),
             ),
-            child: Icon(icon, color: primary, size: 22.adaptSize),
-          ),
-          SizedBox(width: AppDs.space3.h),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                AppText(title, variant: AppTextVariant.title, maxLines: 1),
-                SizedBox(height: AppDs.space1.v),
-                AppText(
-                  subtitle,
-                  variant: AppTextVariant.secondary,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+            Expanded(
+              child: _HomeNavItem(
+                icon: Icons.grid_view_outlined,
+                selectedIcon: Icons.grid_view_rounded,
+                label: 'lbl_online_designs'.tr,
+                onTap: () => NavigatorService.pushNamed(
+                  AppRoutes.screen16OnlineDesignsScreen,
                 ),
-              ],
+              ),
+            ),
+            SizedBox(width: 64.h),
+            Expanded(
+              child: _HomeNavItem(
+                icon: Icons.emoji_events_outlined,
+                selectedIcon: Icons.emoji_events_rounded,
+                label: 'lbl_contest'.tr,
+                onTap: () => NavigatorService.pushNamed(
+                  AppRoutes.screenContestScreen,
+                ),
+              ),
+            ),
+            Expanded(
+              child: _HomeNavItem(
+                icon: isGuest ? Icons.login : Icons.folder_outlined,
+                selectedIcon: isGuest ? Icons.login : Icons.folder_rounded,
+                label: isGuest ? 'lbl_sign_in'.tr : 'lbl_my_designs'.tr,
+                onTap: () {
+                  if (isGuest) {
+                    NavigatorService.pushNamed(AppRoutes.screen0LoginScreen);
+                  } else {
+                    NavigatorService.pushNamed(
+                      AppRoutes.screen18MyDesignsScreen,
+                    );
+                  }
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeNavItem extends StatelessWidget {
+  const _HomeNavItem({
+    required this.icon,
+    required this.selectedIcon,
+    required this.label,
+    required this.onTap,
+    this.selected = false,
+  });
+
+  final IconData icon;
+  final IconData selectedIcon;
+  final String label;
+  final VoidCallback onTap;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = theme.colorScheme.primary;
+    final color = selected ? primary : AppDs.textOnDarkSecondary;
+
+    return InkWell(
+      onTap: onTap,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            selected ? selectedIcon : icon,
+            color: color,
+            size: 22.adaptSize,
+          ),
+          SizedBox(height: 2.v),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 10.fSize,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+              color: color,
+              fontFamily: 'Poppins',
             ),
           ),
         ],

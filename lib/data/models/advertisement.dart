@@ -30,6 +30,11 @@ class Advertisement {
 
   bool get isImage => mediaType.toLowerCase() == 'image';
 
+  bool get hasDisplayableImage {
+    final url = mediaUrl?.trim();
+    return url != null && url.isNotEmpty;
+  }
+
   String? get displayImageUrl {
     final url = mediaUrl?.trim();
     if (url != null && url.isNotEmpty) {
@@ -52,6 +57,23 @@ class Advertisement {
       sortOrder: apiParseInt(json['sort_order']),
       targetPlatform: _nullableString(json['target_platform']),
     );
+  }
+
+  /// Parses `POST/GET` envelope:
+  /// `response.data['data']['advertisements']` — never treat top-level `data` as a list.
+  static List<Advertisement> parseListFromResponseBody(
+    Map<String, dynamic> body,
+  ) {
+    final data = body['data'];
+    if (data is! Map) return const [];
+    final rows = data['advertisements'];
+    if (rows is! List) return const [];
+
+    return rows
+        .whereType<Map>()
+        .map((row) => Advertisement.fromJson(Map<String, dynamic>.from(row)))
+        .where((ad) => ad.hasDisplayableImage)
+        .toList(growable: false);
   }
 
   static String? _nullableString(dynamic v) {

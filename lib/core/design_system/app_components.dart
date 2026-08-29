@@ -611,56 +611,75 @@ class AppCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final content = Padding(
-      padding: padding ?? EdgeInsets.all(AppDs.space4.h),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (title != null && title!.trim().isNotEmpty) ...[
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(title!.trim(), style: AppTypography.cardTitle(theme)),
-                      if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
-                        SizedBox(height: AppDs.space1.v),
-                        Text(
-                          subtitle!.trim(),
-                          style: AppTypography.secondary(theme),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                if (action != null) action!,
-              ],
-            ),
-            SizedBox(height: AppDs.space3.v),
-          ],
-          child,
-          if (actionLabel != null && onAction != null) ...[
-            SizedBox(height: AppDs.space4.v),
-            AppSecondaryButton(label: actionLabel!, onPressed: onAction),
-          ],
-        ],
-      ),
-    );
 
     Widget card = Container(
       width: double.infinity,
       margin: margin,
       decoration: AppDs.cardDecoration(elevated: elevated),
       clipBehavior: Clip.antiAlias,
-      child: onTap == null
-          ? content
-          : Material(
-              color: Colors.transparent,
-              child: InkWell(onTap: onTap, child: content),
-            ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // Inside Expanded / tight height, Column must flex the body so
+          // scrollables get a bounded viewport instead of overflowing.
+          final boundedHeight = constraints.hasBoundedHeight;
+          final hasTitle = title != null && title!.trim().isNotEmpty;
+          final hasFooter = actionLabel != null && onAction != null;
+
+          final body = boundedHeight ? Expanded(child: child) : child;
+
+          final column = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize:
+                boundedHeight ? MainAxisSize.max : MainAxisSize.min,
+            children: [
+              if (hasTitle) ...[
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title!.trim(),
+                            style: AppTypography.cardTitle(theme),
+                          ),
+                          if (subtitle != null &&
+                              subtitle!.trim().isNotEmpty) ...[
+                            SizedBox(height: AppDs.space1.v),
+                            Text(
+                              subtitle!.trim(),
+                              style: AppTypography.secondary(theme),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    if (action != null) action!,
+                  ],
+                ),
+                SizedBox(height: AppDs.space3.v),
+              ],
+              body,
+              if (hasFooter) ...[
+                SizedBox(height: AppDs.space4.v),
+                AppSecondaryButton(label: actionLabel!, onPressed: onAction),
+              ],
+            ],
+          );
+
+          final content = Padding(
+            padding: padding ?? EdgeInsets.all(AppDs.space4.h),
+            child: column,
+          );
+
+          if (onTap == null) return content;
+          return Material(
+            color: Colors.transparent,
+            child: InkWell(onTap: onTap, child: content),
+          );
+        },
+      ),
     );
 
     if (animateIn) {

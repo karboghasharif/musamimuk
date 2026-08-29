@@ -9,8 +9,11 @@ Size musamiEstimateLayerPaintSize(Layer layer, ProImageEditorState editor) {
   final sticker = editor.configs.stickerEditor;
   if (layer is WidgetLayer) {
     final w = (layer.width ?? sticker.initWidth) * layer.scale;
+    // `musamiAspect` is stored as height / width, matching the layer core box.
     final aspect = (layer.meta?['musamiAspect'] as num?)?.toDouble();
-    final h = (aspect != null && aspect > 0) ? w / aspect : w;
+    final h = (aspect != null && aspect.isFinite && aspect > 0)
+        ? w * aspect
+        : w;
     return Size(w, h);
   }
   if (layer is TextLayer) {
@@ -70,6 +73,47 @@ Offset musamiLayerOffsetForAnchor(Offset anchorInBody, Size body) {
   );
 }
 
+/// Aligns the layer with [layerId] against the page on one or both axes.
+///
+/// [xT] / [yT] follow [musamiAnchorAfterAlignAxes]: -1 start, 0 centre, 1 end,
+/// `null` leaves that axis untouched. The single source of truth for canvas
+/// alignment — the align sheet and the layer context menu both call it, so the
+/// two can never drift apart.
+///
+/// Positions only: layer size, scale, rotation, flip and the image/frame ratio
+/// are all left exactly as they were.
+bool musamiAlignLayerToPage({
+  required ProImageEditorState editor,
+  required String layerId,
+  int? xT,
+  int? yT,
+}) {
+  final body = editor.sizesManager.bodySize;
+  if (body.width <= 0 || body.height <= 0) return false;
+
+  final current = editor.activeLayers.cast<Layer?>().firstWhere(
+    (l) => l?.id == layerId,
+    orElse: () => null,
+  );
+  if (current == null) return false;
+
+  final anchor = musamiAnchorAfterAlignAxes(
+    currentAnchorInBody: Offset(
+      current.offset.dx + body.width / 2,
+      current.offset.dy + body.height / 2,
+    ),
+    body: body,
+    paintSize: musamiEstimateLayerPaintSize(current, editor),
+    xT: xT,
+    yT: yT,
+  );
+  _commitLayer(
+    editor,
+    _copyLayerWithOffset(current, musamiLayerOffsetForAnchor(anchor, body)),
+  );
+  return true;
+}
+
 void _commitLayer(
   ProImageEditorState editor,
   Layer updated,
@@ -116,26 +160,12 @@ Future<void> showEditorAlignArrangeSheet({
       final theme = Theme.of(ctx);
 
       void alignAxes({int? xT, int? yT}) {
-        final cur = editor.activeLayers.cast<Layer?>().firstWhere(
-              (l) => l?.id == layer.id,
-              orElse: () => null,
-            );
-        if (cur == null) return;
-        final psz = musamiEstimateLayerPaintSize(cur, editor);
-        final currentAnchor = Offset(
-          cur.offset.dx + body.width / 2,
-          cur.offset.dy + body.height / 2,
-        );
-        final anchor = musamiAnchorAfterAlignAxes(
-          currentAnchorInBody: currentAnchor,
-          body: body,
-          paintSize: psz,
+        musamiAlignLayerToPage(
+          editor: editor,
+          layerId: layer.id,
           xT: xT,
           yT: yT,
         );
-        final off = musamiLayerOffsetForAnchor(anchor, body);
-        final next = _copyLayerWithOffset(cur, off);
-        _commitLayer(editor, next);
         Navigator.pop(ctx);
       }
 

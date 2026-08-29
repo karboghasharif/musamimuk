@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:musamimuk/core/network/api_client.dart';
 import 'package:musamimuk/core/network/api_utils.dart';
+import 'package:musamimuk/data/models/design_persistence_models.dart';
 import 'package:musamimuk/data/models/media_item.dart';
 import 'package:musamimuk/data/repositories/media_repository.dart';
 
@@ -16,6 +17,7 @@ class SaveDesignSuccess extends SaveDesignResult {
   final int? width;
   final int? height;
   final String? title;
+  final SavedDesign? design;
   SaveDesignSuccess({
     required this.id,
     this.imageUrl,
@@ -23,6 +25,7 @@ class SaveDesignSuccess extends SaveDesignResult {
     this.width,
     this.height,
     this.title,
+    this.design,
   });
 }
 
@@ -57,11 +60,36 @@ class DesignActionFailure extends DesignActionResult {
   DesignActionFailure(this.message);
 }
 
+sealed class DesignRedesignResult {}
+
+class DesignRedesignSuccess extends DesignRedesignResult {
+  DesignRedesignSuccess(this.design);
+  final RedesignDesign design;
+}
+
+class DesignRedesignFailure extends DesignRedesignResult {
+  DesignRedesignFailure(this.message, {this.statusCode});
+  final String message;
+  final int? statusCode;
+}
+
+sealed class DesignCloneResult {}
+
+class DesignCloneSuccess extends DesignCloneResult {
+  DesignCloneSuccess(this.design);
+  final SavedDesign design;
+}
+
+class DesignCloneFailure extends DesignCloneResult {
+  DesignCloneFailure(this.message);
+  final String message;
+}
+
 /// Handles design save via POST `design/add` (multipart), matching the live API.
 class DesignRepository {
-  DesignRepository() : _api = ApiClient();
+  DesignRepository({Dio? dio}) : _dio = dio ?? ApiClient().dio;
 
-  final ApiClient _api;
+  final Dio _dio;
 
   /// Saves the design by uploading the rendered image and metadata.
   ///
@@ -85,6 +113,7 @@ class DesignRepository {
     String visibility = 'public',
     String? filename,
     String? designData,
+    List<String> assetIds = const [],
   }) async {
     try {
       final resolvedCategoryId = await _resolveCategoryId(categoryId);
@@ -97,8 +126,9 @@ class DesignRepository {
       final name = (title != null && title.trim().isNotEmpty)
           ? title.trim()
           : 'My design';
-      final tagStr =
-          (tags != null && tags.trim().isNotEmpty) ? tags.trim() : 'design';
+      final tagStr = (tags != null && tags.trim().isNotEmpty)
+          ? tags.trim()
+          : 'design';
 
       final formData = FormData();
       formData.fields.addAll([
@@ -122,20 +152,21 @@ class DesignRepository {
       if (history != null && history.isNotEmpty) {
         formData.fields.add(MapEntry('design_data', history));
       }
+      for (final assetId
+          in assetIds.map((id) => id.trim()).where((id) => id.isNotEmpty)) {
+        formData.fields.add(MapEntry('asset_ids[]', assetId));
+      }
       final fileName = (filename != null && filename.trim().isNotEmpty)
           ? filename.trim()
           : 'design.jpg';
       formData.files.add(
         MapEntry(
           'file',
-          MultipartFile.fromBytes(
-            imageBytes,
-            filename: fileName,
-          ),
+          MultipartFile.fromBytes(imageBytes, filename: fileName),
         ),
       );
 
-      final response = await _api.dio.post<Map<String, dynamic>>(
+      final response = await _dio.post<Map<String, dynamic>>(
         'design/add',
         data: formData,
         options: Options(
@@ -164,26 +195,32 @@ class DesignRepository {
         );
       }
 
-      final item = MediaItem.fromJson(dbData.cast<String, dynamic>());
+      final dbMap = dbData.cast<String, dynamic>();
+      final item = MediaItem.fromJson(dbMap);
+      final savedDesign = SavedDesign.fromJson({
+        ...dbMap,
+        'file_url': apiResolveDesignFileUrl(dbMap),
+      });
       return SaveDesignSuccess(
-        id: item.id.toString(),
-        imageUrl: item.fileUrl.isNotEmpty ? item.fileUrl : null,
-        thumbnailUrl: item.fileUrl.isNotEmpty ? item.fileUrl : null,
-        width: width,
-        height: height,
+        id: savedDesign.id.toString(),
+        imageUrl: savedDesign.fileUrl.isNotEmpty ? savedDesign.fileUrl : null,
+        thumbnailUrl: savedDesign.thumbnailUrl,
+        width: savedDesign.width ?? width,
+        height: savedDesign.height ?? height,
         title: item.name.isNotEmpty ? item.name : name,
+        design: savedDesign,
       );
     } on DioException catch (e) {
       return SaveDesignFailure(apiMessageFromDioException(e));
-    } catch (e) {
-      return SaveDesignFailure(e.toString());
+    } catch (_) {
+      return SaveDesignFailure('Something went wrong');
     }
   }
 
   /// GET `design/list?per_page=..` (legacy v1).
   Future<DesignListResult> list({int perPage = 20}) async {
     try {
-      final response = await _api.dio.get<Map<String, dynamic>>(
+      final response = await _dio.get<Map<String, dynamic>>(
         'design/list',
         queryParameters: <String, dynamic>{
           'per_page': perPage.clamp(1, 100).toString(),
@@ -203,21 +240,49 @@ class DesignRepository {
   /// POST `design/update/{id}` (multipart). File is optional.
   Future<DesignActionResult> update({
     required int id,
-    required String name,
-    required int categoryId,
-    required String visibility, // public|private
+    String? name,
+    int? categoryId,
+    String? visibility,
     String? tags,
+    int? subCategoryId,
+    int? width,
+    int? height,
     Uint8List? imageBytes,
     String? filename,
+    String? designData,
+    bool clearDesignData = false,
+    List<String>? assetIds,
   }) async {
     try {
       final form = FormData();
-      form.fields.addAll([
-        MapEntry('name', name),
-        MapEntry('category_id', categoryId.toString()),
-        MapEntry('visibility', visibility),
-        if (tags != null) MapEntry('tags', tags),
-      ]);
+      if (name != null) form.fields.add(MapEntry('name', name));
+      if (categoryId != null) {
+        form.fields.add(MapEntry('category_id', categoryId.toString()));
+      }
+      if (visibility != null) {
+        form.fields.add(MapEntry('visibility', visibility));
+      }
+      if (tags != null) form.fields.add(MapEntry('tags', tags));
+      if (subCategoryId != null) {
+        form.fields.add(MapEntry('sub_category_id', subCategoryId.toString()));
+      }
+      if (width != null) {
+        form.fields.add(MapEntry('width', width.toString()));
+      }
+      if (height != null) {
+        form.fields.add(MapEntry('height', height.toString()));
+      }
+      if (clearDesignData) {
+        form.fields.add(const MapEntry('design_data', 'null'));
+      } else if (designData != null) {
+        form.fields.add(MapEntry('design_data', designData));
+      }
+      if (assetIds != null) {
+        for (final assetId
+            in assetIds.map((id) => id.trim()).where((id) => id.isNotEmpty)) {
+          form.fields.add(MapEntry('asset_ids[]', assetId));
+        }
+      }
       if (imageBytes != null && imageBytes.isNotEmpty) {
         form.files.add(
           MapEntry(
@@ -231,7 +296,7 @@ class DesignRepository {
           ),
         );
       }
-      final response = await _api.dio.post<Map<String, dynamic>>(
+      final response = await _dio.post<Map<String, dynamic>>(
         'design/update/$id',
         data: form,
         options: Options(contentType: 'multipart/form-data'),
@@ -239,8 +304,9 @@ class DesignRepository {
       final data = response.data;
       if (data == null) return DesignActionFailure('Empty response');
       final db = apiExtractDbData(data);
-      final item =
-          db is Map ? MediaItem.fromJson(db.cast<String, dynamic>()) : null;
+      final item = db is Map
+          ? MediaItem.fromJson(db.cast<String, dynamic>())
+          : null;
       return DesignActionSuccess(message: apiExtractMessage(data), item: item);
     } on DioException catch (e) {
       return DesignActionFailure(apiMessageFromDioException(e));
@@ -249,11 +315,58 @@ class DesignRepository {
     }
   }
 
+  Future<DesignRedesignResult> loadForRedesign(int id) async {
+    try {
+      final response = await _dio.get<Map<String, dynamic>>(
+        'design/redesign/$id',
+      );
+      final payload = apiExtractPayloadMap(response.data);
+      if (payload == null) {
+        return DesignRedesignFailure(
+          apiExtractMessage(response.data) ?? 'Design could not be loaded.',
+        );
+      }
+      return DesignRedesignSuccess(
+        RedesignDesign.fromJson({
+          ...payload,
+          'file_url': apiResolveDesignFileUrl(payload),
+        }),
+      );
+    } on DioException catch (error) {
+      return DesignRedesignFailure(
+        apiMessageFromDioException(error),
+        statusCode: error.response?.statusCode,
+      );
+    } catch (_) {
+      return DesignRedesignFailure('Design could not be loaded.');
+    }
+  }
+
+  Future<DesignCloneResult> clone(int id) async {
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        'design/clone/$id',
+      );
+      final payload = apiExtractPayloadMap(response.data);
+      if (payload == null) {
+        return DesignCloneFailure(
+          apiExtractMessage(response.data) ?? 'Design could not be cloned.',
+        );
+      }
+      return DesignCloneSuccess(SavedDesign.fromJson(payload));
+    } on DioException catch (error) {
+      return DesignCloneFailure(apiMessageFromDioException(error));
+    } catch (_) {
+      return DesignCloneFailure('Design could not be cloned.');
+    }
+  }
+
   /// DELETE `design/delete/{id}`.
   Future<DesignActionResult> delete(int id) async {
     try {
-      final response =
-          await _api.dio.delete<Map<String, dynamic>>('design/delete/$id');
+      final response = await _dio.delete<Map<String, dynamic>>(
+        'design/delete/$id',
+      );
       final data = response.data;
       return DesignActionSuccess(message: apiExtractMessage(data));
     } on DioException catch (e) {
@@ -269,7 +382,7 @@ class DesignRepository {
     required String status, // draft|published|reported|hidden
   }) async {
     try {
-      final response = await _api.dio.post<Map<String, dynamic>>(
+      final response = await _dio.post<Map<String, dynamic>>(
         'design/update-status/$id',
         data: <String, dynamic>{'status': status},
       );
@@ -287,7 +400,7 @@ class DesignRepository {
     required String action,
   }) async {
     try {
-      final response = await _api.dio.post<Map<String, dynamic>>(
+      final response = await _dio.post<Map<String, dynamic>>(
         'design/track/$id',
         data: <String, dynamic>{'action': action},
       );
@@ -306,7 +419,7 @@ class DesignRepository {
 
   Future<DesignListResult> _simpleList(String path) async {
     try {
-      final response = await _api.dio.get<Map<String, dynamic>>(path);
+      final response = await _dio.get<Map<String, dynamic>>(path);
       final data = response.data;
       if (data == null) return DesignListFailure('Empty response');
       final list = apiExtractDataList(data).map(MediaItem.fromJson).toList();

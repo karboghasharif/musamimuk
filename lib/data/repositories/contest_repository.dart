@@ -105,20 +105,43 @@ class ContestMessageResult extends ContestResult {
   final Map<String, dynamic>? data;
 }
 
-class ContestLikeResult extends ContestResult {
-  ContestLikeResult({
-    required this.likesCount,
+/// Like / unlike / share / interact response with authoritative counters.
+class ContestInteractionResult extends ContestResult {
+  ContestInteractionResult({
+    required this.submissionId,
     required this.isLiked,
+    required this.likesCount,
+    this.viewsCount,
+    this.sharesCount,
+    this.shareUrl,
     this.message,
   });
 
-  final int likesCount;
+  final int submissionId;
   final bool isLiked;
+  final int likesCount;
+  final int? viewsCount;
+  final int? sharesCount;
+  final String? shareUrl;
   final String? message;
+
+  ContestInteractionState get state => ContestInteractionState(
+    submissionId: submissionId,
+    liked: isLiked,
+    likesCount: likesCount,
+    viewsCount: viewsCount,
+    sharesCount: sharesCount,
+    shareUrl: shareUrl,
+  );
 }
 
+/// Backward-compatible alias used by existing feed callers.
+typedef ContestLikeResult = ContestInteractionResult;
+
 class ContestRepository {
-  ContestRepository({ApiClient? apiClient}) : _api = apiClient ?? ApiClient();
+  ContestRepository({ApiClient? apiClient, Dio? dio})
+    : _api = apiClient ?? ApiClient(),
+      _dioOverride = dio;
 
   static ContestRepository? _defaultInstance;
   static ContestRepository get instance =>
@@ -129,6 +152,9 @@ class ContestRepository {
   }
 
   final ApiClient _api;
+  final Dio? _dioOverride;
+
+  Dio get _dio => _dioOverride ?? _api.dio;
 
   bool get _isGuestOrLoggedOut {
     final prefs = PrefUtils();
@@ -146,7 +172,8 @@ class ContestRepository {
     if (data is! Map) return const [];
     final map = data.cast<String, dynamic>();
 
-    if (map.containsKey('open_contests') || map.containsKey('closed_contests')) {
+    if (map.containsKey('open_contests') ||
+        map.containsKey('closed_contests')) {
       List<ContestItem> parseList(dynamic raw) {
         if (raw is! List) return const [];
         return raw
@@ -154,7 +181,11 @@ class ContestRepository {
             .map((e) => ContestItem.fromJson(e.cast<String, dynamic>()))
             .toList();
       }
-      return [...parseList(map['open_contests']), ...parseList(map['closed_contests'])];
+
+      return [
+        ...parseList(map['open_contests']),
+        ...parseList(map['closed_contests']),
+      ];
     }
 
     return apiExtractDataList(map).map(ContestItem.fromJson).toList();
@@ -162,9 +193,7 @@ class ContestRepository {
 
   Future<ContestResult> categoryList() async {
     try {
-      final response = await _api.dio.get<Map<String, dynamic>>(
-        'contest/category',
-      );
+      final response = await _dio.get<Map<String, dynamic>>('contest/category');
       final data = response.data;
       if (data == null) return ContestFailure('Empty response');
       final list = apiExtractDataList(data).map(CategoryItem.fromJson).toList();
@@ -188,14 +217,16 @@ class ContestRepository {
     String? search,
   }) async {
     try {
-      final response = await _api.dio.get<Map<String, dynamic>>(
+      final response = await _dio.get<Map<String, dynamic>>(
         'public/contests',
         queryParameters: <String, dynamic>{
           'page': page.clamp(1, 1000000).toString(),
           'per_page': perPage.clamp(1, 50).toString(),
           if (categoryId != null) 'category_id': categoryId.toString(),
-          if (status != null && status.isNotEmpty && status != 'all') 'status': status,
-          if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+          if (status != null && status.isNotEmpty && status != 'all')
+            'status': status,
+          if (search != null && search.trim().isNotEmpty)
+            'search': search.trim(),
         },
       );
       final data = response.data;
@@ -203,7 +234,9 @@ class ContestRepository {
       if (!apiResponseIsSuccess(data) &&
           !data.containsKey('dbData') &&
           !data.containsKey('open_contests')) {
-        return ContestFailure(apiExtractMessage(data) ?? 'Could not load contests');
+        return ContestFailure(
+          apiExtractMessage(data) ?? 'Could not load contests',
+        );
       }
       final items = _parseContestItems(data);
       final contestPage = ContestPage.fromResponse(
@@ -237,7 +270,7 @@ class ContestRepository {
   }) async {
     try {
       final trimmed = query.trim();
-      final response = await _api.dio.get<Map<String, dynamic>>(
+      final response = await _dio.get<Map<String, dynamic>>(
         'contests/search',
         queryParameters: <String, dynamic>{
           'search': trimmed,
@@ -246,7 +279,8 @@ class ContestRepository {
           'page': page.clamp(1, 1000000).toString(),
           'per_page': perPage.clamp(1, 50).toString(),
           if (categoryId != null) 'category_id': categoryId.toString(),
-          if (status != null && status.isNotEmpty && status != 'all') 'status': status,
+          if (status != null && status.isNotEmpty && status != 'all')
+            'status': status,
         },
       );
       final data = response.data;
@@ -276,7 +310,7 @@ class ContestRepository {
   Future<ContestResult> getDetail(int id) async {
     try {
       final path = _isGuestOrLoggedOut ? 'public/contests/$id' : 'contests/$id';
-      final response = await _api.dio.get<Map<String, dynamic>>(path);
+      final response = await _dio.get<Map<String, dynamic>>(path);
       final data = response.data;
       if (data == null) return ContestFailure('Empty response');
       if (!apiResponseIsSuccess(data) && !data.containsKey('dbData')) {
@@ -304,13 +338,15 @@ class ContestRepository {
 
   Future<ContestResult> joinContest(int contestId) async {
     try {
-      final response = await _api.dio.post<Map<String, dynamic>>(
+      final response = await _dio.post<Map<String, dynamic>>(
         'contests/$contestId/join',
       );
       final data = response.data;
       if (data == null) return ContestFailure('Empty response');
       if (!apiResponseIsSuccess(data) && data['status'] != true) {
-        return ContestFailure(apiExtractMessage(data) ?? 'Could not join contest');
+        return ContestFailure(
+          apiExtractMessage(data) ?? 'Could not join contest',
+        );
       }
       return ContestMessageResult(
         message: apiExtractMessage(data),
@@ -325,7 +361,7 @@ class ContestRepository {
 
   Future<ContestResult> eligibleDesigns(int contestId) async {
     try {
-      final response = await _api.dio.get<Map<String, dynamic>>(
+      final response = await _dio.get<Map<String, dynamic>>(
         'contests/$contestId/eligible-designs',
       );
       final data = response.data;
@@ -337,9 +373,9 @@ class ContestRepository {
       }
       final root = data.cast<String, dynamic>();
       final payload = apiExtractPayloadMap(root);
-      final list = _parseEligibleDesignRows(root)
-          .map((e) => ContestEligibleDesign.fromJson(e))
-          .toList();
+      final list = _parseEligibleDesignRows(
+        root,
+      ).map((e) => ContestEligibleDesign.fromJson(e)).toList();
       final hint = payload?['hint']?.toString().trim();
       return ContestEligibleDesignsResult(
         designs: list,
@@ -359,7 +395,7 @@ class ContestRepository {
     required int designId,
   }) async {
     try {
-      final response = await _api.dio.post<Map<String, dynamic>>(
+      final response = await _dio.post<Map<String, dynamic>>(
         'contests/$contestId/submissions',
         data: {'design_id': designId},
       );
@@ -383,7 +419,7 @@ class ContestRepository {
 
   Future<ContestResult> mySubmissions(int contestId) async {
     try {
-      final response = await _api.dio.get<Map<String, dynamic>>(
+      final response = await _dio.get<Map<String, dynamic>>(
         'contests/$contestId/my-submissions',
       );
       final data = response.data;
@@ -394,9 +430,9 @@ class ContestRepository {
         );
       }
       final root = data.cast<String, dynamic>();
-      final list = _parseSubmissionRows(root)
-          .map((e) => ContestSubmission.fromJson(e))
-          .toList();
+      final list = _parseSubmissionRows(
+        root,
+      ).map((e) => ContestSubmission.fromJson(e)).toList();
       return ContestSubmissionsResult(
         submissions: list,
         message: apiExtractMessage(data),
@@ -415,7 +451,7 @@ class ContestRepository {
     int perPage = 20,
   }) async {
     try {
-      final response = await _api.dio.get<Map<String, dynamic>>(
+      final response = await _dio.get<Map<String, dynamic>>(
         'contests/$contestId/submissions',
         queryParameters: <String, dynamic>{
           'sort': sort,
@@ -426,9 +462,9 @@ class ContestRepository {
       final data = response.data;
       if (data == null) return ContestFailure('Empty response');
       final root = data.cast<String, dynamic>();
-      final list = _parseSubmissionRows(root)
-          .map((e) => ContestSubmission.fromJson(e))
-          .toList();
+      final list = _parseSubmissionRows(
+        root,
+      ).map((e) => ContestSubmission.fromJson(e)).toList();
       return ContestSubmissionsResult(
         submissions: list,
         message: apiExtractMessage(data),
@@ -446,25 +482,35 @@ class ContestRepository {
   }
 
   /// Global contest feed — `GET /public/contests/submissions/feed`.
+  ///
+  /// No auth required. Optional [contestId], [featured], [sort] (`recent`|`likes`).
   /// Falls back to aggregating active contest galleries when unavailable.
   Future<ContestResult> feedSubmissions({
     int page = 1,
-    int perPage = 15,
+    int perPage = 20,
+    int? contestId,
+    bool? featured,
+    String sort = 'recent',
   }) async {
+    final normalizedSort = sort == 'likes' ? 'likes' : 'recent';
     try {
-      final response = await _api.dio.get<Map<String, dynamic>>(
+      final response = await _dio.get<Map<String, dynamic>>(
         'public/contests/submissions/feed',
         queryParameters: <String, dynamic>{
           'page': page.clamp(1, 1000000).toString(),
-          'per_page': perPage.clamp(1, 50).toString(),
+          'per_page': perPage.clamp(1, 100).toString(),
+          'sort': normalizedSort,
+          if (contestId != null && contestId > 0)
+            'contest_id': contestId.toString(),
+          if (featured != null) 'featured': featured ? '1' : '0',
         },
       );
       final data = response.data;
       if (data == null) return ContestFailure('Empty response');
       final root = data.cast<String, dynamic>();
-      final list = _parseSubmissionRows(root)
-          .map((e) => ContestSubmission.fromJson(e))
-          .toList();
+      final list = _parseSubmissionRows(
+        root,
+      ).map(ContestSubmission.fromJson).toList();
       return ContestSubmissionsResult(
         submissions: list,
         message: apiExtractMessage(data),
@@ -476,7 +522,11 @@ class ContestRepository {
       );
     } on DioException catch (e) {
       if (e.response?.statusCode == 404) {
-        return _aggregateFeedFromContests(page: page, perPage: perPage);
+        return _aggregateFeedFromContests(
+          page: page,
+          perPage: perPage,
+          sort: normalizedSort,
+        );
       }
       return _failureFromDio(e);
     } catch (_) {
@@ -505,23 +555,87 @@ class ContestRepository {
   }
 
   /// Record a share — `POST /contests/submissions/{id}/share`.
-  Future<ContestResult> recordSubmissionShare(int submissionId) async {
+  ///
+  /// Prefer calling this **before** opening the native share sheet, then use
+  /// [ContestInteractionResult.shareUrl] from the response.
+  Future<ContestResult> recordSubmissionShare(
+    int submissionId, {
+    String? channel,
+    String? source,
+  }) async {
     try {
-      final response = await _api.dio.post<Map<String, dynamic>>(
+      final body = <String, dynamic>{
+        if (channel != null && channel.trim().isNotEmpty)
+          'channel': channel.trim(),
+        if (source != null && source.trim().isNotEmpty) 'source': source.trim(),
+      };
+      final response = await _dio.post<Map<String, dynamic>>(
         'contests/submissions/$submissionId/share',
+        data: body.isEmpty ? null : body,
       );
       final data = response.data;
       if (data == null) return ContestFailure('Empty response');
-      final payload = apiExtractPayloadMap(data);
-      return ContestLikeResult(
-        likesCount: apiParseInt(payload?['shares_count'] ?? payload?['likes_count']),
-        isLiked: apiParseBool(payload?['is_liked']) ?? false,
-        message: apiExtractMessage(data),
+      if (!apiResponseIsSuccess(data) && data['status'] != true) {
+        return ContestFailure(
+          apiExtractMessage(data) ?? 'Could not record share',
+        );
+      }
+      return _interactionFromPayload(
+        data,
+        fallbackSubmissionId: submissionId,
+        fallbackLiked: false,
       );
     } on DioException catch (e) {
       if (e.response?.statusCode == 404) {
-        return ContestMessageResult(message: 'Shared');
+        return ContestFailure(apiMessageFromDioException(e), statusCode: 404);
       }
+      return _failureFromDio(e);
+    } catch (_) {
+      return ContestFailure('Something went wrong');
+    }
+  }
+
+  /// Unified interaction — `POST /contests/submissions/{id}/interact`.
+  ///
+  /// [action] must be one of: `view`, `share`, `like`, `unlike`.
+  Future<ContestResult> interactSubmission(
+    int submissionId, {
+    required String action,
+    String? channel,
+    String? source,
+  }) async {
+    final normalized = action.trim().toLowerCase();
+    const allowed = {'view', 'share', 'like', 'unlike'};
+    if (!allowed.contains(normalized)) {
+      return ContestFailure('Invalid interaction action');
+    }
+    try {
+      final body = <String, dynamic>{
+        'action': normalized,
+        if (normalized == 'share' &&
+            channel != null &&
+            channel.trim().isNotEmpty)
+          'channel': channel.trim(),
+        if (normalized == 'share' && source != null && source.trim().isNotEmpty)
+          'source': source.trim(),
+      };
+      final response = await _dio.post<Map<String, dynamic>>(
+        'contests/submissions/$submissionId/interact',
+        data: body,
+      );
+      final data = response.data;
+      if (data == null) return ContestFailure('Empty response');
+      if (!apiResponseIsSuccess(data) && data['status'] != true) {
+        return ContestFailure(
+          apiExtractMessage(data) ?? 'Could not record interaction',
+        );
+      }
+      return _interactionFromPayload(
+        data,
+        fallbackSubmissionId: submissionId,
+        fallbackLiked: normalized == 'like',
+      );
+    } on DioException catch (e) {
       return _failureFromDio(e);
     } catch (_) {
       return ContestFailure('Something went wrong');
@@ -535,11 +649,11 @@ class ContestRepository {
     try {
       final Response<Map<String, dynamic>> response;
       if (like) {
-        response = await _api.dio.post<Map<String, dynamic>>(
+        response = await _dio.post<Map<String, dynamic>>(
           'contests/submissions/$submissionId/like',
         );
       } else {
-        response = await _api.dio.delete<Map<String, dynamic>>(
+        response = await _dio.delete<Map<String, dynamic>>(
           'contests/submissions/$submissionId/like',
         );
       }
@@ -548,17 +662,20 @@ class ContestRepository {
       if (!apiResponseIsSuccess(data) && data['status'] != true) {
         return ContestFailure(
           apiExtractMessage(data) ?? 'Could not update like',
+          statusCode: response.statusCode,
         );
       }
-      final payload = apiExtractPayloadMap(data) ?? data;
-      return ContestLikeResult(
-        likesCount: apiParseInt(payload['likes_count']),
-        isLiked: apiParseBool(payload['is_liked'] ?? payload['liked']) ?? like,
-        message: apiExtractMessage(data),
+      return _interactionFromPayload(
+        data,
+        fallbackSubmissionId: submissionId,
+        fallbackLiked: like,
       );
     } on DioException catch (e) {
       if (e.response?.statusCode == 404) {
-        return _mutateSubmissionLikeViaInteract(submissionId, like: like);
+        return interactSubmission(
+          submissionId,
+          action: like ? 'like' : 'unlike',
+        );
       }
       return _failureFromDio(e);
     } catch (_) {
@@ -566,28 +683,24 @@ class ContestRepository {
     }
   }
 
-  Future<ContestResult> _mutateSubmissionLikeViaInteract(
-    int submissionId, {
-    required bool like,
-  }) async {
-    try {
-      final response = await _api.dio.post<Map<String, dynamic>>(
-        'contests/submissions/$submissionId/interact',
-        data: {'action': like ? 'like' : 'unlike'},
-      );
-      final data = response.data;
-      if (data == null) return ContestFailure('Empty response');
-      final payload = apiExtractPayloadMap(data) ?? data;
-      return ContestLikeResult(
-        likesCount: apiParseInt(payload['likes_count']),
-        isLiked: apiParseBool(payload['is_liked'] ?? payload['liked']) ?? like,
-        message: apiExtractMessage(data),
-      );
-    } on DioException catch (e) {
-      return _failureFromDio(e);
-    } catch (_) {
-      return ContestFailure('Something went wrong');
-    }
+  ContestInteractionResult _interactionFromPayload(
+    Map<String, dynamic> data, {
+    required int fallbackSubmissionId,
+    required bool fallbackLiked,
+  }) {
+    final payload = apiExtractPayloadMap(data) ?? data;
+    final state = ContestInteractionState.fromJson(payload);
+    return ContestInteractionResult(
+      submissionId: state.submissionId > 0
+          ? state.submissionId
+          : fallbackSubmissionId,
+      isLiked: state.liked ?? fallbackLiked,
+      likesCount: state.likesCount ?? 0,
+      viewsCount: state.viewsCount,
+      sharesCount: state.sharesCount,
+      shareUrl: state.shareUrl,
+      message: apiExtractMessage(data),
+    );
   }
 
   List<ContestSubmission>? _feedCache;
@@ -596,6 +709,7 @@ class ContestRepository {
   Future<ContestResult> _aggregateFeedFromContests({
     required int page,
     required int perPage,
+    String sort = 'recent',
   }) async {
     try {
       final now = DateTime.now();
@@ -615,7 +729,7 @@ class ContestRepository {
         for (final contest in contestsResult.items.take(12)) {
           final subs = await gallerySubmissions(
             contest.id,
-            sort: 'recent',
+            sort: sort == 'likes' ? 'likes' : 'recent',
             page: 1,
             perPage: 12,
           );
@@ -630,11 +744,17 @@ class ContestRepository {
           }
         }
 
-        merged.sort((a, b) {
-          final ad = DateTime.tryParse(a.createdAt ?? '') ?? DateTime(1970);
-          final bd = DateTime.tryParse(b.createdAt ?? '') ?? DateTime(1970);
-          return bd.compareTo(ad);
-        });
+        if (sort == 'likes') {
+          merged.sort(
+            (a, b) => (b.likesCount ?? 0).compareTo(a.likesCount ?? 0),
+          );
+        } else {
+          merged.sort((a, b) {
+            final ad = DateTime.tryParse(a.createdAt ?? '') ?? DateTime(1970);
+            final bd = DateTime.tryParse(b.createdAt ?? '') ?? DateTime(1970);
+            return bd.compareTo(ad);
+          });
+        }
         _feedCache = merged;
         _feedCacheAt = now;
       }
@@ -672,7 +792,7 @@ class ContestRepository {
 
   Future<ContestResult> publicWinners(int contestId) async {
     try {
-      final response = await _api.dio.get<Map<String, dynamic>>(
+      final response = await _dio.get<Map<String, dynamic>>(
         'public/contests/$contestId/winners',
       );
       final data = response.data;
@@ -683,9 +803,9 @@ class ContestRepository {
         );
       }
       final root = data.cast<String, dynamic>();
-      final list = _parseWinnerRows(root)
-          .map((e) => ContestWinner.fromJson(e))
-          .toList();
+      final list = _parseWinnerRows(
+        root,
+      ).map((e) => ContestWinner.fromJson(e)).toList();
       return ContestWinnersResult(
         winners: list,
         message: apiExtractMessage(data),
@@ -699,7 +819,7 @@ class ContestRepository {
 
   Future<ContestResult> acceptedDesigns(int contestId) async {
     try {
-      final response = await _api.dio.get<Map<String, dynamic>>(
+      final response = await _dio.get<Map<String, dynamic>>(
         'contest/accepteddesigns/$contestId',
       );
       final data = response.data;
@@ -744,7 +864,9 @@ class ContestRepository {
     }
 
     if (acceptedFromEntries != null && stats.accepted == null) {
-      stats = stats.merge(ContestSubmissionStats(accepted: acceptedFromEntries));
+      stats = stats.merge(
+        ContestSubmissionStats(accepted: acceptedFromEntries),
+      );
     }
     if (stats.submitted == null &&
         stats.accepted != null &&
@@ -777,7 +899,7 @@ class ContestRepository {
         );
       }
       final path = 'contest/add';
-      final response = await _api.dio.post<Map<String, dynamic>>(
+      final response = await _dio.post<Map<String, dynamic>>(
         path,
         data: formData,
         options: Options(contentType: 'multipart/form-data'),
@@ -801,7 +923,7 @@ class ContestRepository {
     required String status,
   }) async {
     try {
-      final response = await _api.dio.post<Map<String, dynamic>>(
+      final response = await _dio.post<Map<String, dynamic>>(
         'contest/submissionstatus/$submissionId',
         data: {'status': status},
       );
@@ -820,7 +942,7 @@ class ContestRepository {
     required int position,
   }) async {
     try {
-      final response = await _api.dio.post<Map<String, dynamic>>(
+      final response = await _dio.post<Map<String, dynamic>>(
         'contest/assignposition/$submissionId',
         data: {'position': position},
       );
@@ -837,7 +959,7 @@ class ContestRepository {
   Future<ContestResult> delete(int id) async {
     try {
       final path = 'contest/delete/$id';
-      final response = await _api.dio.delete<Map<String, dynamic>>(path);
+      final response = await _dio.delete<Map<String, dynamic>>(path);
       final data = response.data;
       if (data == null) return ContestFailure('Empty response');
       return ContestMessageResult(message: apiExtractMessage(data));

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:pro_image_editor/pro_image_editor.dart';
 
 import '../../../core/app_export.dart';
+import '../../../core/network/authenticated_image.dart';
 import '../../../data/models/category_item.dart';
 import '../../../data/models/media_item.dart';
 import '../../../data/repositories/asset_repository.dart';
@@ -20,10 +21,7 @@ Future<T?> showApiAssetBottomSheet<T>({
   bool pickOnly = false,
   VoidCallback? onAssetAdded,
 }) {
-  assert(
-    type != null || assetType != null,
-    'Provide either type or assetType',
-  );
+  assert(type != null || assetType != null, 'Provide either type or assetType');
   return showModalBottomSheet<T>(
     context: context,
     isScrollControlled: true,
@@ -41,8 +39,7 @@ Future<T?> showApiAssetBottomSheet<T>({
   );
 }
 
-/// API-driven asset picker matching the shapes reference screen:
-/// back arrow, search, category chips, stacked horizontal sections.
+/// API-driven asset picker with search, category chips, and grid/list views.
 class ApiAssetBottomSheet extends StatefulWidget {
   const ApiAssetBottomSheet({
     super.key,
@@ -68,6 +65,8 @@ class ApiAssetBottomSheet extends StatefulWidget {
 }
 
 class _ApiAssetBottomSheetState extends State<ApiAssetBottomSheet> {
+  static const int _gridColumnCount = 3;
+
   final AssetRepository _assetRepo = AssetRepository();
   late final MediaRepository? _legacyRepo =
       _assetType == null && widget.type != null
@@ -82,6 +81,7 @@ class _ApiAssetBottomSheetState extends State<ApiAssetBottomSheet> {
   int _selectedCategoryIndex = 0;
   bool _loading = true;
   String? _error;
+  bool _isGridView = true;
 
   String? get _assetType {
     final key = widget.assetType;
@@ -111,6 +111,10 @@ class _ApiAssetBottomSheetState extends State<ApiAssetBottomSheet> {
   void _onSearchChanged() {
     _searchDebounce?.cancel();
     _searchDebounce = Timer(const Duration(milliseconds: 350), _loadAssets);
+  }
+
+  void _toggleViewMode() {
+    setState(() => _isGridView = !_isGridView);
   }
 
   Future<void> _loadAssets() async {
@@ -263,6 +267,7 @@ class _ApiAssetBottomSheetState extends State<ApiAssetBottomSheet> {
       context: context,
       item: item,
       layerKind: layerKind,
+      editor: widget.editorKey?.currentState,
     );
     if (layer == null || !mounted) return;
 
@@ -326,11 +331,22 @@ class _ApiAssetBottomSheetState extends State<ApiAssetBottomSheet> {
   }
 
   Widget _buildBackRow(BuildContext context) {
+    final primary = theme.colorScheme.primary;
     return Padding(
-      padding: EdgeInsets.only(left: AppDs.space4.h),
-      child: AppbarLeadingImage(
-        imagePath: ImageConstant.imgArrowLeftPrimary,
-        onTap: () => Navigator.of(context).pop(),
+      padding: EdgeInsets.symmetric(horizontal: AppDs.space4.h),
+      child: Row(
+        children: [
+          AppbarLeadingImage(
+            imagePath: ImageConstant.imgArrowLeftPrimary,
+            onTap: () => Navigator.of(context).pop(),
+          ),
+          const Spacer(),
+          _ViewModeToggle(
+            isGridView: _isGridView,
+            primary: primary,
+            onToggle: _toggleViewMode,
+          ),
+        ],
       ),
     );
   }
@@ -416,6 +432,12 @@ class _ApiAssetBottomSheetState extends State<ApiAssetBottomSheet> {
       );
     }
 
+    // Category / See all: one full category body.
+    if (_selectedCategoryIndex != 0 && sections.length == 1) {
+      final entry = sections.entries.first;
+      return _buildCategoryBody(title: entry.key, items: entry.value);
+    }
+
     return ListView(
       padding: EdgeInsets.fromLTRB(
         AppDs.space4.h,
@@ -432,6 +454,67 @@ class _ApiAssetBottomSheetState extends State<ApiAssetBottomSheet> {
     );
   }
 
+  Widget _buildCategoryBody({
+    required String title,
+    required List<MediaItem> items,
+  }) {
+    if (items.isEmpty) {
+      return Center(
+        child: AppText(
+          'No items in this category',
+          variant: AppTextVariant.secondary,
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+            AppDs.space4.h,
+            AppDs.space3.v,
+            AppDs.space4.h,
+            AppDs.space2.v,
+          ),
+          child: AppSectionHeader(title: title),
+        ),
+        Expanded(
+          child: _isGridView
+              ? GridView.builder(
+                  padding: EdgeInsets.fromLTRB(
+                    AppDs.space4.h,
+                    AppDs.space2.v,
+                    AppDs.space4.h,
+                    AppDs.space6.v,
+                  ),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: _gridColumnCount,
+                    mainAxisSpacing: AppDs.space4.v,
+                    crossAxisSpacing: AppDs.space4.h,
+                    childAspectRatio: 1,
+                  ),
+                  itemCount: items.length,
+                  itemBuilder: (context, index) =>
+                      _buildAssetGridTile(items[index]),
+                )
+              : ListView.separated(
+                  padding: EdgeInsets.fromLTRB(
+                    AppDs.space4.h,
+                    AppDs.space2.v,
+                    AppDs.space4.h,
+                    AppDs.space6.v,
+                  ),
+                  itemCount: items.length,
+                  separatorBuilder: (_, _) => SizedBox(height: AppDs.space2.v),
+                  itemBuilder: (context, index) =>
+                      _buildAssetListTile(items[index]),
+                ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildSection({
     required String title,
     required List<MediaItem> items,
@@ -445,30 +528,38 @@ class _ApiAssetBottomSheetState extends State<ApiAssetBottomSheet> {
             title: title,
             trailing: GestureDetector(
               onTap: () => _onSeeAll(title),
-              child: AppText(
-                'lbl_see_all'.tr,
-                variant: AppTextVariant.accent,
+              child: AppText('lbl_see_all'.tr, variant: AppTextVariant.accent),
+            ),
+          ),
+          if (_isGridView)
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: _gridColumnCount,
+                mainAxisSpacing: AppDs.space4.v,
+                crossAxisSpacing: AppDs.space4.h,
+                childAspectRatio: 1,
               ),
-            ),
-          ),
-          SizedBox(
-            height: 104.v,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
               itemCount: items.length,
-              separatorBuilder: (_, _) => SizedBox(width: AppDs.space4.h),
-              itemBuilder: (context, index) {
-                final asset = items[index];
-                return _buildAssetTile(asset);
-              },
+              itemBuilder: (context, index) =>
+                  _buildAssetGridTile(items[index]),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: items.length,
+              separatorBuilder: (_, _) => SizedBox(height: AppDs.space2.v),
+              itemBuilder: (context, index) =>
+                  _buildAssetListTile(items[index]),
             ),
-          ),
         ],
       ),
     );
   }
 
-  Widget _buildAssetTile(MediaItem asset) {
+  Widget _buildAssetGridTile(MediaItem asset) {
     return GestureDetector(
       onTap: () => _onSelectAsset(asset),
       child: SizedBox(
@@ -476,14 +567,150 @@ class _ApiAssetBottomSheetState extends State<ApiAssetBottomSheet> {
         height: 104.v,
         child: Padding(
           padding: EdgeInsets.all(AppDs.space2.h),
-          child: Image.network(
-            asset.fileUrl,
-            fit: BoxFit.contain,
-            errorBuilder: (_, _, _) => Icon(
-              Icons.broken_image_outlined,
-              color: AppDs.textOnDarkDisabled,
-              size: 32.adaptSize,
+          child: _buildAssetImage(asset, fit: BoxFit.contain),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAssetListTile(MediaItem asset) {
+    final subtitle = asset.category?.name.trim();
+    return Material(
+      color: AppDs.surfaceElevated,
+      borderRadius: BorderRadius.circular(AppDs.radiusMd.adaptSize),
+      clipBehavior: Clip.antiAlias,
+      child: ListTile(
+        onTap: () => _onSelectAsset(asset),
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: AppDs.space3.h,
+          vertical: AppDs.space1.v,
+        ),
+        leading: ClipRRect(
+          borderRadius: BorderRadius.circular(AppDs.radiusSm.adaptSize),
+          child: SizedBox(
+            width: 52.adaptSize,
+            height: 52.adaptSize,
+            child: ColoredBox(
+              color: AppDs.surfaceBase,
+              child: _buildAssetImage(asset, fit: BoxFit.contain),
             ),
+          ),
+        ),
+        title: AppText(
+          asset.name.trim().isEmpty ? 'Asset #${asset.id}' : asset.name,
+          variant: AppTextVariant.body,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: (subtitle != null && subtitle.isNotEmpty)
+            ? AppText(
+                subtitle,
+                variant: AppTextVariant.secondary,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              )
+            : null,
+        trailing: Icon(
+          Icons.add_circle_outline_rounded,
+          color: theme.colorScheme.primary,
+          size: 22.adaptSize,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAssetImage(MediaItem asset, {required BoxFit fit}) {
+    return Image.network(
+      asset.fileUrl,
+      fit: fit,
+      headers: musamiAuthenticatedHeadersForUrl(asset.fileUrl),
+      errorBuilder: (_, _, _) => Icon(
+        Icons.broken_image_outlined,
+        color: AppDs.textOnDarkDisabled,
+        size: 28.adaptSize,
+      ),
+    );
+  }
+}
+
+class _ViewModeToggle extends StatelessWidget {
+  const _ViewModeToggle({
+    required this.isGridView,
+    required this.primary,
+    required this.onToggle,
+  });
+
+  final bool isGridView;
+  final Color primary;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppDs.surfaceElevated,
+      borderRadius: BorderRadius.circular(AppDs.radiusMd.adaptSize),
+      child: Padding(
+        padding: EdgeInsets.all(2.adaptSize),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _ViewModeButton(
+              icon: Icons.grid_view_rounded,
+              tooltip: 'lbl_grid_view'.tr,
+              selected: isGridView,
+              primary: primary,
+              onTap: isGridView ? null : onToggle,
+            ),
+            _ViewModeButton(
+              icon: Icons.view_list_rounded,
+              tooltip: 'lbl_list_view'.tr,
+              selected: !isGridView,
+              primary: primary,
+              onTap: isGridView ? onToggle : null,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ViewModeButton extends StatelessWidget {
+  const _ViewModeButton({
+    required this.icon,
+    required this.tooltip,
+    required this.selected,
+    required this.primary,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final bool selected;
+  final Color primary;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppDs.radiusSm.adaptSize),
+        child: AnimatedContainer(
+          duration: AppDs.motionFast,
+          padding: EdgeInsets.symmetric(
+            horizontal: AppDs.space2.h,
+            vertical: AppDs.space1.v + 2,
+          ),
+          decoration: BoxDecoration(
+            color: selected ? primary.withValues(alpha: 0.2) : Colors.transparent,
+            borderRadius: BorderRadius.circular(AppDs.radiusSm.adaptSize),
+          ),
+          child: Icon(
+            icon,
+            size: 20.adaptSize,
+            color: selected ? primary : AppDs.textOnDarkSecondary,
           ),
         ),
       ),

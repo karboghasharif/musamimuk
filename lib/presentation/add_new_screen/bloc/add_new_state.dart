@@ -25,6 +25,8 @@ class AddNewState extends Equatable {
     this.imageContextSecondaryPanel = 'default',
     this.canvasUnit = 'px',
     this.pendingDesignHistoryJson,
+    this.canvasLocked = true,
+    this.isResizingCanvas = false,
   });
 
   final GlobalKey<ProImageEditorState>? editorKey;
@@ -63,6 +65,13 @@ class AddNewState extends Equatable {
   /// Pro Image Editor history JSON to import once the editor is ready.
   final String? pendingDesignHistoryJson;
 
+  /// When true, canvas pan/pinch-zoom gestures are disabled (layers remain
+  /// editable). The current zoom/pan transform is preserved across toggles.
+  final bool canvasLocked;
+
+  /// True while Apply is rebuilding the canvas background for a new size.
+  final bool isResizingCanvas;
+
   final AddNewModel? addNewModel = null;
   @override
   List<Object?> get props => [
@@ -88,6 +97,8 @@ class AddNewState extends Equatable {
     imageContextSecondaryPanel,
     canvasUnit,
     pendingDesignHistoryJson,
+    canvasLocked,
+    isResizingCanvas,
   ];
   AddNewState copyWith({
     final Uint8List? transparentBytes,
@@ -113,6 +124,8 @@ class AddNewState extends Equatable {
     String? canvasUnit,
     String? pendingDesignHistoryJson,
     bool clearPendingDesignHistory = false,
+    bool? canvasLocked,
+    bool? isResizingCanvas,
   }) {
     return AddNewState(
       valueoneController: valueoneController ?? this.valueoneController,
@@ -146,6 +159,8 @@ class AddNewState extends Equatable {
       pendingDesignHistoryJson: clearPendingDesignHistory
           ? null
           : (pendingDesignHistoryJson ?? this.pendingDesignHistoryJson),
+      canvasLocked: canvasLocked ?? this.canvasLocked,
+      isResizingCanvas: isResizingCanvas ?? this.isResizingCanvas,
     );
   }
 }

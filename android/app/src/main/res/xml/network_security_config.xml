@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Cleartext only for APIs that are HTTP-only (Colormind). -->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">colormind.io</domain>
+    </domain-config>
+</network-security-config>

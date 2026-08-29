@@ -9,6 +9,7 @@ class Screen0LoginState extends Equatable {
     this.screen0LoginModelObj,
     this.isLoading = false,
     this.isLoadingGoogle = false,
+    this.isLoadingApple = false,
     this.isLoadingGuest = false,
     this.loginError,
     this.loginSuccess = false,
@@ -20,6 +21,7 @@ class Screen0LoginState extends Equatable {
   bool rememberMe;
   bool isLoading;
   bool isLoadingGoogle;
+  bool isLoadingApple;
   bool isLoadingGuest;
   String? loginError;
   bool loginSuccess;
@@ -32,6 +34,7 @@ class Screen0LoginState extends Equatable {
         screen0LoginModelObj,
         isLoading,
         isLoadingGoogle,
+        isLoadingApple,
         isLoadingGuest,
         loginError,
         loginSuccess,
@@ -44,6 +47,7 @@ class Screen0LoginState extends Equatable {
     Screen0LoginModel? screen0LoginModelObj,
     bool? isLoading,
     bool? isLoadingGoogle,
+    bool? isLoadingApple,
     bool? isLoadingGuest,
     String? loginError,
     bool? loginSuccess,
@@ -56,6 +60,7 @@ class Screen0LoginState extends Equatable {
       screen0LoginModelObj: screen0LoginModelObj ?? this.screen0LoginModelObj,
       isLoading: isLoading ?? this.isLoading,
       isLoadingGoogle: isLoadingGoogle ?? this.isLoadingGoogle,
+      isLoadingApple: isLoadingApple ?? this.isLoadingApple,
       isLoadingGuest: isLoadingGuest ?? this.isLoadingGuest,
       loginError: loginError,
       loginSuccess: loginSuccess ?? this.loginSuccess,

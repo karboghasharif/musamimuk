@@ -2,96 +2,18 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:path_provider/path_provider.dart';
-import 'package:remove_bg/remove_bg.dart';
 
-/// Service for background removal using remove_bg package
+/// Legacy compatibility surface with third-party client egress disabled.
 class RemoveBgService {
-  static const String _apiKey =
-      'u1HPQ4wdXaBztLcdCyGFunRP'; // Replace with your API key
-
-  /// Remove background from image using remove_bg package
-  Future<Uint8List?> removeBackground(Uint8List imageBytes) async {
-    try {
-      print('Using remove_bg service for background removal...');
-
-      // Create a temporary file to save the input image
-      final tempDir = await getTemporaryDirectory();
-      final inputFile = File('${tempDir.path}/input_image.png');
-      await inputFile.writeAsBytes(imageBytes);
-
-      // Use remove_bg package to remove background
-      final result = await Remove().bg(
-        inputFile,
-        privateKey: _apiKey,
-        onUploadProgressCallback: (progress) {
-          print('Upload Progress: $progress%');
-        },
-      );
-
-      if (result != null) {
-        // Clean up temporary files
-        await inputFile.delete();
-
-        return result;
-      } else {
-        print('Remove.bg service returned null result');
-        return null;
-      }
-    } catch (e) {
-      print('Error removing background with remove_bg: $e');
-      return null;
-    }
-  }
+  Future<Uint8List?> removeBackground(Uint8List imageBytes) async => null;
 
   /// Remove background with progress callback
   Future<Uint8List?> removeBackgroundWithProgress(
     Uint8List imageBytes,
     Function(double progress)? onProgress,
   ) async {
-    try {
-      onProgress?.call(0.1);
-      print('Starting remove_bg background removal...');
-
-      onProgress?.call(0.3);
-
-      // Create a temporary file to save the input image
-      final tempDir = await getTemporaryDirectory();
-      final inputFile = File(
-        '${tempDir.path}/input_image_${DateTime.now().millisecondsSinceEpoch}.png',
-      );
-      await inputFile.writeAsBytes(imageBytes);
-
-      onProgress?.call(0.5);
-
-      // Use remove_bg package to remove background
-      final result = await Remove().bg(
-        inputFile,
-        privateKey: _apiKey,
-        onUploadProgressCallback: (progress) {
-          onProgress?.call(0.5 + (progress / 100) * 0.3);
-        },
-      );
-
-      onProgress?.call(0.8);
-
-      if (result != null) {
-        onProgress?.call(0.9);
-
-        // Clean up temporary files
-        await inputFile.delete();
-
-        onProgress?.call(1.0);
-        return result;
-      } else {
-        print('Remove.bg service returned null result');
-        onProgress?.call(0.0);
-        return null;
-      }
-    } catch (e) {
-      print('Error removing background with remove_bg: $e');
-      onProgress?.call(0.0);
-      return null;
-    }
+    onProgress?.call(0.0);
+    return null;
   }
 
   /// Save processed image to device storage
@@ -105,23 +27,17 @@ class RemoveBgService {
       File file = File(filePath);
       await file.writeAsBytes(imageBytes);
       return filePath;
-    } catch (e) {
-      print('Error saving image: $e');
+    } catch (_) {
       return null;
     }
   }
 
   /// Check if API key is configured
   static bool isApiKeyConfigured() {
-    return _apiKey != 'u1HPQ4wdXaBztLcdCyGFunRP' && _apiKey.isNotEmpty;
+    return false;
   }
 
-  /// Set API key (in a real app, you'd want to store this securely)
-  static void setApiKey(String apiKey) {
-    // In a real implementation, you'd update the service with the new API key
-    // For now, this is a placeholder
-    print('API key would be set to: ${apiKey.substring(0, 10)}...');
-  }
+  static void setApiKey(String apiKey) {}
 
   /// Get service information
   static Map<String, dynamic> getServiceInfo() {
@@ -130,7 +46,6 @@ class RemoveBgService {
       'description': 'Professional background removal service',
       'apiKeyRequired': true,
       'apiKeyConfigured': isApiKeyConfigured(),
-      'website': 'https://www.remove.bg/',
     };
   }
 }

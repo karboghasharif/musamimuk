@@ -11,8 +11,11 @@ import '../../core/app_export.dart';
 import '../../core/utils/app_toast.dart';
 import '../../core/utils/save_raster_to_gallery.dart';
 import '../../data/models/background_removal_api_models.dart';
+import '../../data/models/wallet_models.dart';
 import '../../widgets/app_bar/appbar_leading_image.dart';
 import '../../widgets/app_bar/custom_app_bar.dart';
+import '../wallet/bloc/wallet_bloc.dart';
+import '../wallet/wallet_cost_guard.dart';
 
 /// Arguments when opening [EnhancedRemoveBackgroundScreen] from the editor.
 class RemoveBackgroundScreenArgs {
@@ -590,6 +593,8 @@ class _EnhancedRemoveBackgroundScreenState
         return 'msg_bg_removal_timeout'.tr;
       case BackgroundRemovalErrorKind.network:
         return 'msg_bg_removal_network_error'.tr;
+      case BackgroundRemovalErrorKind.insufficientCoins:
+        return 'msg_insufficient_coins'.tr;
       case BackgroundRemovalErrorKind.apiFailure:
       case null:
         return 'msg_bg_removal_api_failure'.tr;
@@ -599,6 +604,12 @@ class _EnhancedRemoveBackgroundScreenState
   Future<void> _removeBackground() async {
     final bytes = _originalImage;
     if (bytes == null || _isProcessing) return;
+
+    final allowed = await ensureCanSpendCoins(
+      context: context,
+      feature: WalletFeatureCost.removeBackground,
+    );
+    if (!allowed || !mounted) return;
 
     setState(() {
       _isProcessing = true;
@@ -628,6 +639,7 @@ class _EnhancedRemoveBackgroundScreenState
       if (resultBytes != null) {
         _processedImage = resultBytes;
         _errorMessage = null;
+        context.read<WalletBloc>().add(const WalletRefreshEvent());
         showAppToast(
           'msg_bg_removal_success'.tr,
           type: ToastificationType.success,

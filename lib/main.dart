@@ -1,15 +1,23 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:musamimuk/presentation/add_new_screen/bloc/add_new_bloc.dart';
 import 'package:toastification/toastification.dart';
-
 import 'core/app_export.dart';
+import 'core/deeplink/app_deep_link_service.dart';
 import 'data/repositories/auth_repository.dart';
+import 'data/services/custom_font_library.dart';
+import 'data/services/user_font_library.dart';
 import 'presentation/guest_upgrade/guest_upgrade_prompt.dart';
+import 'presentation/wallet/bloc/wallet_bloc.dart';
+import 'presentation/wallet/wallet_auth_sync.dart';
+import 'presentation/wallet/widgets/insufficient_coins_sheet.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  Logger.init(kReleaseMode ? LogMode.live : LogMode.debug);
+  await AppDeepLinkService.instance.init();
   const startupBackground = Color(0xFF252A30);
   await Future.wait([
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]),
@@ -40,9 +48,21 @@ Future<void> main() async {
     }
   }
   appLocaleNotifier.syncFromPrefs();
+  // Warm custom font catalog in the background (text editor uses it as primary).
+  if (prefs.isLoggedIn()) {
+    // ignore: unawaited_futures
+    CustomFontLibrary.instance.ensureLoaded();
+  }
+  // Re-register user-imported fonts so designs reopen with the correct family.
+  // ignore: unawaited_futures
+  UserFontLibrary.instance.ensureLoaded();
   // Route guest 403s (account-only actions) to the upgrade prompt.
-  SessionManager.instance.guestForbiddenHandler =
-      (message) => showGuestUpgradePrompt(message);
+  SessionManager.instance.guestForbiddenHandler = (message) =>
+      showGuestUpgradePrompt(message);
+  SessionManager.instance.insufficientCoinsHandler = (info) =>
+      showInsufficientCoinsSheet(info);
+  SessionManager.instance.authClearedHandler = () =>
+      syncWalletAfterAuth(forceReset: true);
   runApp(const MyApp());
 }
 
@@ -60,6 +80,10 @@ class MyApp extends StatelessWidget {
             BlocProvider<AddNewBloc>(
               create: (context) => AddNewBloc(AddNewState()),
             ),
+            BlocProvider<WalletBloc>(
+              create: (context) =>
+                  WalletBloc()..add(const WalletBootstrapEvent()),
+            ),
           ],
           child: BlocProvider(
             create: (context) =>
@@ -73,7 +97,7 @@ class MyApp extends StatelessWidget {
                     final Locale? localeOverride =
                         (code == 'ar' || code == 'en') ? Locale(code!) : null;
 
-                    return ToastificationWrapper( 
+                    return ToastificationWrapper(
                       config: const ToastificationConfig(
                         alignment: Alignment.bottomCenter,
                       ),

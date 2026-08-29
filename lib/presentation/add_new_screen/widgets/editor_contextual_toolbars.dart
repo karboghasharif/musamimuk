@@ -165,11 +165,6 @@ class TextContextToolbar extends StatelessWidget {
               child: Row(
                 children: [
                   _PrimaryBarTool(
-                    icon: Icons.delete_outline_rounded,
-                    label: 'Delete',
-                    onTap: onDelete,
-                  ),
-                  _PrimaryBarTool(
                     icon: Icons.text_fields_rounded,
                     label: 'Size',
                     onTap: onSize,
@@ -178,11 +173,6 @@ class TextContextToolbar extends StatelessWidget {
                     icon: Icons.border_color_outlined,
                     label: 'Stroke',
                     onTap: onStroke,
-                  ),
-                  _PrimaryBarTool(
-                    icon: Icons.copy_all_outlined,
-                    label: 'Duplicate',
-                    onTap: onDuplicate,
                   ),
                   _PrimaryBarTool(
                     icon: Icons.opacity_rounded,
@@ -680,6 +670,8 @@ class ImageContextToolbar extends StatelessWidget {
     required this.onAiRemoveBg,
     required this.onColor,
     required this.onAdjust,
+    this.onClippingMask,
+    this.clippingMaskActive = false,
     this.secondaryPanel = 'default',
     this.adjustPanel = const SizedBox.shrink(),
   });
@@ -698,6 +690,9 @@ class ImageContextToolbar extends StatelessWidget {
   final VoidCallback onAiRemoveBg;
   final VoidCallback onColor;
   final VoidCallback onAdjust;
+  /// When non-null, shows Clipping Mask / Release Mask for shapes.
+  final VoidCallback? onClippingMask;
+  final bool clippingMaskActive;
 
   /// `default` | `adjust`
   final String secondaryPanel;
@@ -735,11 +730,6 @@ class ImageContextToolbar extends StatelessWidget {
                 child: Row(
                   children: [
                     _PrimaryBarTool(
-                      icon: Icons.delete_outline_rounded,
-                      label: 'Delete',
-                      onTap: onDelete,
-                    ),
-                    _PrimaryBarTool(
                       icon: Icons.open_in_full_rounded,
                       label: 'Resize',
                       onTap: onResize,
@@ -761,15 +751,20 @@ class ImageContextToolbar extends StatelessWidget {
                       onTap: onShadow,
                     ),
                     _PrimaryBarTool(
-                      icon: Icons.copy_all_outlined,
-                      label: 'Duplicate',
-                      onTap: onDuplicate,
-                    ),
-                    _PrimaryBarTool(
                       icon: Icons.opacity_rounded,
                       label: 'Opacity',
                       onTap: onOpacity,
                     ),
+                    if (onClippingMask != null)
+                      _PrimaryBarTool(
+                        icon: clippingMaskActive
+                            ? Icons.content_cut_rounded
+                            : Icons.filter_center_focus_rounded,
+                        label: clippingMaskActive
+                            ? 'lbl_release_mask'.tr
+                            : 'lbl_clipping_mask'.tr,
+                        onTap: onClippingMask!,
+                      ),
                   ],
                 ),
               ),

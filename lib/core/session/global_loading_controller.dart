@@ -30,6 +30,14 @@ class GlobalLoadingController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Force-clears a stuck overlay (e.g. after hot reload mid-request).
+  void reset() {
+    if (_depth == 0 && _message == null) return;
+    _depth = 0;
+    _message = null;
+    notifyListeners();
+  }
+
   /// Runs [task] while showing the global overlay.
   Future<T> during<T>(
     Future<T> Function() task, {

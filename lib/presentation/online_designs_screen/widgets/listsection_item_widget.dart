@@ -18,6 +18,7 @@ class ListsectionItemWidget extends StatelessWidget {
       designId: designId,
       showRemoveBackground: false,
       enableRedesign: true,
+      cloneBeforeRedesign: true,
       title: listsectionItemModelObj.name?.trim().isNotEmpty == true
           ? listsectionItemModelObj.name
           : 'lbl_online_designs'.tr,
