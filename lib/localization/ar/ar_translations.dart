@@ -701,6 +701,8 @@ final Map<String, String> arSa = {
       "تسجيل الدخول عبر Google غير مهيأ على الويب في هذا الإصدار. استخدم التطبيق على الجوال أو البريد.",
   "msg_google_sign_in_misconfigured":
       "تسجيل الدخول عبر Google غير مُعدّ لهذا البناء. أضف عميل OAuth حقيقيًا (وSHA-1 لأندرويد) ثم أعد البناء.",
+  "msg_google_sign_in_no_token":
+      "لم يُرجع Google رمز تسجيل الدخول. تحقق من إعداد OAuth (معرّف عميل الويب / SHA-1) وحاول مرة أخرى.",
   "msg_apple_sign_in_failed":
       "فشل تسجيل الدخول عبر Apple. حاول مرة أخرى.",
   "msg_apple_sign_in_unavailable":

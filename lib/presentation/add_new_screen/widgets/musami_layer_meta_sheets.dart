@@ -103,8 +103,7 @@ Future<MusamiLayerMetaEdit> _showMetaTextSheet({
   required int maxLines,
   required String? Function(String value) validate,
 }) async {
-  final controller = TextEditingController(text: initialValue ?? '');
-  final result = await showAppModalBottomSheet<MusamiLayerMetaResult>(
+  final result = await showAppModalBottomSheet<MusamiLayerMetaEdit>(
     context: context,
     isScrollControlled: true,
     builder: (sheetContext) => AppDarkSheetTheme(
@@ -117,7 +116,7 @@ Future<MusamiLayerMetaEdit> _showMetaTextSheet({
             title: title,
             hint: hint,
             helper: helper,
-            controller: controller,
+            initialValue: initialValue ?? '',
             keyboardType: keyboardType,
             maxLines: maxLines,
             validate: validate,
@@ -127,9 +126,7 @@ Future<MusamiLayerMetaEdit> _showMetaTextSheet({
       ),
     ),
   );
-  final value = controller.text.trim();
-  controller.dispose();
-  return MusamiLayerMetaEdit(result ?? MusamiLayerMetaResult.cancelled, value);
+  return result ?? const MusamiLayerMetaEdit(MusamiLayerMetaResult.cancelled, '');
 }
 
 class _MetaTextForm extends StatefulWidget {
@@ -137,7 +134,7 @@ class _MetaTextForm extends StatefulWidget {
     required this.title,
     required this.hint,
     required this.helper,
-    required this.controller,
+    required this.initialValue,
     required this.keyboardType,
     required this.maxLines,
     required this.validate,
@@ -147,7 +144,7 @@ class _MetaTextForm extends StatefulWidget {
   final String title;
   final String hint;
   final String helper;
-  final TextEditingController controller;
+  final String initialValue;
   final TextInputType keyboardType;
   final int maxLines;
   final String? Function(String value) validate;
@@ -158,12 +155,29 @@ class _MetaTextForm extends StatefulWidget {
 }
 
 class _MetaTextFormState extends State<_MetaTextForm> {
+  late final TextEditingController _controller;
   String? _error;
 
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialValue);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _pop(MusamiLayerMetaResult result, String value) {
+    Navigator.of(context).pop(MusamiLayerMetaEdit(result, value.trim()));
+  }
+
   void _save() {
-    final value = widget.controller.text.trim();
+    final value = _controller.text.trim();
     if (value.isEmpty) {
-      Navigator.of(context).pop(MusamiLayerMetaResult.removed);
+      _pop(MusamiLayerMetaResult.removed, '');
       return;
     }
     final error = widget.validate(value);
@@ -171,7 +185,7 @@ class _MetaTextFormState extends State<_MetaTextForm> {
       setState(() => _error = error);
       return;
     }
-    Navigator.of(context).pop(MusamiLayerMetaResult.saved);
+    _pop(MusamiLayerMetaResult.saved, value);
   }
 
   @override
@@ -181,65 +195,66 @@ class _MetaTextFormState extends State<_MetaTextForm> {
     final keyboardType = isMultiline && widget.keyboardType == TextInputType.text
         ? TextInputType.multiline
         : widget.keyboardType;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          widget.title,
-          style: AppDs.sheetTitle(theme, color: AppDs.textOnDarkPrimary),
-        ),
-        const SizedBox(height: AppDs.space2),
-        Text(
-          widget.helper,
-          style: AppDs.sheetCaption(theme, color: AppDs.textOnDarkSecondary),
-        ),
-        const SizedBox(height: AppDs.space4),
-        TextField(
-          controller: widget.controller,
-          keyboardType: keyboardType,
-          maxLines: widget.maxLines,
-          autofocus: true,
-          textInputAction: isMultiline
-              ? TextInputAction.newline
-              : TextInputAction.done,
-          onSubmitted: isMultiline ? null : (_) => _save(),
-          onChanged: (_) {
-            if (_error != null) setState(() => _error = null);
-          },
-          style: AppDs.sheetBody(theme, color: AppDs.textOnDarkPrimary),
-          decoration: InputDecoration(
-            hintText: widget.hint,
-            errorText: _error,
-            filled: true,
-            fillColor: AppDs.surfaceRaised,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppDs.radiusMd),
-              borderSide: BorderSide.none,
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            widget.title,
+            style: AppDs.sheetTitle(theme, color: AppDs.textOnDarkPrimary),
+          ),
+          const SizedBox(height: AppDs.space2),
+          Text(
+            widget.helper,
+            style: AppDs.sheetCaption(theme, color: AppDs.textOnDarkSecondary),
+          ),
+          const SizedBox(height: AppDs.space4),
+          TextField(
+            controller: _controller,
+            keyboardType: keyboardType,
+            maxLines: widget.maxLines,
+            autofocus: true,
+            textInputAction: isMultiline
+                ? TextInputAction.newline
+                : TextInputAction.done,
+            onSubmitted: isMultiline ? null : (_) => _save(),
+            onChanged: (_) {
+              if (_error != null) setState(() => _error = null);
+            },
+            style: AppDs.sheetBody(theme, color: AppDs.textOnDarkPrimary),
+            decoration: InputDecoration(
+              hintText: widget.hint,
+              errorText: _error,
+              filled: true,
+              fillColor: AppDs.surfaceRaised,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppDs.radiusMd),
+                borderSide: BorderSide.none,
+              ),
             ),
           ),
-        ),
-        const SizedBox(height: AppDs.space4),
-        Row(
-          children: [
-            if (widget.hasExistingValue)
-              Expanded(
-                child: TextButton(
-                  onPressed: () =>
-                      Navigator.of(context).pop(MusamiLayerMetaResult.removed),
-                  child: Text(
-                    'lbl_remove'.tr,
-                    style: TextStyle(color: theme.colorScheme.error),
+          const SizedBox(height: AppDs.space4),
+          Row(
+            children: [
+              if (widget.hasExistingValue)
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => _pop(MusamiLayerMetaResult.removed, ''),
+                    child: Text(
+                      'lbl_remove'.tr,
+                      style: TextStyle(color: theme.colorScheme.error),
+                    ),
                   ),
                 ),
+              if (widget.hasExistingValue) const SizedBox(width: AppDs.space3),
+              Expanded(
+                child: FilledButton(onPressed: _save, child: Text('lbl_save'.tr)),
               ),
-            if (widget.hasExistingValue) const SizedBox(width: AppDs.space3),
-            Expanded(
-              child: FilledButton(onPressed: _save, child: Text('lbl_save'.tr)),
-            ),
-          ],
-        ),
-      ],
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

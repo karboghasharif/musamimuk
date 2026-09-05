@@ -99,6 +99,41 @@ class AuthRepository {
     }
   }
 
+  /// POST `user/google-login` with Google ID token and/or access token.
+  /// Returns the same token/user shape as [login].
+  Future<LoginResult> googleLogin({
+    String? idToken,
+    String? accessToken,
+  }) async {
+    try {
+      final payload = <String, dynamic>{
+        if (idToken != null && idToken.trim().isNotEmpty)
+          'id_token': idToken.trim(),
+        if (accessToken != null && accessToken.trim().isNotEmpty)
+          'access_token': accessToken.trim(),
+      };
+      final response = await _api.dio.post<Map<String, dynamic>>(
+        'user/google-login',
+        data: payload,
+        options: Options(
+          extra: const {ApiErrorMapper.skipSessionHandlingKey: true},
+        ),
+      );
+      final data = response.data;
+      final status = response.statusCode ?? 0;
+      if (status >= 200 && status < 300 && data != null) {
+        final parsed = LoginResponse.fromJson(data);
+        if (parsed.token.trim().isNotEmpty) return LoginSuccess(parsed);
+        return LoginFailure(apiExtractMessage(data) ?? 'Google sign-in failed');
+      }
+      return LoginFailure(apiExtractMessage(data) ?? 'Google sign-in failed');
+    } on DioException catch (e) {
+      return LoginFailure(apiMessageFromDioException(e));
+    } catch (_) {
+      return LoginFailure('Something went wrong. Please try again.');
+    }
+  }
+
   /// POST `user/guest-login` with `{ device_id }` — starts or resumes the
   /// per-device guest session. Returns the same token/user shape as [login];
   /// the resulting `user.is_guest` is `true`.

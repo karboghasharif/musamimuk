@@ -54,6 +54,8 @@ class SessionManager {
   static const Set<String> _authPathFragments = {
     'user/login',
     'user/register',
+    'user/guest-login',
+    'user/google-login',
     'forgot-password',
     'reset-password',
     'user/logout',

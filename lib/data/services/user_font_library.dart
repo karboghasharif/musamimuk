@@ -170,7 +170,7 @@ class UserFontLibrary extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final result = await FilePicker.platform.pickFiles(
+      final result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: const ['ttf', 'otf'],
         withData: true,

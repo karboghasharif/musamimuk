@@ -55,8 +55,8 @@ class PrefUtils {
   /// Stable per-install identifier used to start/resume a backend guest session.
   static const String _keyDeviceId = 'device_id';
 
-  /// Local home access without API token: guest / google / apple
-  /// (backend has no social OAuth exchange yet).
+  /// Local home access without API token: guest / apple
+  /// (Google now exchanges tokens via POST /user/google-login).
   static const String _keyOfflineHomeKind = 'offline_home_kind';
 
   static const String offlineHomeKindGuest = 'guest';
@@ -242,7 +242,8 @@ class PrefUtils {
     await setUserSession({'id': 0, 'name': localizedGuestName, 'email': ''});
   }
 
-  /// After Google sign-in when the API cannot exchange tokens yet: local profile only.
+  /// Legacy local-only Google session (no API token). Unused after Google login
+  /// started exchanging tokens with the backend.
   Future<void> setGoogleOfflineHomeSession({
     required String? displayName,
     required String? email,

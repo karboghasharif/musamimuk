@@ -733,6 +733,8 @@ final Map<String, String> enUs = {
       "Google sign-in on web is not set up in this build. Use the mobile app or email login.",
   "msg_google_sign_in_misconfigured":
       "Google sign-in is not configured for this app build. Add a real Google OAuth client (and Android SHA-1), then rebuild.",
+  "msg_google_sign_in_no_token":
+      "Google did not return a sign-in token. Check Google OAuth setup (Web client ID / SHA-1) and try again.",
   "msg_apple_sign_in_failed":
       "Apple sign-in failed. Please try again.",
   "msg_apple_sign_in_unavailable":

@@ -20,7 +20,7 @@ class Screen0LoginBloc extends Bloc<Screen0LoginEvent, Screen0LoginState> {
   })  : _authRepository = authRepository ?? AuthRepository(),
         _googleSignIn = googleSignIn ??
             GoogleSignIn(
-              scopes: const <String>['email', 'profile'],
+              scopes: const <String>['email', 'profile', 'openid'],
             ),
         super(
           Screen0LoginState(
@@ -196,20 +196,55 @@ class Screen0LoginBloc extends Bloc<Screen0LoginEvent, Screen0LoginState> {
         emit(state.copyWith(isLoadingGoogle: false));
         return;
       }
-      final prefs = PrefUtils();
-      await prefs.setRememberSession(true);
-      await prefs.setGoogleOfflineHomeSession(
-        displayName: account.displayName,
-        email: account.email,
-        photoUrl: account.photoUrl,
+
+      final googleAuth = await account.authentication;
+      final idToken = googleAuth.idToken?.trim();
+      final accessToken = googleAuth.accessToken?.trim();
+      if ((idToken == null || idToken.isEmpty) &&
+          (accessToken == null || accessToken.isEmpty)) {
+        emit(
+          state.copyWith(
+            isLoadingGoogle: false,
+            loginError: AppLocalization.translate('msg_google_sign_in_no_token'),
+          ),
+        );
+        return;
+      }
+
+      final result = await _authRepository.googleLogin(
+        idToken: idToken,
+        accessToken: accessToken,
       );
-      emit(
-        state.copyWith(
-          isLoadingGoogle: false,
-          loginError: null,
-          loginSuccess: true,
-        ),
-      );
+      if (result is LoginSuccess) {
+        await _persistLoginSuccess(
+          result,
+          rememberMe: true,
+          emailToSaveWhenRemembered: account.email,
+        );
+        emit(
+          state.copyWith(
+            isLoadingGoogle: false,
+            loginError: null,
+            loginSuccess: true,
+          ),
+        );
+      } else if (result is LoginFailure) {
+        emit(
+          state.copyWith(
+            isLoadingGoogle: false,
+            loginError: result.message.isNotEmpty
+                ? result.message
+                : AppLocalization.translate('msg_google_sign_in_failed'),
+          ),
+        );
+      } else {
+        emit(
+          state.copyWith(
+            isLoadingGoogle: false,
+            loginError: AppLocalization.translate('msg_google_sign_in_failed'),
+          ),
+        );
+      }
     } on PlatformException catch (e) {
       debugPrint('GoogleSignIn PlatformException: code=${e.code} message=${e.message}');
       emit(
