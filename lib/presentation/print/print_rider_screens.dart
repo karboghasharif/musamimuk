@@ -7,6 +7,7 @@ import '../../core/app_export.dart';
 import '../../core/utils/app_toast.dart';
 import '../../data/models/print_models.dart';
 import '../../data/repositories/print_repository.dart';
+import 'print_review_sheet.dart';
 import 'print_ui.dart';
 
 class PrintRiderHomeScreen extends StatefulWidget {
@@ -22,6 +23,7 @@ class _PrintRiderHomeScreenState extends State<PrintRiderHomeScreen> {
   final _repo = PrintRepository();
   PrintRiderProfile? _rider;
   List<PrintDeliveryInfo> _jobs = const [];
+  List<PrintReview> _reviews = const [];
   bool _loading = true;
   Timer? _poll;
 
@@ -53,10 +55,18 @@ class _PrintRiderHomeScreenState extends State<PrintRiderHomeScreen> {
         jobs = jobsResult.data;
       }
     }
+    List<PrintReview> reviews = const [];
+    if (rider != null) {
+      final reviewResult = await _repo.riderReviews(rider.id);
+      if (reviewResult is PrintSuccess<List<PrintReview>>) {
+        reviews = reviewResult.data;
+      }
+    }
     if (!mounted) return;
     setState(() {
       _rider = rider;
       _jobs = jobs;
+      _reviews = reviews;
       _loading = false;
     });
   }
@@ -140,7 +150,28 @@ class _PrintRiderHomeScreenState extends State<PrintRiderHomeScreen> {
               ),
               onChanged: _toggleOnline,
             ),
+            PrintLevelBadge(
+              label: _rider!.levelLabel,
+              labelAr: _rider!.levelLabelAr,
+            ),
+            if (_rider!.levelProgress?.hint != null)
+              Padding(
+                padding: EdgeInsets.only(top: 6.v, bottom: 12.v),
+                child: Text(
+                  _rider!.levelProgress!.hint!,
+                  style: const TextStyle(color: Colors.white70),
+                ),
+              ),
+            Text(
+              'lbl_print_verified_reviews'.tr,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
             SizedBox(height: 8.v),
+            PrintVerifiedReviewList(reviews: _reviews),
+            SizedBox(height: 12.v),
             ..._jobs.map(
               (job) => Padding(
                 padding: EdgeInsets.only(bottom: 10.v),
@@ -367,6 +398,21 @@ class _RiderJobCardState extends State<_RiderJobCard> {
                 label: 'lbl_print_rider_action_$action'.tr,
                 loading: _busy,
                 onPressed: _run,
+              ),
+            ),
+          if (job.status == 'delivered' && job.orderId != null)
+            Padding(
+              padding: EdgeInsets.only(top: 8.v),
+              child: PrintGoldButton(
+                label: 'lbl_print_review_customer'.tr,
+                onPressed: () async {
+                  await showPrintReviewSheet(
+                    context: context,
+                    orderId: job.orderId!,
+                    target: 'customer',
+                  );
+                  widget.onChanged();
+                },
               ),
             ),
         ],

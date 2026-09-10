@@ -5,6 +5,7 @@ import '../../core/app_export.dart';
 import '../../core/utils/app_toast.dart';
 import '../../data/models/print_models.dart';
 import '../../data/repositories/print_repository.dart';
+import 'print_review_sheet.dart';
 import 'print_ui.dart';
 
 class PrintShopRegisterScreen extends StatefulWidget {
@@ -231,7 +232,18 @@ class _PrintShopHomeScreenState extends State<PrintShopHomeScreen> {
                   : 'lbl_print_status_${_shop!.status}'.tr,
               style: const TextStyle(color: AppDs.printGold),
             ),
-            SizedBox(height: 12.v),
+            PrintLevelBadge(
+              label: _shop!.levelLabel,
+              labelAr: _shop!.levelLabelAr,
+            ),
+            if (_shop!.levelProgress?.hint != null)
+              Padding(
+                padding: EdgeInsets.only(top: 6.v, bottom: 12.v),
+                child: Text(
+                  _shop!.levelProgress!.hint!,
+                  style: const TextStyle(color: Colors.white70),
+                ),
+              ),
             ..._orders.map(
               (order) => Padding(
                 padding: EdgeInsets.only(bottom: 10.v),
@@ -368,6 +380,25 @@ class _ShopOrderCardState extends State<_ShopOrderCard> {
               label: 'lbl_print_verify_pickup'.tr,
               loading: _busy,
               onPressed: _verifyPickup,
+            ),
+          ],
+          if (order.status == 'completed') ...[
+            SizedBox(height: 8.v),
+            ...order.pendingReviews.where((e) => !e.submitted).map(
+              (pending) => Padding(
+                padding: EdgeInsets.only(top: 8.v),
+                child: PrintGoldButton(
+                  label: 'lbl_print_review_${pending.target}'.tr,
+                  onPressed: () async {
+                    await showPrintReviewSheet(
+                      context: context,
+                      orderId: order.id,
+                      target: pending.target,
+                    );
+                    widget.onChanged();
+                  },
+                ),
+              ),
             ),
           ],
         ],

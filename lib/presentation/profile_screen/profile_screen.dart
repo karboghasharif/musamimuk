@@ -10,6 +10,7 @@ import '../../core/app_export.dart';
 import '../../core/utils/app_toast.dart';
 import '../../core/country_names.dart';
 import '../../data/repositories/auth_repository.dart';
+import '../print/print_reputation_card.dart';
 import '../../widgets/app_bar/appbar_leading_image.dart';
 import '../../widgets/app_bar/custom_app_bar.dart';
 import '../wallet/wallet_auth_sync.dart';
@@ -419,6 +420,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               textAlign: TextAlign.center,
                             ),
                             SizedBox(height: AppDs.space6.v),
+                            if (!PrefUtils().isGuestAccount())
+                              const PrintReputationCard(),
                             AppCard(
                               elevated: true,
                               child: Column(

@@ -28,6 +28,8 @@ class PrintRepository {
     double? price,
     bool openNow = false,
     String? q,
+    String? sort,
+    int? level,
   }) async {
     try {
       final response = await _dio.get<Map<String, dynamic>>(
@@ -40,6 +42,8 @@ class PrintRepository {
           if (price != null) 'price': price,
           if (openNow) 'open_now': true,
           if (q != null && q.trim().isNotEmpty) 'q': q.trim(),
+          if (sort != null && sort.trim().isNotEmpty) 'sort': sort.trim(),
+          if (level != null) 'level': level,
         },
       );
       final data = response.data;
@@ -420,6 +424,85 @@ class PrintRepository {
         },
       ),
     );
+  }
+
+  Future<PrintResult<PrintReview>> submitReview({
+    required int orderId,
+    required String target,
+    required Map<String, int> scores,
+    String? comment,
+  }) async {
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        'print/orders/$orderId/reviews',
+        data: {
+          'target': target,
+          'scores': scores,
+          if (comment != null && comment.trim().isNotEmpty) 'comment': comment.trim(),
+        },
+      );
+      final map = apiExtractPayloadMap(response.data);
+      if (response.data == null ||
+          !apiResponseIsSuccess(response.data!) ||
+          map == null) {
+        return PrintFailure(
+          apiExtractMessage(response.data) ?? 'Review failed.',
+        );
+      }
+      return PrintSuccess(PrintReview.fromJson(map));
+    } on DioException catch (e) {
+      return PrintFailure(apiMessageFromDioException(e));
+    }
+  }
+
+  Future<PrintResult<List<PrintReview>>> shopReviews(int shopId) {
+    return _sendReviews('print/shops/$shopId/reviews');
+  }
+
+  Future<PrintResult<List<PrintReview>>> riderReviews(int riderId) {
+    return _sendReviews('print/riders/$riderId/reviews');
+  }
+
+  Future<PrintResult<PrintReputation>> myReputation() async {
+    try {
+      final response = await _dio.get<Map<String, dynamic>>(
+        'print/me/reputation',
+      );
+      final map = apiExtractPayloadMap(response.data);
+      if (response.data == null ||
+          !apiResponseIsSuccess(response.data!) ||
+          map == null) {
+        return PrintFailure(
+          apiExtractMessage(response.data) ?? 'Unable to load reputation.',
+        );
+      }
+      return PrintSuccess(PrintReputation.fromJson(map));
+    } on DioException catch (e) {
+      return PrintFailure(apiMessageFromDioException(e));
+    }
+  }
+
+  Future<PrintResult<List<PrintReview>>> _sendReviews(String path) async {
+    try {
+      final response = await _dio.get<Map<String, dynamic>>(path);
+      final data = response.data;
+      if (data == null || !apiResponseIsSuccess(data)) {
+        return PrintFailure(
+          apiExtractMessage(data) ?? 'Unable to load reviews.',
+        );
+      }
+      final map = apiExtractPayloadMap(data);
+      final raw = map?['reviews'] ?? apiExtractDataList(data);
+      final list = raw is List ? raw : const [];
+      return PrintSuccess(
+        list
+            .whereType<Map>()
+            .map((e) => PrintReview.fromJson(e.cast<String, dynamic>()))
+            .toList(),
+      );
+    } on DioException catch (e) {
+      return PrintFailure(apiMessageFromDioException(e));
+    }
   }
 
   Future<PrintResult<PrintOrder>> _sendOrder(

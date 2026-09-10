@@ -34,6 +34,7 @@ class PrintShopProfileScreen extends StatefulWidget {
 class _PrintShopProfileScreenState extends State<PrintShopProfileScreen> {
   final _repo = PrintRepository();
   PrintShopSummary? _shop;
+  List<PrintReview> _reviews = const [];
   bool _loading = true;
   bool _chatting = false;
   String? _error;
@@ -58,6 +59,11 @@ class _PrintShopProfileScreenState extends State<PrintShopProfileScreen> {
       _shop = (result as PrintSuccess<PrintShopSummary>).data;
       _loading = false;
     });
+    final reviews = await _repo.shopReviews(widget.shopId);
+    if (!mounted) return;
+    if (reviews is PrintSuccess<List<PrintReview>>) {
+      setState(() => _reviews = reviews.data);
+    }
   }
 
   Future<void> _chat() async {
@@ -117,6 +123,10 @@ class _PrintShopProfileScreenState extends State<PrintShopProfileScreen> {
                       ),
                   ],
                 ),
+                PrintLevelBadge(
+                  label: shop.levelLabel,
+                  labelAr: shop.levelLabelAr,
+                ),
                 if (shop.nameAr != null)
                   Text(
                     shop.nameAr!,
@@ -150,6 +160,16 @@ class _PrintShopProfileScreenState extends State<PrintShopProfileScreen> {
                       )
                       .toList(),
                 ),
+                SizedBox(height: 16.v),
+                Text(
+                  'lbl_print_verified_reviews'.tr,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                SizedBox(height: 8.v),
+                PrintVerifiedReviewList(reviews: _reviews),
                 SizedBox(height: 24.v),
                 PrintGoldButton(
                   label: 'lbl_print_chat'.tr,

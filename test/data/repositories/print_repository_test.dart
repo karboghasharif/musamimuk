@@ -165,6 +165,91 @@ void main() {
       expect(data['otp'], '1234');
       expect(data.containsKey('coins'), isFalse);
     });
+
+    test('submitReview posts scores without coin fields', () async {
+      RequestOptions? captured;
+      final repository = PrintRepository(
+        dio: _dioReturning({
+          'success': true,
+          'data': {
+            'id': 3,
+            'target_type': 'shop',
+            'verified': true,
+            'overall': 4.75,
+            'scores': {'print_quality': 5, 'service': 5, 'communication': 4, 'on_time': 5},
+          },
+        }, onRequest: (request) => captured = request),
+      );
+
+      final result = await repository.submitReview(
+        orderId: 11,
+        target: 'shop',
+        scores: const {
+          'print_quality': 5,
+          'service': 5,
+          'communication': 4,
+          'on_time': 5,
+        },
+      );
+      expect(result, isA<PrintSuccess<PrintReview>>());
+      expect(captured?.path, 'print/orders/11/reviews');
+      final data = captured?.data as Map;
+      expect(data['target'], 'shop');
+      expect(data.containsKey('coins'), isFalse);
+      expect(data.containsKey('user_id'), isFalse);
+      expect((result as PrintSuccess<PrintReview>).data.verified, isTrue);
+    });
+
+    test('searchShops sends sort and level without coin fields', () async {
+      RequestOptions? captured;
+      final repository = PrintRepository(
+        dio: _dioReturning({
+          'success': true,
+          'data': [
+            {
+              'id': 1,
+              'name': 'Volume Press',
+              'level_label': 'Trusted Printer',
+              'rating': 4.4,
+            },
+          ],
+        }, onRequest: (request) => captured = request),
+      );
+
+      final result = await repository.searchShops(sort: 'trusted', level: 2);
+      expect(result, isA<PrintSuccess<List<PrintShopSummary>>>());
+      expect(captured?.path, 'print/shops');
+      expect(captured?.queryParameters['sort'], 'trusted');
+      expect(captured?.queryParameters['level'], 2);
+      expect(captured?.queryParameters.containsKey('coins'), isFalse);
+      final shops = (result as PrintSuccess<List<PrintShopSummary>>).data;
+      expect(shops.first.levelLabel, 'Trusted Printer');
+    });
+
+    test('myReputation reads customer rating dimensions', () async {
+      final repository = PrintRepository(
+        dio: _dioReturning({
+          'success': true,
+          'data': {
+            'rating': 4.5,
+            'review_count': 2,
+            'communication': 4,
+            'payment': 5,
+            'professionalism': 4,
+            'would_work_again': 5,
+            'completed_orders': 3,
+          },
+        }),
+      );
+
+      final result = await repository.myReputation();
+      expect(result, isA<PrintSuccess<PrintReputation>>());
+      final rep = (result as PrintSuccess<PrintReputation>).data;
+      expect(rep.rating, 4.5);
+      expect(rep.communication, 4);
+      expect(rep.payment, 5);
+      expect(rep.professionalism, 4);
+    });
   });
 }
 

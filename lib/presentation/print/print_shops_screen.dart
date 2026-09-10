@@ -31,6 +31,9 @@ class _PrintShopsScreenState extends State<PrintShopsScreen> {
   bool _loading = true;
   bool _mapView = false;
   bool _openNow = false;
+  bool _minRating4 = false;
+  String _sort = 'trusted';
+  int? _minLevel;
   String? _error;
 
   @override
@@ -54,7 +57,10 @@ class _PrintShopsScreenState extends State<PrintShopsScreen> {
       lat: _jeddahLat,
       lng: _jeddahLng,
       openNow: _openNow,
+      rating: _minRating4 ? 4 : null,
       q: _search.text,
+      sort: _sort,
+      level: _minLevel,
     );
     if (!mounted) return;
     if (result is PrintFailure<List<PrintShopSummary>>) {
@@ -121,6 +127,67 @@ class _PrintShopsScreenState extends State<PrintShopsScreen> {
               _load();
             },
           ),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: EdgeInsets.symmetric(horizontal: 12.h),
+            child: Row(
+              children: [
+                for (final sort in [
+                  'trusted',
+                  'fastest',
+                  'price',
+                  'distance',
+                  'level',
+                ])
+                  Padding(
+                    padding: EdgeInsets.only(right: 8.h),
+                    child: ChoiceChip(
+                      label: Text('lbl_print_sort_$sort'.tr),
+                      selected: _sort == sort,
+                      selectedColor: AppDs.printGold,
+                      labelStyle: TextStyle(
+                        color: _sort == sort ? Colors.black : Colors.white,
+                      ),
+                      onSelected: (_) {
+                        setState(() => _sort = sort);
+                        _load();
+                      },
+                    ),
+                  ),
+                for (final level in [2, 3, 4, 5])
+                  Padding(
+                    padding: EdgeInsets.only(right: 8.h),
+                    child: FilterChip(
+                      label: Text('lbl_print_level_$level'.tr),
+                      selected: _minLevel == level,
+                      selectedColor: AppDs.printGold,
+                      labelStyle: TextStyle(
+                        color: _minLevel == level ? Colors.black : Colors.white,
+                      ),
+                      onSelected: (selected) {
+                        setState(() => _minLevel = selected ? level : null);
+                        _load();
+                      },
+                    ),
+                  ),
+                Padding(
+                  padding: EdgeInsets.only(right: 8.h),
+                  child: FilterChip(
+                    label: Text('lbl_print_filter_rating'.tr),
+                    selected: _minRating4,
+                    selectedColor: AppDs.printGold,
+                    labelStyle: TextStyle(
+                      color: _minRating4 ? Colors.black : Colors.white,
+                    ),
+                    onSelected: (selected) {
+                      setState(() => _minRating4 = selected);
+                      _load();
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
           Expanded(child: _body()),
         ],
       ),
@@ -169,6 +236,7 @@ class _PrintShopsScreenState extends State<PrintShopsScreen> {
           subtitle: Text(
             [
               if (shop.verified) 'lbl_print_verified'.tr,
+              printLocalizedLabel(shop.levelLabel, shop.levelLabelAr),
               shop.district ?? '',
               if (shop.distanceKm != null)
                 '${shop.distanceKm!.toStringAsFixed(1)} km',

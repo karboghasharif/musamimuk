@@ -9,6 +9,7 @@ import '../../core/network/api_utils.dart';
 import '../../core/utils/app_toast.dart';
 import '../../data/models/print_models.dart';
 import '../../data/repositories/print_repository.dart';
+import 'print_review_sheet.dart';
 import 'print_ui.dart';
 
 class PrintTrackingScreen extends StatefulWidget {
@@ -34,6 +35,7 @@ class _PrintTrackingScreenState extends State<PrintTrackingScreen> {
   PrintDeliveryQuote? _preview;
   String? _otpOnce;
   bool _busy = false;
+  bool _reviewPrompted = false;
   Timer? _poll;
 
   @override
@@ -58,6 +60,14 @@ class _PrintTrackingScreenState extends State<PrintTrackingScreen> {
       setState(() => _order = result.data);
       if (result.data.status == 'completed') {
         _poll?.cancel();
+        if (!_reviewPrompted &&
+            result.data.pendingReviews.any((e) => !e.submitted)) {
+          _reviewPrompted = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            promptPendingPrintReviews(context: context, order: result.data);
+          });
+        }
       }
     }
   }
@@ -265,6 +275,32 @@ class _PrintTrackingScreenState extends State<PrintTrackingScreen> {
                         onPressed: _submitOtp,
                       ),
                     ],
+                  ],
+                  if (order.status == 'completed') ...[
+                    SizedBox(height: 16.v),
+                    Text(
+                      'lbl_print_please_review'.tr,
+                      style: const TextStyle(
+                        color: AppDs.printGold,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    ...order.pendingReviews.where((e) => !e.submitted).map(
+                      (pending) => Padding(
+                        padding: EdgeInsets.only(top: 8.v),
+                        child: PrintGoldButton(
+                          label: 'lbl_print_review_${pending.target}'.tr,
+                          onPressed: () async {
+                            await showPrintReviewSheet(
+                              context: context,
+                              orderId: order.id,
+                              target: pending.target,
+                            );
+                            _load();
+                          },
+                        ),
+                      ),
+                    ),
                   ],
                   if (order.payment != null)
                     Padding(

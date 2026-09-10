@@ -78,6 +78,9 @@ class PrintShopSummary {
     this.distanceKm,
     this.openNow = false,
     this.reviewNote,
+    this.levelLabel,
+    this.levelLabelAr,
+    this.levelProgress,
   });
 
   final int id;
@@ -103,6 +106,9 @@ class PrintShopSummary {
   final double? distanceKm;
   final bool openNow;
   final String? reviewNote;
+  final String? levelLabel;
+  final String? levelLabelAr;
+  final PrintLevelProgress? levelProgress;
 
   factory PrintShopSummary.fromJson(Map<String, dynamic> json) {
     final services = json['services'];
@@ -133,6 +139,13 @@ class PrintShopSummary {
       distanceKm: _asDouble(json['distance_km']),
       openNow: json['open_now'] == true,
       reviewNote: json['review_note']?.toString(),
+      levelLabel: json['level_label']?.toString(),
+      levelLabelAr: json['level_label_ar']?.toString(),
+      levelProgress: json['level_progress'] is Map
+          ? PrintLevelProgress.fromJson(
+              (json['level_progress'] as Map).cast<String, dynamic>(),
+            )
+          : null,
     );
   }
 
@@ -276,6 +289,7 @@ class PrintOrder {
     this.deliveryFee,
     this.total,
     this.delivery,
+    this.pendingReviews = const [],
   });
 
   final int id;
@@ -299,6 +313,7 @@ class PrintOrder {
   final double? deliveryFee;
   final double? total;
   final PrintDeliveryInfo? delivery;
+  final List<PrintPendingReview> pendingReviews;
 
   PrintQuote? get offeredQuote {
     for (final quote in quotes) {
@@ -314,6 +329,7 @@ class PrintOrder {
     final messages = json['messages'];
     final timeline = json['timeline'];
     final payment = json['payment'];
+    final pending = json['pending_reviews'];
     return PrintOrder(
       id: PrintSpec._asInt(json['id']) ?? 0,
       number: PrintSpec._asInt(json['number']) ?? 0,
@@ -363,6 +379,16 @@ class PrintOrder {
               (json['delivery'] as Map).cast<String, dynamic>(),
             )
           : null,
+      pendingReviews: pending is List
+          ? pending
+                .whereType<Map>()
+                .map(
+                  (e) => PrintPendingReview.fromJson(
+                    e.cast<String, dynamic>(),
+                  ),
+                )
+                .toList()
+          : const [],
     );
   }
 }
@@ -505,6 +531,11 @@ class PrintRiderProfile {
     this.reviewNote,
     this.completedDeliveries = 0,
     this.rating = 0,
+    this.reviewCount = 0,
+    this.level = 1,
+    this.levelLabel,
+    this.levelLabelAr,
+    this.levelProgress,
   });
 
   final int id;
@@ -520,6 +551,11 @@ class PrintRiderProfile {
   final String? reviewNote;
   final int completedDeliveries;
   final double rating;
+  final int reviewCount;
+  final int level;
+  final String? levelLabel;
+  final String? levelLabelAr;
+  final PrintLevelProgress? levelProgress;
 
   factory PrintRiderProfile.fromJson(Map<String, dynamic> json) {
     return PrintRiderProfile(
@@ -536,6 +572,15 @@ class PrintRiderProfile {
       reviewNote: json['review_note']?.toString(),
       completedDeliveries: PrintSpec._asInt(json['completed_deliveries']) ?? 0,
       rating: PrintShopSummary._asDouble(json['rating']) ?? 0,
+      reviewCount: PrintSpec._asInt(json['review_count']) ?? 0,
+      level: PrintSpec._asInt(json['level']) ?? 1,
+      levelLabel: json['level_label']?.toString(),
+      levelLabelAr: json['level_label_ar']?.toString(),
+      levelProgress: json['level_progress'] is Map
+          ? PrintLevelProgress.fromJson(
+              (json['level_progress'] as Map).cast<String, dynamic>(),
+            )
+          : null,
     );
   }
 }
@@ -562,6 +607,120 @@ class PrintNotice {
       body: json['body']?.toString() ?? '',
       read: json['read'] == true,
       href: json['href']?.toString(),
+    );
+  }
+}
+
+class PrintLevelProgress {
+  const PrintLevelProgress({
+    this.level = 1,
+    this.label,
+    this.labelAr,
+    this.hint,
+    this.completedOrders = 0,
+    this.rating = 0,
+  });
+
+  final int level;
+  final String? label;
+  final String? labelAr;
+  final String? hint;
+  final int completedOrders;
+  final double rating;
+
+  factory PrintLevelProgress.fromJson(Map<String, dynamic> json) {
+    return PrintLevelProgress(
+      level: PrintSpec._asInt(json['level']) ?? 1,
+      label: json['label']?.toString(),
+      labelAr: json['label_ar']?.toString(),
+      hint: json['hint']?.toString(),
+      completedOrders: PrintSpec._asInt(json['completed_orders']) ?? 0,
+      rating: PrintShopSummary._asDouble(json['rating']) ?? 0,
+    );
+  }
+}
+
+class PrintPendingReview {
+  const PrintPendingReview({
+    required this.target,
+    this.targetId,
+    this.submitted = false,
+  });
+
+  final String target;
+  final int? targetId;
+  final bool submitted;
+
+  factory PrintPendingReview.fromJson(Map<String, dynamic> json) {
+    return PrintPendingReview(
+      target: json['target']?.toString() ?? '',
+      targetId: PrintSpec._asInt(json['target_id']),
+      submitted: json['submitted'] == true,
+    );
+  }
+}
+
+class PrintReview {
+  const PrintReview({
+    required this.id,
+    required this.targetType,
+    this.scores = const {},
+    this.overall = 0,
+    this.comment,
+    this.verified = true,
+    this.createdAt,
+  });
+
+  final int id;
+  final String targetType;
+  final Map<String, dynamic> scores;
+  final double overall;
+  final String? comment;
+  final bool verified;
+  final String? createdAt;
+
+  factory PrintReview.fromJson(Map<String, dynamic> json) {
+    final scores = json['scores'];
+    return PrintReview(
+      id: PrintSpec._asInt(json['id']) ?? 0,
+      targetType: json['target_type']?.toString() ?? '',
+      scores: scores is Map ? scores.cast<String, dynamic>() : const {},
+      overall: PrintShopSummary._asDouble(json['overall']) ?? 0,
+      comment: json['comment']?.toString(),
+      verified: json['verified'] != false,
+      createdAt: json['created_at']?.toString(),
+    );
+  }
+}
+
+class PrintReputation {
+  const PrintReputation({
+    this.rating = 0,
+    this.reviewCount = 0,
+    this.communication = 0,
+    this.payment = 0,
+    this.professionalism = 0,
+    this.wouldWorkAgain = 0,
+    this.completedOrders = 0,
+  });
+
+  final double rating;
+  final int reviewCount;
+  final double communication;
+  final double payment;
+  final double professionalism;
+  final double wouldWorkAgain;
+  final int completedOrders;
+
+  factory PrintReputation.fromJson(Map<String, dynamic> json) {
+    return PrintReputation(
+      rating: PrintShopSummary._asDouble(json['rating']) ?? 0,
+      reviewCount: PrintSpec._asInt(json['review_count']) ?? 0,
+      communication: PrintShopSummary._asDouble(json['communication']) ?? 0,
+      payment: PrintShopSummary._asDouble(json['payment']) ?? 0,
+      professionalism: PrintShopSummary._asDouble(json['professionalism']) ?? 0,
+      wouldWorkAgain: PrintShopSummary._asDouble(json['would_work_again']) ?? 0,
+      completedOrders: PrintSpec._asInt(json['completed_orders']) ?? 0,
     );
   }
 }

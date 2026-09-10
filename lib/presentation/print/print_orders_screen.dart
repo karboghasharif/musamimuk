@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/app_export.dart';
 import '../../data/models/print_models.dart';
 import '../../data/repositories/print_repository.dart';
+import 'print_review_sheet.dart';
 import 'print_ui.dart';
 
 class PrintOrdersScreen extends StatefulWidget {
@@ -52,59 +53,112 @@ class _PrintOrdersScreenState extends State<PrintOrdersScreen> {
     });
   }
 
+  List<PrintOrder> get _active =>
+      _orders.where((o) => o.status != 'completed' && o.status != 'cancelled').toList();
+
+  List<PrintOrder> get _completed =>
+      _orders.where((o) => o.status == 'completed').toList();
+
+  String _reviewStatus(PrintOrder order) {
+    if (order.status != 'completed' || order.pendingReviews.isEmpty) {
+      return '';
+    }
+    if (order.pendingReviews.every((e) => e.submitted)) {
+      return 'lbl_print_reviewed'.tr;
+    }
+    return 'lbl_print_please_review'.tr;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return PrintScaffold(
-      title: widget.shopMode ? 'lbl_print_shop_orders'.tr : 'lbl_print_my_orders'.tr,
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-          ? Center(child: Text(_error!, style: const TextStyle(color: Colors.white70)))
-          : _orders.isEmpty
-          ? Center(
-              child: Text(
-                'msg_print_no_orders'.tr,
-                style: const TextStyle(color: Colors.white70),
-              ),
-            )
-          : RefreshIndicator(
-              onRefresh: _load,
-              child: ListView.separated(
-                padding: EdgeInsets.all(16.h),
-                itemCount: _orders.length,
-                separatorBuilder: (_, __) => SizedBox(height: 8.v),
-                itemBuilder: (context, index) {
-                  final order = _orders[index];
-                  return ListTile(
-                    tileColor: AppDs.surfaceRaised,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    title: Text(
-                      '#${order.number} · ${'lbl_print_status_${order.status}'.tr}',
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                    subtitle: Text(
-                      order.shop?.name ?? order.pickupCode,
-                      style: const TextStyle(color: AppDs.textOnDarkSecondary),
-                    ),
-                    onTap: () {
-                      if (widget.shopMode) {
-                        NavigatorService.pushNamed(
-                          AppRoutes.printShopDashboardScreen,
-                          arguments: {'orderId': order.id},
-                        );
-                      } else {
-                        NavigatorService.pushNamed(
-                          AppRoutes.printTrackingScreen,
-                          arguments: {'orderId': order.id},
-                        );
-                      }
-                    },
-                  );
-                },
-              ),
+    return DefaultTabController(
+      length: 2,
+      child: PrintScaffold(
+        title: widget.shopMode ? 'lbl_print_shop_orders'.tr : 'lbl_print_my_orders'.tr,
+        body: Column(
+          children: [
+            TabBar(
+              indicatorColor: AppDs.printGold,
+              labelColor: AppDs.printGold,
+              unselectedLabelColor: Colors.white70,
+              tabs: [
+                Tab(text: 'lbl_print_tab_active'.tr),
+                Tab(text: 'lbl_print_tab_completed'.tr),
+              ],
             ),
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _error != null
+                  ? Center(child: Text(_error!, style: const TextStyle(color: Colors.white70)))
+                  : TabBarView(
+                      children: [
+                        _list(_active),
+                        _list(_completed),
+                      ],
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _list(List<PrintOrder> orders) {
+    if (orders.isEmpty) {
+      return Center(
+        child: Text(
+          'msg_print_no_orders'.tr,
+          style: const TextStyle(color: Colors.white70),
+        ),
+      );
+    }
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView.separated(
+        padding: EdgeInsets.all(16.h),
+        itemCount: orders.length,
+        separatorBuilder: (_, __) => SizedBox(height: 8.v),
+        itemBuilder: (context, index) {
+          final order = orders[index];
+          final review = _reviewStatus(order);
+          return ListTile(
+            tileColor: AppDs.surfaceRaised,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+            title: Text(
+              '#${order.number} · ${'lbl_print_status_${order.status}'.tr}',
+              style: const TextStyle(color: Colors.white),
+            ),
+            subtitle: Text(
+              [
+                order.shop?.name ?? order.pickupCode,
+                if (review.isNotEmpty) review,
+              ].join(' · '),
+              style: const TextStyle(color: AppDs.textOnDarkSecondary),
+            ),
+            onTap: () async {
+              if (widget.shopMode) {
+                NavigatorService.pushNamed(
+                  AppRoutes.printShopDashboardScreen,
+                  arguments: {'orderId': order.id},
+                );
+              } else {
+                await NavigatorService.pushNamed(
+                  AppRoutes.printTrackingScreen,
+                  arguments: {'orderId': order.id},
+                );
+              }
+              if (order.status == 'completed') {
+                if (!context.mounted) return;
+                await promptPendingPrintReviews(context: context, order: order);
+                _load();
+              }
+            },
+          );
+        },
+      ),
     );
   }
 }
