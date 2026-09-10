@@ -364,6 +364,27 @@ class PrefUtils {
     await prefs.setDouble(_keyEditorFabDy, offset.dy);
   }
 
+  static const String _keyPrintRoleMode = 'print_role_mode';
+  static const String printRoleDesigner = 'designer';
+  static const String printRoleShop = 'shop';
+
+  String getPrintRoleMode() {
+    try {
+      final value = _sharedPreferences?.getString(_keyPrintRoleMode);
+      if (value == printRoleShop) return printRoleShop;
+    } catch (_) {}
+    return printRoleDesigner;
+  }
+
+  Future<void> setPrintRoleMode(String mode) async {
+    final prefs = _sharedPreferences ?? await SharedPreferences.getInstance();
+    _sharedPreferences ??= prefs;
+    await prefs.setString(
+      _keyPrintRoleMode,
+      mode == printRoleShop ? printRoleShop : printRoleDesigner,
+    );
+  }
+
   static String? _encodeSession(Map<String, dynamic> json) {
     try {
       final sanitized = <String, dynamic>{};

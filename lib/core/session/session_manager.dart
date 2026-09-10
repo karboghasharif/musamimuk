@@ -87,6 +87,15 @@ class SessionManager {
     AppRoutes.aiStudioDesignScreen,
     AppRoutes.aiStudioChatScreen,
     AppRoutes.aiStudioVisionScreen,
+    AppRoutes.printSettingsScreen,
+    AppRoutes.printShopsScreen,
+    AppRoutes.printShopProfileScreen,
+    AppRoutes.printChatScreen,
+    AppRoutes.printTrackingScreen,
+    AppRoutes.printOrdersScreen,
+    AppRoutes.printShopRegisterScreen,
+    AppRoutes.printShopHomeScreen,
+    AppRoutes.printShopDashboardScreen,
   };
 
   bool isAuthEndpoint(String path) {

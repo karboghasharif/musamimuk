@@ -49,6 +49,13 @@ import '../presentation/swatch_tab_container_screen/screen_12_swatch_tab_contain
 import '../presentation/transperant_bg_screen/screen_8_transperant_bg_screen.dart';
 import '../presentation/wallet/coin_store_screen.dart';
 import '../presentation/wallet/wallet_transactions_screen.dart';
+import '../presentation/print/print_settings_screen.dart';
+import '../presentation/print/print_shops_screen.dart';
+import '../presentation/print/print_shop_profile_screen.dart';
+import '../presentation/print/print_chat_screen.dart';
+import '../presentation/print/print_tracking_screen.dart';
+import '../presentation/print/print_orders_screen.dart';
+import '../presentation/print/print_shop_screens.dart';
 
 class AppRoutes {
   static const String screenTwentythreeScreen = '/screen_twentythree_screen';
@@ -124,6 +131,15 @@ class AppRoutes {
   static const String aiStudioDesignScreen = '/ai_studio_design_screen';
   static const String aiStudioChatScreen = '/ai_studio_chat_screen';
   static const String aiStudioVisionScreen = '/ai_studio_vision_screen';
+  static const String printSettingsScreen = '/print_settings_screen';
+  static const String printShopsScreen = '/print_shops_screen';
+  static const String printShopProfileScreen = '/print_shop_profile_screen';
+  static const String printChatScreen = '/print_chat_screen';
+  static const String printTrackingScreen = '/print_tracking_screen';
+  static const String printOrdersScreen = '/print_orders_screen';
+  static const String printShopRegisterScreen = '/print_shop_register_screen';
+  static const String printShopHomeScreen = '/print_shop_home_screen';
+  static const String printShopDashboardScreen = '/print_shop_dashboard_screen';
   static const String initialRoute = '/initialRoute';
   static Map<String, WidgetBuilder> get routes => {
     screenTwentythreeScreen: ScreenTwentythreeScreen.builder,
@@ -180,6 +196,15 @@ class AppRoutes {
     aiStudioDesignScreen: AiStudioDesignScreen.builder,
     aiStudioChatScreen: AiStudioChatScreen.builder,
     aiStudioVisionScreen: AiStudioVisionScreen.builder,
+    printSettingsScreen: PrintSettingsScreen.builder,
+    printShopsScreen: PrintShopsScreen.builder,
+    printShopProfileScreen: PrintShopProfileScreen.builder,
+    printChatScreen: PrintChatScreen.builder,
+    printTrackingScreen: PrintTrackingScreen.builder,
+    printOrdersScreen: PrintOrdersScreen.builder,
+    printShopRegisterScreen: PrintShopRegisterScreen.builder,
+    printShopHomeScreen: PrintShopHomeScreen.builder,
+    printShopDashboardScreen: PrintShopDashboardScreen.builder,
     initialRoute: ScreenTwentythreeScreen.builder,
   };
 }

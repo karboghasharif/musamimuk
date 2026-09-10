@@ -59,6 +59,7 @@ import '../../data/services/user_font_library.dart';
 import '../../data/models/custom_font_models.dart';
 import 'widgets/musami_text_editor_arabic_fonts.dart';
 import '../../core/config/editor_ai_config.dart';
+import '../../presentation/guest_upgrade/guest_upgrade_prompt.dart';
 import 'package:flutter_expandable_fab/flutter_expandable_fab.dart';
 import '../../background_removal/background_removal_controller.dart';
 import '../../background_removal/background_removal_loading_dialog.dart';
@@ -1141,6 +1142,7 @@ class _AddNewScreenState extends State<AddNewScreen>
   bool _aiBarAutoSend = false;
   bool _didLaunchInitialAi = false;
   String? _localDraftId;
+  int? _persistedDesignId;
   Timer? _autoSaveDebounce;
   bool _autoSaveInFlight = false;
   /// Cached in [didChangeDependencies] so dispose / lifecycle saves never call
@@ -1167,6 +1169,30 @@ class _AddNewScreenState extends State<AddNewScreen>
       _aiBarPrompt = null;
       _aiBarAutoSend = false;
     });
+  }
+
+  int? get _effectiveDesignId => widget.designId ?? _persistedDesignId;
+
+  Future<void> _openPrintMyDesign() async {
+    if (PrefUtils().isGuestAccount()) {
+      await showGuestUpgradePrompt('msg_print_guest_locked'.tr);
+      return;
+    }
+    if (!PrefUtils().isLoggedIn()) {
+      SessionManager.instance.requireAuthenticated(
+        routeName: AppRoutes.printSettingsScreen,
+      );
+      return;
+    }
+    final designId = _effectiveDesignId;
+    if (designId == null) {
+      showAppToast('msg_print_save_first'.tr, type: ToastificationType.warning);
+      return;
+    }
+    NavigatorService.pushNamed(
+      AppRoutes.printSettingsScreen,
+      arguments: {'designId': designId},
+    );
   }
 
   void _maybeLaunchInitialAi(AddNewState state) {
@@ -2156,6 +2182,30 @@ class _AddNewScreenState extends State<AddNewScreen>
                                       height: 48.v,
                                       autoAdvanceSeconds: 8,
                                     ),
+                            ),
+                          ),
+                          Padding(
+                            padding: EdgeInsets.fromLTRB(16.h, 6.v, 16.h, 0),
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: FilledButton.icon(
+                                onPressed: _openPrintMyDesign,
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: AppDs.printGold,
+                                  foregroundColor: Colors.black,
+                                  minimumSize: Size(double.infinity, 44.v),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                icon: const Icon(Icons.print_outlined, size: 18),
+                                label: Text(
+                                  'lbl_print_my_design'.tr,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
                           Padding(
@@ -6250,6 +6300,10 @@ class _AddNewScreenState extends State<AddNewScreen>
 
       switch (result) {
         case SaveDesignSuccess():
+          final parsedId = int.tryParse(result.id);
+          if (parsedId != null) {
+            _persistedDesignId = parsedId;
+          }
           final draftId = _localDraftId;
           if (draftId != null && draftId.isNotEmpty) {
             await LocalDesignStore.instance.deleteDraft(draftId);

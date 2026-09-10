@@ -158,6 +158,26 @@ class AppNavigationDrawer extends StatelessWidget {
                         );
                       },
                     ),
+                  if (!isGuest)
+                    _DrawerNavTile(
+                      icon: Icons.print_outlined,
+                      label: 'lbl_print_my_orders'.tr,
+                      onTap: () {
+                        Navigator.pop(context);
+                        NavigatorService.pushNamed(AppRoutes.printOrdersScreen);
+                      },
+                    ),
+                  if (!isGuest)
+                    _DrawerNavTile(
+                      icon: Icons.storefront_outlined,
+                      label: 'lbl_print_shop_mode'.tr,
+                      onTap: () {
+                        Navigator.pop(context);
+                        NavigatorService.pushNamed(
+                          AppRoutes.printShopHomeScreen,
+                        );
+                      },
+                    ),
                   _DrawerNavTile(
                     icon: Icons.qr_code_2_outlined,
                     label: 'msg_generate_qr_code'.tr,

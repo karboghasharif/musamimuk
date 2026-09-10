@@ -61,6 +61,7 @@ abstract final class AppDs {
   static const Color surfaceRaised = Color(0xFF2F353D);
   static const Color surfaceElevated = Color(0xFF2F353D);
   static const Color accentYellow = Color(0xFFF4DF08);
+  static const Color printGold = Color(0xFFE8C547);
   static const Color onAccent = Color(0xFF000000);
 
   // —— Motion ——
