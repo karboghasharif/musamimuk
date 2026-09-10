@@ -5,6 +5,8 @@ import '../../core/app_export.dart';
 import '../../core/utils/app_toast.dart';
 import '../../data/models/print_models.dart';
 import '../../data/repositories/print_repository.dart';
+import 'print_earnings_card.dart';
+import 'print_dispute_sheet.dart';
 import 'print_review_sheet.dart';
 import 'print_ui.dart';
 
@@ -236,6 +238,7 @@ class _PrintShopHomeScreenState extends State<PrintShopHomeScreen> {
               label: _shop!.levelLabel,
               labelAr: _shop!.levelLabelAr,
             ),
+            const PrintEarningsCard(kind: 'shop'),
             if (_shop!.levelProgress?.hint != null)
               Padding(
                 padding: EdgeInsets.only(top: 6.v, bottom: 12.v),
@@ -400,6 +403,27 @@ class _ShopOrderCardState extends State<_ShopOrderCard> {
                 ),
               ),
             ),
+          ],
+          if (order.dispute != null) ...[
+            SizedBox(height: 8.v),
+            Text(
+              '${'lbl_print_dispute_status'.tr}: ${'lbl_print_dispute_${order.dispute!.status}'.tr}',
+              style: const TextStyle(color: AppDs.printGold),
+            ),
+            if (order.dispute!.isOpen)
+              Padding(
+                padding: EdgeInsets.only(top: 8.v),
+                child: PrintGoldButton(
+                  label: 'lbl_print_dispute_reply'.tr,
+                  onPressed: () async {
+                    await showPrintDisputeReplySheet(
+                      context: context,
+                      orderId: order.id,
+                    );
+                    widget.onChanged();
+                  },
+                ),
+              ),
           ],
         ],
       ),

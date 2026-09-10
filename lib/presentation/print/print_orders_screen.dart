@@ -135,6 +135,8 @@ class _PrintOrdersScreenState extends State<PrintOrdersScreen> {
               [
                 order.shop?.name ?? order.pickupCode,
                 if (review.isNotEmpty) review,
+                if (order.dispute != null)
+                  'lbl_print_dispute_${order.dispute!.status}'.tr,
               ].join(' · '),
               style: const TextStyle(color: AppDs.textOnDarkSecondary),
             ),

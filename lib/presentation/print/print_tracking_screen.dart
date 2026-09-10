@@ -9,6 +9,7 @@ import '../../core/network/api_utils.dart';
 import '../../core/utils/app_toast.dart';
 import '../../data/models/print_models.dart';
 import '../../data/repositories/print_repository.dart';
+import 'print_dispute_sheet.dart';
 import 'print_review_sheet.dart';
 import 'print_ui.dart';
 
@@ -165,6 +166,14 @@ class _PrintTrackingScreenState extends State<PrintTrackingScreen> {
                     'lbl_print_status_${order.status}'.tr,
                     style: const TextStyle(color: Colors.white),
                   ),
+                  if (order.dispute != null)
+                    Padding(
+                      padding: EdgeInsets.only(top: 8.v),
+                      child: Text(
+                        '${'lbl_print_dispute_status'.tr}: ${'lbl_print_dispute_${order.dispute!.status}'.tr}',
+                        style: const TextStyle(color: AppDs.printGold),
+                      ),
+                    ),
                   if (order.status == 'ready' && order.fulfillment == null) ...[
                     SizedBox(height: 16.v),
                     PrintGoldButton(
@@ -310,6 +319,22 @@ class _PrintTrackingScreenState extends State<PrintTrackingScreen> {
                         style: const TextStyle(color: Colors.white70),
                       ),
                     ),
+                  if (order.dispute == null &&
+                      order.status != 'quote' &&
+                      order.status != 'awaiting_payment' &&
+                      order.status != 'cancelled') ...[
+                    SizedBox(height: 12.v),
+                    PrintGoldButton(
+                      label: 'lbl_print_report_problem'.tr,
+                      onPressed: () async {
+                        await showPrintDisputeSheet(
+                          context: context,
+                          orderId: order.id,
+                        );
+                        _load();
+                      },
+                    ),
+                  ],
                   SizedBox(height: 20.v),
                   ...order.timeline.map(
                     (event) => Padding(

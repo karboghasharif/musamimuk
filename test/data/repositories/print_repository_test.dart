@@ -250,6 +250,99 @@ void main() {
       expect(rep.payment, 5);
       expect(rep.professionalism, 4);
     });
+
+    test('shopEarnings gets wallet without coin fields', () async {
+      RequestOptions? captured;
+      final repository = PrintRepository(
+        dio: _dioReturning({
+          'success': true,
+          'data': {
+            'kind': 'shop',
+            'available': 90,
+            'protected': 0,
+            'locked': 10,
+            'pending_days': 4,
+            'min_withdraw': 20,
+            'iban': 'SA0380000000608010167519',
+            'currency': 'SAR',
+            'payouts': [],
+          },
+        }, onRequest: (request) => captured = request),
+      );
+
+      final result = await repository.shopEarnings();
+      expect(result, isA<PrintSuccess<PrintEarnings>>());
+      final wallet = (result as PrintSuccess<PrintEarnings>).data;
+      expect(captured?.path, 'print/shop/earnings');
+      expect(captured?.method, 'GET');
+      expect(wallet.available, 90);
+      expect(wallet.pendingDays, 4);
+    });
+
+    test('withdrawShop posts amount and method without coins or user_id', () async {
+      RequestOptions? captured;
+      final repository = PrintRepository(
+        dio: _dioReturning({
+          'success': true,
+          'data': {
+            'payout': {
+              'id': 1,
+              'kind': 'shop',
+              'amount': 90,
+              'method': 'iban',
+              'status': 'sent',
+            },
+            'wallet': {
+              'kind': 'shop',
+              'available': 0,
+              'protected': 0,
+              'locked': 0,
+              'min_withdraw': 20,
+              'payouts': [],
+            },
+          },
+        }, onRequest: (request) => captured = request),
+      );
+
+      final result = await repository.withdrawShop(amount: 90, method: 'iban');
+      expect(result, isA<PrintSuccess<PrintEarnings>>());
+      expect(captured?.path, 'print/shop/withdraw');
+      expect(captured?.method, 'POST');
+      final data = captured?.data as Map;
+      expect(data['amount'], 90);
+      expect(data['method'], 'iban');
+      expect(data.containsKey('coins'), isFalse);
+      expect(data.containsKey('wallet'), isFalse);
+      expect(data.containsKey('user_id'), isFalse);
+    });
+
+    test('createDispute posts issue and evidence without user_id', () async {
+      RequestOptions? captured;
+      final repository = PrintRepository(
+        dio: _dioReturning({
+          'success': true,
+          'data': {
+            'id': 3,
+            'order_id': 11,
+            'issue': 'damaged',
+            'evidence': 'photo',
+            'status': 'open',
+          },
+        }, onRequest: (request) => captured = request),
+      );
+
+      final result = await repository.createDispute(
+        orderId: 11,
+        issue: 'damaged',
+        evidence: 'photo',
+      );
+      expect(result, isA<PrintSuccess<PrintDispute>>());
+      expect(captured?.path, 'print/orders/11/disputes');
+      final data = captured?.data as Map;
+      expect(data['issue'], 'damaged');
+      expect(data.containsKey('user_id'), isFalse);
+      expect(data.containsKey('coins'), isFalse);
+    });
   });
 }
 

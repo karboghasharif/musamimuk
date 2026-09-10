@@ -197,6 +197,11 @@ class PrintPaymentInfo {
     required this.method,
     required this.status,
     this.protectedAt,
+    this.releasedAt,
+    this.availableAt,
+    this.shopNet,
+    this.riderNet,
+    this.holdDaysLeft,
     this.spendable = false,
   });
 
@@ -204,6 +209,11 @@ class PrintPaymentInfo {
   final String method;
   final String status;
   final String? protectedAt;
+  final String? releasedAt;
+  final String? availableAt;
+  final double? shopNet;
+  final double? riderNet;
+  final int? holdDaysLeft;
   final bool spendable;
 
   factory PrintPaymentInfo.fromJson(Map<String, dynamic> json) {
@@ -212,6 +222,11 @@ class PrintPaymentInfo {
       method: json['method']?.toString() ?? '',
       status: json['status']?.toString() ?? 'pending',
       protectedAt: json['protected_at']?.toString(),
+      releasedAt: json['released_at']?.toString(),
+      availableAt: json['available_at']?.toString(),
+      shopNet: PrintShopSummary._asDouble(json['shop_net']),
+      riderNet: PrintShopSummary._asDouble(json['rider_net']),
+      holdDaysLeft: PrintSpec._asInt(json['hold_days_left']),
       spendable: json['spendable'] == true,
     );
   }
@@ -290,6 +305,7 @@ class PrintOrder {
     this.total,
     this.delivery,
     this.pendingReviews = const [],
+    this.dispute,
   });
 
   final int id;
@@ -314,6 +330,7 @@ class PrintOrder {
   final double? total;
   final PrintDeliveryInfo? delivery;
   final List<PrintPendingReview> pendingReviews;
+  final PrintDispute? dispute;
 
   PrintQuote? get offeredQuote {
     for (final quote in quotes) {
@@ -389,6 +406,11 @@ class PrintOrder {
                 )
                 .toList()
           : const [],
+      dispute: json['dispute'] is Map
+          ? PrintDispute.fromJson(
+              (json['dispute'] as Map).cast<String, dynamic>(),
+            )
+          : null,
     );
   }
 }
@@ -721,6 +743,126 @@ class PrintReputation {
       professionalism: PrintShopSummary._asDouble(json['professionalism']) ?? 0,
       wouldWorkAgain: PrintShopSummary._asDouble(json['would_work_again']) ?? 0,
       completedOrders: PrintSpec._asInt(json['completed_orders']) ?? 0,
+    );
+  }
+}
+
+class PrintDispute {
+  const PrintDispute({
+    required this.id,
+    required this.orderId,
+    required this.issue,
+    this.evidence,
+    this.shopReply,
+    this.status = 'open',
+    this.resolution,
+    this.refundAmount,
+    this.createdAt,
+  });
+
+  final int id;
+  final int orderId;
+  final String issue;
+  final String? evidence;
+  final String? shopReply;
+  final String status;
+  final String? resolution;
+  final double? refundAmount;
+  final String? createdAt;
+
+  bool get isOpen => status == 'open' || status == 'shop_replied';
+
+  factory PrintDispute.fromJson(Map<String, dynamic> json) {
+    return PrintDispute(
+      id: PrintSpec._asInt(json['id']) ?? 0,
+      orderId: PrintSpec._asInt(json['order_id']) ?? 0,
+      issue: json['issue']?.toString() ?? '',
+      evidence: json['evidence']?.toString(),
+      shopReply: json['shop_reply']?.toString(),
+      status: json['status']?.toString() ?? 'open',
+      resolution: json['resolution']?.toString(),
+      refundAmount: PrintShopSummary._asDouble(json['refund_amount']),
+      createdAt: json['created_at']?.toString(),
+    );
+  }
+}
+
+class PrintPayoutRecord {
+  const PrintPayoutRecord({
+    required this.id,
+    required this.kind,
+    required this.amount,
+    required this.method,
+    required this.status,
+    this.destination,
+    this.sentAt,
+  });
+
+  final int id;
+  final String kind;
+  final double amount;
+  final String method;
+  final String status;
+  final String? destination;
+  final String? sentAt;
+
+  factory PrintPayoutRecord.fromJson(Map<String, dynamic> json) {
+    return PrintPayoutRecord(
+      id: PrintSpec._asInt(json['id']) ?? 0,
+      kind: json['kind']?.toString() ?? '',
+      amount: PrintShopSummary._asDouble(json['amount']) ?? 0,
+      method: json['method']?.toString() ?? 'iban',
+      status: json['status']?.toString() ?? 'processing',
+      destination: json['destination']?.toString(),
+      sentAt: json['sent_at']?.toString(),
+    );
+  }
+}
+
+class PrintEarnings {
+  const PrintEarnings({
+    this.kind = 'shop',
+    this.available = 0,
+    this.protectedBalance = 0,
+    this.locked = 0,
+    this.pendingDays,
+    this.minWithdraw = 20,
+    this.iban,
+    this.currency = 'SAR',
+    this.payouts = const [],
+  });
+
+  final String kind;
+  final double available;
+  final double protectedBalance;
+  final double locked;
+  final int? pendingDays;
+  final double minWithdraw;
+  final String? iban;
+  final String currency;
+  final List<PrintPayoutRecord> payouts;
+
+  factory PrintEarnings.fromJson(Map<String, dynamic> json) {
+    final payouts = json['payouts'];
+    return PrintEarnings(
+      kind: json['kind']?.toString() ?? 'shop',
+      available: PrintShopSummary._asDouble(json['available']) ?? 0,
+      protectedBalance: PrintShopSummary._asDouble(json['protected']) ?? 0,
+      locked: PrintShopSummary._asDouble(json['locked']) ?? 0,
+      pendingDays: PrintSpec._asInt(json['pending_days']),
+      minWithdraw: PrintShopSummary._asDouble(json['min_withdraw']) ?? 20,
+      iban: json['iban']?.toString(),
+      currency: json['currency']?.toString() ?? 'SAR',
+      payouts: payouts is List
+          ? payouts
+                .whereType<Map>()
+                .map(
+                  (e) => PrintPayoutRecord.fromJson(
+                    e.cast<String, dynamic>(),
+                  ),
+                )
+                .toList()
+          : const [],
     );
   }
 }

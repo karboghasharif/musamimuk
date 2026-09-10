@@ -482,6 +482,138 @@ class PrintRepository {
     }
   }
 
+  Future<PrintResult<PrintEarnings>> shopEarnings() {
+    return _sendEarnings('print/shop/earnings');
+  }
+
+  Future<PrintResult<PrintEarnings>> riderEarnings() {
+    return _sendEarnings('print/rider/earnings');
+  }
+
+  Future<PrintResult<PrintEarnings>> withdrawShop({
+    double? amount,
+    String method = 'iban',
+    String? destination,
+  }) {
+    return _sendWithdraw(
+      'print/shop/withdraw',
+      amount: amount,
+      method: method,
+      destination: destination,
+    );
+  }
+
+  Future<PrintResult<PrintEarnings>> withdrawRider({
+    double? amount,
+    String method = 'iban',
+    String? destination,
+  }) {
+    return _sendWithdraw(
+      'print/rider/withdraw',
+      amount: amount,
+      method: method,
+      destination: destination,
+    );
+  }
+
+  Future<PrintResult<PrintDispute>> createDispute({
+    required int orderId,
+    required String issue,
+    String? evidence,
+  }) async {
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        'print/orders/$orderId/disputes',
+        data: {
+          'issue': issue,
+          if (evidence != null && evidence.trim().isNotEmpty)
+            'evidence': evidence.trim(),
+        },
+      );
+      return _parseDispute(response.data, 'Unable to open dispute.');
+    } on DioException catch (e) {
+      return PrintFailure(apiMessageFromDioException(e));
+    }
+  }
+
+  Future<PrintResult<PrintDispute>> replyDispute({
+    required int orderId,
+    required String body,
+  }) async {
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        'print/orders/$orderId/disputes/reply',
+        data: {'body': body},
+      );
+      return _parseDispute(response.data, 'Unable to reply to dispute.');
+    } on DioException catch (e) {
+      return PrintFailure(apiMessageFromDioException(e));
+    }
+  }
+
+  Future<PrintResult<PrintEarnings>> _sendEarnings(String path) async {
+    try {
+      final response = await _dio.get<Map<String, dynamic>>(path);
+      final map = apiExtractPayloadMap(response.data);
+      if (response.data == null ||
+          !apiResponseIsSuccess(response.data!) ||
+          map == null) {
+        return PrintFailure(
+          apiExtractMessage(response.data) ?? 'Unable to load earnings.',
+        );
+      }
+      return PrintSuccess(PrintEarnings.fromJson(map));
+    } on DioException catch (e) {
+      return PrintFailure(apiMessageFromDioException(e));
+    }
+  }
+
+  Future<PrintResult<PrintEarnings>> _sendWithdraw(
+    String path, {
+    double? amount,
+    required String method,
+    String? destination,
+  }) async {
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        path,
+        data: {
+          if (amount != null) 'amount': amount,
+          'method': method,
+          if (destination != null && destination.trim().isNotEmpty)
+            'destination': destination.trim(),
+        },
+      );
+      final map = apiExtractPayloadMap(response.data);
+      if (response.data == null ||
+          !apiResponseIsSuccess(response.data!) ||
+          map == null) {
+        return PrintFailure(
+          apiExtractMessage(response.data) ?? 'Withdrawal failed.',
+        );
+      }
+      final wallet = map['wallet'];
+      return PrintSuccess(
+        PrintEarnings.fromJson(
+          wallet is Map ? wallet.cast<String, dynamic>() : map,
+        ),
+      );
+    } on DioException catch (e) {
+      return PrintFailure(apiMessageFromDioException(e));
+    }
+  }
+
+  PrintResult<PrintDispute> _parseDispute(
+    Map<String, dynamic>? data,
+    String fallback,
+  ) {
+    final map = apiExtractPayloadMap(data);
+    if (data == null || !apiResponseIsSuccess(data) || map == null) {
+      return PrintFailure(apiExtractMessage(data) ?? fallback);
+    }
+    return PrintSuccess(PrintDispute.fromJson(map));
+  }
+
   Future<PrintResult<List<PrintReview>>> _sendReviews(String path) async {
     try {
       final response = await _dio.get<Map<String, dynamic>>(path);

@@ -7,6 +7,7 @@ import '../../core/app_export.dart';
 import '../../core/utils/app_toast.dart';
 import '../../data/models/print_models.dart';
 import '../../data/repositories/print_repository.dart';
+import 'print_earnings_card.dart';
 import 'print_review_sheet.dart';
 import 'print_ui.dart';
 
@@ -154,6 +155,7 @@ class _PrintRiderHomeScreenState extends State<PrintRiderHomeScreen> {
               label: _rider!.levelLabel,
               labelAr: _rider!.levelLabelAr,
             ),
+            const PrintEarningsCard(kind: 'rider'),
             if (_rider!.levelProgress?.hint != null)
               Padding(
                 padding: EdgeInsets.only(top: 6.v, bottom: 12.v),
