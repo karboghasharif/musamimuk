@@ -6,7 +6,15 @@ class EditorAiConfig {
 }
 
 /// Supported LLM backends for editor text / image commands.
-enum EditorAiProviderKind { openAi, gemini }
+enum EditorAiProviderKind { openAi, gemini, grok }
+
+extension EditorAiProviderKindX on EditorAiProviderKind {
+  String get labelKey => switch (this) {
+    EditorAiProviderKind.openAi => 'lbl_chatgpt',
+    EditorAiProviderKind.gemini => 'lbl_gemini',
+    EditorAiProviderKind.grok => 'lbl_grok',
+  };
+}
 
 /// What the command bar sends on Submit.
 enum EditorAiGenerationMode {

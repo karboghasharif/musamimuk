@@ -1,18 +1,18 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_expandable_fab/flutter_expandable_fab.dart';
 import 'package:pro_image_editor/pro_image_editor.dart';
 import 'package:toastification/toastification.dart';
 
+import '../../../core/app_export.dart';
 import '../../../core/config/editor_ai_config.dart';
-import '../../../core/session/session_manager.dart';
 import '../../../core/utils/app_toast.dart';
 import '../../../data/models/wallet_models.dart';
 import '../../../data/services/editor_ai/editor_ai_message_base.dart';
 import '../../../data/services/editor_ai/editor_ai_prompt_classifier.dart';
 import '../../../data/services/editor_ai/editor_ai_provider_factory.dart';
+import '../../ai_studio/ai_studio_shared.dart';
 import '../../wallet/bloc/wallet_bloc.dart';
 import '../../wallet/wallet_cost_guard.dart';
 import '../bloc/add_new_bloc.dart';
@@ -451,6 +451,9 @@ class _EditorAiCommandBarState extends State<EditorAiCommandBar> {
     if (_providerKind == EditorAiProviderKind.gemini) {
       return WalletFeatureCost.aiGeminiEditor;
     }
+    if (_providerKind == EditorAiProviderKind.grok) {
+      return WalletFeatureCost.aiGrokEditor;
+    }
     return WalletFeatureCost.aiOpenaiEditor;
   }
 
@@ -622,6 +625,7 @@ class _EditorAiCommandBarState extends State<EditorAiCommandBar> {
             padding: EdgeInsets.symmetric(horizontal: 6),
             child: Icon(Icons.auto_awesome, color: Color(0xFF10A37F), size: 20),
           ),
+          _providerMenu(),
           _coinCostBadge(),
           if (imageOk) _modeMenu(),
           ValueListenableBuilder<bool>(
@@ -684,6 +688,25 @@ class _EditorAiCommandBarState extends State<EditorAiCommandBar> {
             );
           },
         );
+      },
+    );
+  }
+
+  Widget _providerMenu() {
+    return AiStudioProviderPicker(
+      value: _providerKind,
+      onChanged: (kind) {
+        setState(() {
+          _providerKind = kind;
+          _rebuildProvider();
+          final imageOk = _provider?.isImageGenerationSupported ?? false;
+          if (!imageOk &&
+              (_mode.value == EditorAiGenerationMode.sticker ||
+                  _mode.value == EditorAiGenerationMode.background ||
+                  _mode.value == EditorAiGenerationMode.designComposition)) {
+            _mode.value = EditorAiGenerationMode.text;
+          }
+        });
       },
     );
   }

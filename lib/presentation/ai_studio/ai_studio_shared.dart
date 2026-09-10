@@ -7,9 +7,12 @@ import 'package:image_picker/image_picker.dart';
 import 'package:toastification/toastification.dart';
 
 import '../../core/app_export.dart';
+import '../../core/config/editor_ai_config.dart';
 import '../../core/utils/app_toast.dart';
+import '../../data/models/editor_ai_api_models.dart';
 import '../../data/models/wallet_models.dart';
 import '../../data/services/editor_ai/editor_ai_api_service.dart';
+import '../../data/services/editor_ai/editor_ai_provider_factory.dart';
 import '../../widgets/app_bar/appbar_leading_image.dart';
 import '../../widgets/app_bar/appbar_title.dart';
 import '../../widgets/app_bar/custom_app_bar.dart';
@@ -34,6 +37,15 @@ class AiStudioChrome {
   }
 
   static Widget poweredByChatGpt(BuildContext context) {
+    return poweredBy(EditorAiProviderKind.openAi);
+  }
+
+  static Widget poweredBy(EditorAiProviderKind kind) {
+    final label = switch (kind) {
+      EditorAiProviderKind.openAi => 'lbl_powered_by_chatgpt'.tr,
+      EditorAiProviderKind.gemini => 'lbl_powered_by_gemini'.tr,
+      EditorAiProviderKind.grok => 'lbl_powered_by_grok'.tr,
+    };
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: AppDs.space3.h,
@@ -50,7 +62,7 @@ class AiStudioChrome {
           Icon(Icons.auto_awesome, size: 14.adaptSize, color: accent),
           SizedBox(width: 6.h),
           AppText(
-            'lbl_powered_by_chatgpt'.tr,
+            label,
             variant: AppTextVariant.caption,
             color: accent,
           ),
@@ -83,10 +95,61 @@ class AiStudioChrome {
   }
 
   static Future<bool> guardOpenAiEditor(BuildContext context) {
+    return guardEditor(context, EditorAiProviderKind.openAi);
+  }
+
+  static Future<bool> guardEditor(
+    BuildContext context,
+    EditorAiProviderKind kind,
+  ) {
     return ensureCanSpendCoins(
       context: context,
-      feature: WalletFeatureCost.aiOpenaiEditor,
+      feature: editorFeatureFor(kind),
     );
+  }
+
+  static String editorFeatureFor(EditorAiProviderKind kind) {
+    return switch (kind) {
+      EditorAiProviderKind.openAi => WalletFeatureCost.aiOpenaiEditor,
+      EditorAiProviderKind.gemini => WalletFeatureCost.aiGeminiEditor,
+      EditorAiProviderKind.grok => WalletFeatureCost.aiGrokEditor,
+    };
+  }
+
+  static Future<String> sendStudioChat({
+    required EditorAiApiService api,
+    required EditorAiProviderKind kind,
+    required List<AiMessage> messages,
+  }) async {
+    final request = OpenAiEditorRequest(messages: messages);
+    switch (kind) {
+      case EditorAiProviderKind.openAi:
+        return (await api.sendOpenAiEditor(request)).content;
+      case EditorAiProviderKind.grok:
+        return (await api.sendGrokEditor(request)).content;
+      case EditorAiProviderKind.gemini:
+        final response = await api.sendGemini(
+          GeminiEditorRequest(
+            contents: [
+              {
+                'role': 'user',
+                'parts': [
+                  {
+                    'text': messages
+                        .map((message) => '${message.role}: ${message.content}')
+                        .join('\n\n'),
+                  },
+                ],
+              },
+            ],
+            generationConfig: const {
+              'responseMimeType': 'text/plain',
+              'temperature': 0.4,
+            },
+          ),
+        );
+        return response.content;
+    }
   }
 
   static Future<bool> guardOpenAiImages(BuildContext context) {
@@ -117,6 +180,75 @@ class AiStudioChrome {
 
   static void toastAiError(Object error) {
     showAppToast(friendlyAiError(error), type: ToastificationType.error);
+  }
+}
+
+/// Compact ChatGPT / Gemini / Grok switcher. Hides Grok when `grok_enabled` is false.
+class AiStudioProviderPicker extends StatelessWidget {
+  const AiStudioProviderPicker({
+    super.key,
+    required this.value,
+    required this.onChanged,
+    this.includeGemini = true,
+  });
+
+  final EditorAiProviderKind value;
+  final ValueChanged<EditorAiProviderKind> onChanged;
+  final bool includeGemini;
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<WalletBloc, WalletState>(
+      buildWhen: (previous, next) => previous.grokEnabled != next.grokEnabled,
+      builder: (context, state) {
+        final kinds = EditorAiProviderFactory.visibleProviders(
+          grokEnabled: state.grokEnabled,
+          includeGemini: includeGemini,
+        );
+        if (kinds.length < 2) {
+          return const SizedBox.shrink();
+        }
+        final selected = kinds.contains(value) ? value : kinds.first;
+        if (selected != value) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (context.mounted) onChanged(selected);
+          });
+        }
+        return PopupMenuButton<EditorAiProviderKind>(
+          tooltip: 'lbl_ai_provider'.tr,
+          initialValue: selected,
+          onSelected: onChanged,
+          itemBuilder: (_) => [
+            for (final kind in kinds)
+              PopupMenuItem<EditorAiProviderKind>(
+                value: kind,
+                child: Text(kind.labelKey.tr),
+              ),
+          ],
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: AppDs.space2.h),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  selected.labelKey.tr,
+                  style: TextStyle(
+                    color: AppDs.textOnDarkPrimary,
+                    fontSize: 13.fSize,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Icon(
+                  Icons.expand_more,
+                  size: 18.adaptSize,
+                  color: AppDs.textOnDarkSecondary,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 }
 

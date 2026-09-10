@@ -71,7 +71,7 @@ class WalletRepository {
   }
 
   /// GET `/wallet/costs`
-  Future<WalletResult<List<WalletFeatureCost>>> getCosts() async {
+  Future<WalletResult<WalletCostsPayload>> getCosts() async {
     try {
       final response = await _api.dio.get<Map<String, dynamic>>('wallet/costs');
       final envelope = response.data;
@@ -85,8 +85,12 @@ class WalletRepository {
       if (list.isEmpty) {
         list = apiExtractDbDataList(envelope);
       }
+      final grokEnabled = apiParseBool(payload['grok_enabled']) ?? true;
       return WalletSuccess(
-        list.map(WalletFeatureCost.fromJson).toList(growable: false),
+        WalletCostsPayload(
+          costs: list.map(WalletFeatureCost.fromJson).toList(growable: false),
+          grokEnabled: grokEnabled,
+        ),
         message: apiExtractMessage(envelope),
       );
     } on DioException catch (e) {

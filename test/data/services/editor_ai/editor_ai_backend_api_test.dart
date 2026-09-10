@@ -131,6 +131,37 @@ void main() {
       });
     });
 
+    test('Grok command posts to editor/grok without client keys', () async {
+      RequestOptions? captured;
+      final service = EditorAiApiService(
+        dio: _dioReturning({
+          'choices': [
+            {
+              'message': {'content': '{"layers":[]}'},
+            },
+          ],
+        }, onRequest: (request) => captured = request),
+      );
+
+      final response = await service.sendGrokEditor(
+        const OpenAiEditorRequest(
+          messages: [AiMessage(role: 'user', content: 'Add text')],
+          responseFormat: {'type': 'text'},
+        ),
+      );
+
+      expect(response.content, '{"layers":[]}');
+      expect(captured?.path, 'ai/editor/grok');
+      expect(
+        (captured?.data as Map<String, dynamic>).keys,
+        containsAll(<String>['messages', 'response_format']),
+      );
+      expect(
+        (captured?.data as Map<String, dynamic>).keys,
+        isNot(contains(anyOf('model', 'tools', 'api_key'))),
+      );
+    });
+
     for (final status in [401, 422, 429, 502, 503, 504]) {
       test('$status maps to a safe user-facing AI error', () async {
         final service = EditorAiApiService(dio: _dioRejecting(status));

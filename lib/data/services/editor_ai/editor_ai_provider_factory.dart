@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../../core/config/editor_ai_config.dart';
 import 'editor_ai_gemini_provider.dart';
+import 'editor_ai_grok_provider.dart';
 import 'editor_ai_message_base.dart';
 import 'editor_ai_openai_provider.dart';
 
@@ -18,8 +19,21 @@ class EditorAiProviderFactory {
         return EditorAiOpenAiProvider(context: context);
       case EditorAiProviderKind.gemini:
         return EditorAiGeminiProvider(context: context);
+      case EditorAiProviderKind.grok:
+        return EditorAiGrokProvider(context: context);
     }
   }
 
   static EditorAiProviderKind defaultProvider() => EditorAiProviderKind.openAi;
+
+  static List<EditorAiProviderKind> visibleProviders({
+    required bool grokEnabled,
+    bool includeGemini = true,
+  }) {
+    return [
+      EditorAiProviderKind.openAi,
+      if (includeGemini) EditorAiProviderKind.gemini,
+      if (grokEnabled) EditorAiProviderKind.grok,
+    ];
+  }
 }

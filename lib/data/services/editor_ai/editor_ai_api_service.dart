@@ -86,6 +86,26 @@ class EditorAiApiService {
     }
   }
 
+  Future<OpenAiEditorResponse> sendGrokEditor(
+    OpenAiEditorRequest request,
+  ) async {
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        'ai/editor/grok',
+        data: request.toJson(),
+        options: _aiOptions,
+      );
+      return OpenAiEditorResponse.fromJson(_unwrapAiBody(response.data));
+    } on DioException catch (error) {
+      throw _mapError(error);
+    } on FormatException catch (_) {
+      throw const EditorAiApiException(
+        message: 'The AI provider returned an invalid response. Please retry.',
+        retryable: true,
+      );
+    }
+  }
+
   Future<GeminiEditorResponse> sendGemini(GeminiEditorRequest request) async {
     try {
       final response = await _dio.post<Map<String, dynamic>>(

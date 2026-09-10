@@ -3,11 +3,14 @@ import 'package:pro_image_editor/pro_image_editor.dart';
 import 'package:toastification/toastification.dart';
 
 import '../../../core/app_export.dart';
+import '../../../core/config/editor_ai_config.dart';
 import '../../../core/utils/app_toast.dart';
 import '../../../data/services/editor_ai/editor_ai_api_service.dart';
 import '../../../data/services/editor_ai/editor_ai_provider_factory.dart';
 import '../../../data/services/editor_ai/editor_ai_text_writing.dart';
 import '../../../data/services/editor_ai/editor_ai_text_writing_service.dart';
+import '../../ai_studio/ai_studio_shared.dart';
+import '../../wallet/wallet_cost_guard.dart';
 import 'musami_text_editor_script.dart';
 
 /// Opens the AI writing-assistance sheet for the inline text editor.
@@ -44,8 +47,9 @@ class _MusamiTextEditorAiSheetState extends State<_MusamiTextEditorAiSheet> {
   bool _isProcessing = false;
   final _promptCtrl = TextEditingController();
   EditorAiTextWritingAction? _promptAction;
+  EditorAiProviderKind _providerKind = EditorAiProviderKind.openAi;
 
-  late final EditorAiTextWritingService _service;
+  late EditorAiTextWritingService _service;
 
   static const _actions = <({EditorAiTextWritingAction action, IconData icon})>[
     (action: EditorAiTextWritingAction.generate, icon: Icons.auto_awesome),
@@ -194,6 +198,12 @@ class _MusamiTextEditorAiSheetState extends State<_MusamiTextEditorAiSheet> {
   }) async {
     setState(() => _isProcessing = true);
     try {
+      final allowed = await ensureCanSpendCoins(
+        context: context,
+        feature: AiStudioChrome.editorFeatureFor(_providerKind),
+      );
+      if (!allowed || !mounted) return;
+
       final result = await _service.write(
         action: action,
         sourceText: source.text,
@@ -248,6 +258,15 @@ class _MusamiTextEditorAiSheetState extends State<_MusamiTextEditorAiSheet> {
                     'lbl_text_editor_ai_assist'.tr,
                     style: AppDs.sheetTitle(theme, color: Colors.white),
                   ),
+                ),
+                AiStudioProviderPicker(
+                  value: _providerKind,
+                  onChanged: (kind) {
+                    setState(() {
+                      _providerKind = kind;
+                      _service = EditorAiTextWritingService(provider: kind);
+                    });
+                  },
                 ),
                 if (_isProcessing)
                   SizedBox.square(

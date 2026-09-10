@@ -5,9 +5,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:toastification/toastification.dart';
 
 import '../../core/app_export.dart';
+import '../../core/config/editor_ai_config.dart';
 import '../../core/utils/app_toast.dart';
 import '../../data/models/editor_ai_api_models.dart';
-import '../../data/models/wallet_models.dart';
 import '../../data/services/editor_ai/editor_ai_api_service.dart';
 import 'ai_studio_image_screen.dart';
 import 'ai_studio_shared.dart';
@@ -32,6 +32,7 @@ class _AiStudioVisionScreenState extends State<AiStudioVisionScreen> {
   String? _dataUrl;
   String? _answer;
   bool _busy = false;
+  EditorAiProviderKind _providerKind = EditorAiProviderKind.openAi;
 
   static const _suggestions = <String>[
     'What text should go on this poster?',
@@ -87,28 +88,28 @@ class _AiStudioVisionScreenState extends State<AiStudioVisionScreen> {
       showAppToast('msg_ai_prompt_required'.tr, type: ToastificationType.warning);
       return;
     }
-    if (!await AiStudioChrome.guardOpenAiEditor(context)) return;
+    if (!await AiStudioChrome.guardEditor(context, _providerKind)) return;
 
     setState(() {
       _busy = true;
       _answer = null;
     });
     try {
-      final response = await _api.sendOpenAiEditor(
-        OpenAiEditorRequest(
-          messages: [
-            AiMessage.system(
-              'You are Musamimuk AI Vision powered by ChatGPT. Analyze the '
-              'attached image for design feedback. Be concrete and friendly. '
-              'Reply in the same language as the user question when possible.',
-            ),
-            AiMessage.userWithImage(text: prompt, imageDataUrl: dataUrl),
-          ],
-        ),
+      final response = await AiStudioChrome.sendStudioChat(
+        api: _api,
+        kind: _providerKind,
+        messages: [
+          AiMessage.system(
+            'You are Musamimuk AI Vision. Analyze the '
+            'attached image for design feedback. Be concrete and friendly. '
+            'Reply in the same language as the user question when possible.',
+          ),
+          AiMessage.userWithImage(text: prompt, imageDataUrl: dataUrl),
+        ],
       );
       if (!mounted) return;
       AiStudioChrome.applyWallet(context, _api);
-      setState(() => _answer = response.content.trim());
+      setState(() => _answer = response.trim());
     } catch (error) {
       if (mounted) AiStudioChrome.toastAiError(error);
     } finally {
@@ -129,9 +130,17 @@ class _AiStudioVisionScreenState extends State<AiStudioVisionScreen> {
           children: [
             Row(
               children: [
-                AiStudioChrome.poweredByChatGpt(context),
+                AiStudioChrome.poweredBy(_providerKind),
+                SizedBox(width: AppDs.space2.h),
+                AiStudioProviderPicker(
+                  value: _providerKind,
+                  includeGemini: false,
+                  onChanged: (kind) => setState(() => _providerKind = kind),
+                ),
                 const Spacer(),
-                BlocBuilderCoinHint(feature: WalletFeatureCost.aiOpenaiEditor),
+                BlocBuilderCoinHint(
+                  feature: AiStudioChrome.editorFeatureFor(_providerKind),
+                ),
               ],
             ),
             SizedBox(height: AppDs.space3.v),

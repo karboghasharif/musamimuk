@@ -75,7 +75,19 @@ class WalletFeatureCost {
   static const String aiOpenaiEditor = 'ai.openai.editor';
   static const String aiOpenaiImages = 'ai.openai.images';
   static const String aiGeminiEditor = 'ai.gemini.editor';
+  static const String aiGrokEditor = 'ai.grok.editor';
   static const String removeBackground = 'remove_background';
+}
+
+/// `GET /wallet/costs` payload (cost rows plus optional Grok feature flag).
+class WalletCostsPayload {
+  const WalletCostsPayload({
+    required this.costs,
+    this.grokEnabled = true,
+  });
+
+  final List<WalletFeatureCost> costs;
+  final bool grokEnabled;
 }
 
 /// IAP package from `GET /wallet/packages`.

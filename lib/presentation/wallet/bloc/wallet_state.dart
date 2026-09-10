@@ -5,6 +5,7 @@ class WalletState extends Equatable {
     this.bootstrapped = false,
     this.balance,
     this.costs = const [],
+    this.grokEnabled = true,
     this.packages = const [],
     this.transactions = const [],
     this.transactionsPage = 1,
@@ -24,6 +25,7 @@ class WalletState extends Equatable {
   final bool bootstrapped;
   final WalletBalance? balance;
   final List<WalletFeatureCost> costs;
+  final bool grokEnabled;
   final List<WalletPackage> packages;
   final List<WalletTransaction> transactions;
   final int transactionsPage;
@@ -47,6 +49,7 @@ class WalletState extends Equatable {
     bool? bootstrapped,
     WalletBalance? balance,
     List<WalletFeatureCost>? costs,
+    bool? grokEnabled,
     List<WalletPackage>? packages,
     List<WalletTransaction>? transactions,
     int? transactionsPage,
@@ -69,6 +72,7 @@ class WalletState extends Equatable {
       bootstrapped: bootstrapped ?? this.bootstrapped,
       balance: balance ?? this.balance,
       costs: costs ?? this.costs,
+      grokEnabled: grokEnabled ?? this.grokEnabled,
       packages: packages ?? this.packages,
       transactions: transactions ?? this.transactions,
       transactionsPage: transactionsPage ?? this.transactionsPage,
@@ -96,6 +100,7 @@ class WalletState extends Equatable {
         bootstrapped,
         balance,
         costs,
+        grokEnabled,
         packages,
         transactions,
         transactionsPage,

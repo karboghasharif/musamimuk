@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_export.dart';
+import '../../core/config/editor_ai_config.dart';
 import '../../data/models/editor_ai_api_models.dart';
-import '../../data/models/wallet_models.dart';
 import '../../data/services/editor_ai/editor_ai_api_service.dart';
 import 'ai_studio_image_screen.dart';
 import 'ai_studio_shared.dart';
@@ -31,13 +31,14 @@ class _AiStudioChatScreenState extends State<AiStudioChatScreen> {
   final _turns = <_ChatTurn>[];
   final _history = <AiMessage>[
     AiMessage.system(
-      'You are Musamimuk AI Studio, a friendly ChatGPT design assistant. '
+      'You are Musamimuk AI Studio, a friendly design assistant. '
       'Help with design ideas, Arabic/English copy, layouts, and brand tone. '
       'Keep answers concise and practical. Do not invent that you can edit the '
       'user canvas directly — suggest clear next steps instead.',
     ),
   ];
   bool _busy = false;
+  EditorAiProviderKind _providerKind = EditorAiProviderKind.openAi;
 
   static const _suggestions = <String>[
     'Suggest a slogan for a Saudi coffee brand',
@@ -56,7 +57,7 @@ class _AiStudioChatScreenState extends State<AiStudioChatScreen> {
   Future<void> _send([String? preset]) async {
     final text = (preset ?? _inputCtrl.text).trim();
     if (text.isEmpty || _busy) return;
-    if (!await AiStudioChrome.guardOpenAiEditor(context)) return;
+    if (!await AiStudioChrome.guardEditor(context, _providerKind)) return;
 
     setState(() {
       _busy = true;
@@ -67,12 +68,13 @@ class _AiStudioChatScreenState extends State<AiStudioChatScreen> {
     _scrollToEnd();
 
     try {
-      final response = await _api.sendOpenAiEditor(
-        OpenAiEditorRequest(messages: List<AiMessage>.from(_history)),
-      );
+      final reply = (await AiStudioChrome.sendStudioChat(
+        api: _api,
+        kind: _providerKind,
+        messages: List<AiMessage>.from(_history),
+      )).trim();
       if (!mounted) return;
       AiStudioChrome.applyWallet(context, _api);
-      final reply = response.content.trim();
       setState(() {
         _turns.add(_ChatTurn(isUser: false, text: reply));
         _history.add(AiMessage.assistant(reply));
@@ -119,9 +121,16 @@ class _AiStudioChatScreenState extends State<AiStudioChatScreen> {
               ),
               child: Row(
                 children: [
-                  AiStudioChrome.poweredByChatGpt(context),
+                  AiStudioChrome.poweredBy(_providerKind),
+                  SizedBox(width: AppDs.space2.h),
+                  AiStudioProviderPicker(
+                    value: _providerKind,
+                    onChanged: (kind) => setState(() => _providerKind = kind),
+                  ),
                   const Spacer(),
-                  BlocBuilderCoinHint(feature: WalletFeatureCost.aiOpenaiEditor),
+                  BlocBuilderCoinHint(
+                    feature: AiStudioChrome.editorFeatureFor(_providerKind),
+                  ),
                 ],
               ),
             ),

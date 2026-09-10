@@ -64,6 +64,7 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
 
     WalletBalance? balance = state.balance;
     List<WalletFeatureCost> costs = state.costs;
+    var grokEnabled = state.grokEnabled;
     String? error;
 
     if (walletRes is WalletSuccess<WalletBalance>) {
@@ -72,8 +73,9 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
       error = walletRes.message;
     }
 
-    if (costsRes is WalletSuccess<List<WalletFeatureCost>>) {
-      costs = costsRes.data;
+    if (costsRes is WalletSuccess<WalletCostsPayload>) {
+      costs = costsRes.data.costs;
+      grokEnabled = costsRes.data.grokEnabled;
     }
 
     emit(
@@ -81,6 +83,7 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
         isLoadingWallet: false,
         balance: balance,
         costs: costs,
+        grokEnabled: grokEnabled,
         errorMessage: error,
         clearError: error == null,
       ),
@@ -268,6 +271,7 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     switch (feature) {
       case WalletFeatureCost.aiOpenaiEditor:
       case WalletFeatureCost.aiGeminiEditor:
+      case WalletFeatureCost.aiGrokEditor:
         return 3;
       case WalletFeatureCost.aiOpenaiImages:
         return 8;

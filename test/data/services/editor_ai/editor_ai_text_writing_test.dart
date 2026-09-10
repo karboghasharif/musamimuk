@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:musamimuk/core/config/editor_ai_config.dart';
 import 'package:musamimuk/data/models/editor_ai_api_models.dart';
 import 'package:musamimuk/data/services/editor_ai/editor_ai_api_service.dart';
 import 'package:musamimuk/data/services/editor_ai/editor_ai_text_writing.dart';
@@ -92,6 +93,30 @@ void main() {
       final messages = data['messages'] as List;
       final system = (messages.first as Map)['content'] as String;
       expect(system.toLowerCase(), contains('plain text only'));
+    });
+
+    test('Grok write posts to editor/grok', () async {
+      RequestOptions? captured;
+      final service = EditorAiTextWritingService(
+        provider: EditorAiProviderKind.grok,
+        apiService: EditorAiApiService(
+          dio: _dioReturning({
+            'choices': [
+              {
+                'message': {'content': 'Grok copy'},
+              },
+            ],
+          }, onRequest: (request) => captured = request),
+        ),
+      );
+
+      final result = await service.write(
+        action: EditorAiTextWritingAction.rewrite,
+        sourceText: 'old copy',
+      );
+
+      expect(result, 'Grok copy');
+      expect(captured?.path, 'ai/editor/grok');
     });
 
     test('rejects empty source for non-generate actions', () async {

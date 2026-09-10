@@ -44,6 +44,7 @@ class EditorAiTextWritingService {
     final raw = switch (_provider) {
       EditorAiProviderKind.openAi => await _requestOpenAi(system, user),
       EditorAiProviderKind.gemini => await _requestGemini(system, user),
+      EditorAiProviderKind.grok => await _requestGrok(system, user),
     };
 
     final cleaned = sanitizeAiPlainText(raw);
@@ -59,6 +60,19 @@ class EditorAiTextWritingService {
 
   Future<String> _requestOpenAi(String system, String user) async {
     final response = await _apiService.sendOpenAiEditor(
+      OpenAiEditorRequest(
+        messages: [
+          AiMessage(role: 'system', content: system),
+          AiMessage(role: 'user', content: user),
+        ],
+        responseFormat: const {'type': 'text'},
+      ),
+    );
+    return response.content;
+  }
+
+  Future<String> _requestGrok(String system, String user) async {
+    final response = await _apiService.sendGrokEditor(
       OpenAiEditorRequest(
         messages: [
           AiMessage(role: 'system', content: system),

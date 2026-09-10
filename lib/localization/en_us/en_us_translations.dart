@@ -92,7 +92,12 @@ final Map<String, String> enUs = {
   "lbl_tutorials": "Tutorials",
   "lbl_ai_studio": "AI Studio",
   "lbl_chatgpt": "ChatGPT",
+  "lbl_gemini": "Gemini",
+  "lbl_grok": "Grok",
+  "lbl_ai_provider": "AI provider",
   "lbl_powered_by_chatgpt": "Powered by ChatGPT",
+  "lbl_powered_by_gemini": "Powered by Gemini",
+  "lbl_powered_by_grok": "Powered by Grok",
   "msg_ai_studio_subtitle":
       "Create with ChatGPT — images, designs, chat & vision",
   "lbl_ai_generate_images": "Generate Images",
