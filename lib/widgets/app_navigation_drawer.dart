@@ -178,6 +178,17 @@ class AppNavigationDrawer extends StatelessWidget {
                         );
                       },
                     ),
+                  if (!isGuest)
+                    _DrawerNavTile(
+                      icon: Icons.two_wheeler_outlined,
+                      label: 'lbl_print_rider_mode'.tr,
+                      onTap: () {
+                        Navigator.pop(context);
+                        NavigatorService.pushNamed(
+                          AppRoutes.printRiderHomeScreen,
+                        );
+                      },
+                    ),
                   _DrawerNavTile(
                     icon: Icons.qr_code_2_outlined,
                     label: 'msg_generate_qr_code'.tr,

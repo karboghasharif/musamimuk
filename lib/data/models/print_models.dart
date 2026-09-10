@@ -271,6 +271,11 @@ class PrintOrder {
     this.canCancel = false,
     this.readyForPickup = false,
     this.currency = 'SAR',
+    this.fulfillment,
+    this.printSubtotal,
+    this.deliveryFee,
+    this.total,
+    this.delivery,
   });
 
   final int id;
@@ -289,6 +294,11 @@ class PrintOrder {
   final bool canCancel;
   final bool readyForPickup;
   final String currency;
+  final String? fulfillment;
+  final double? printSubtotal;
+  final double? deliveryFee;
+  final double? total;
+  final PrintDeliveryInfo? delivery;
 
   PrintQuote? get offeredQuote {
     for (final quote in quotes) {
@@ -344,6 +354,188 @@ class PrintOrder {
       canCancel: json['can_cancel'] == true,
       readyForPickup: json['ready_for_pickup'] == true,
       currency: json['currency']?.toString() ?? 'SAR',
+      fulfillment: json['fulfillment']?.toString(),
+      printSubtotal: PrintShopSummary._asDouble(json['print_subtotal']),
+      deliveryFee: PrintShopSummary._asDouble(json['delivery_fee']),
+      total: PrintShopSummary._asDouble(json['total']),
+      delivery: json['delivery'] is Map
+          ? PrintDeliveryInfo.fromJson(
+              (json['delivery'] as Map).cast<String, dynamic>(),
+            )
+          : null,
+    );
+  }
+}
+
+class PrintDeliveryInfo {
+  const PrintDeliveryInfo({
+    required this.id,
+    required this.status,
+    this.orderId,
+    this.riderId,
+    this.address,
+    this.fee = 0,
+    this.expectedEarning = 0,
+    this.distanceKm = 0,
+    this.customerLat,
+    this.customerLng,
+    this.riderLat,
+    this.riderLng,
+    this.arrivedShopAt,
+    this.arrivedCustomerAt,
+    this.areaCode,
+    this.riderName,
+    this.riderPhone,
+    this.pickupCode,
+    this.orderStatus,
+    this.shopName,
+  });
+
+  final int id;
+  final String status;
+  final int? orderId;
+  final int? riderId;
+  final String? address;
+  final double fee;
+  final double expectedEarning;
+  final double distanceKm;
+  final double? customerLat;
+  final double? customerLng;
+  final double? riderLat;
+  final double? riderLng;
+  final String? arrivedShopAt;
+  final String? arrivedCustomerAt;
+  final String? areaCode;
+  final String? riderName;
+  final String? riderPhone;
+  final String? pickupCode;
+  final String? orderStatus;
+  final String? shopName;
+
+  factory PrintDeliveryInfo.fromJson(Map<String, dynamic> json) {
+    final area = json['area'];
+    final rider = json['rider'];
+    final order = json['order'];
+    final shop = order is Map ? order['shop'] : null;
+    return PrintDeliveryInfo(
+      id: PrintSpec._asInt(json['id']) ?? 0,
+      status: json['status']?.toString() ?? 'requested',
+      orderId: PrintSpec._asInt(json['order_id'] ?? (order is Map ? order['id'] : null)),
+      riderId: PrintSpec._asInt(json['rider_id']),
+      address: json['address']?.toString(),
+      fee: PrintShopSummary._asDouble(json['fee']) ?? 0,
+      expectedEarning: PrintShopSummary._asDouble(json['expected_earning']) ?? 0,
+      distanceKm: PrintShopSummary._asDouble(json['distance_km']) ?? 0,
+      customerLat: PrintShopSummary._asDouble(json['customer_lat']),
+      customerLng: PrintShopSummary._asDouble(json['customer_lng']),
+      riderLat: PrintShopSummary._asDouble(json['rider_lat']),
+      riderLng: PrintShopSummary._asDouble(json['rider_lng']),
+      arrivedShopAt: json['arrived_shop_at']?.toString(),
+      arrivedCustomerAt: json['arrived_customer_at']?.toString(),
+      areaCode: area is Map ? area['code']?.toString() : null,
+      riderName: rider is Map ? rider['name']?.toString() : null,
+      riderPhone: rider is Map ? rider['phone']?.toString() : null,
+      pickupCode: order is Map ? order['pickup_code']?.toString() : null,
+      orderStatus: order is Map ? order['status']?.toString() : null,
+      shopName: shop is Map ? shop['name']?.toString() : null,
+    );
+  }
+}
+
+class PrintDeliveryQuote {
+  const PrintDeliveryQuote({
+    required this.printSubtotal,
+    required this.deliveryFee,
+    required this.total,
+    this.distanceKm,
+    this.areaCode,
+    this.assigned = false,
+    this.otp,
+    this.delivery,
+    this.order,
+    this.currency = 'SAR',
+  });
+
+  final double printSubtotal;
+  final double deliveryFee;
+  final double total;
+  final double? distanceKm;
+  final String? areaCode;
+  final bool assigned;
+  final String? otp;
+  final PrintDeliveryInfo? delivery;
+  final PrintOrder? order;
+  final String currency;
+
+  factory PrintDeliveryQuote.fromJson(Map<String, dynamic> json) {
+    final area = json['area'];
+    final order = json['order'];
+    final delivery = json['delivery'];
+    return PrintDeliveryQuote(
+      printSubtotal: PrintShopSummary._asDouble(json['print_subtotal']) ?? 0,
+      deliveryFee: PrintShopSummary._asDouble(json['delivery_fee']) ?? 0,
+      total: PrintShopSummary._asDouble(json['total']) ?? 0,
+      distanceKm: PrintShopSummary._asDouble(json['distance_km']),
+      areaCode: area is Map ? area['code']?.toString() : null,
+      assigned: json['assigned'] == true,
+      otp: json['otp']?.toString(),
+      delivery: delivery is Map
+          ? PrintDeliveryInfo.fromJson(delivery.cast<String, dynamic>())
+          : null,
+      order: order is Map
+          ? PrintOrder.fromJson(order.cast<String, dynamic>())
+          : null,
+      currency: json['currency']?.toString() ?? 'SAR',
+    );
+  }
+}
+
+class PrintRiderProfile {
+  const PrintRiderProfile({
+    required this.id,
+    required this.name,
+    required this.phone,
+    this.status = 'pending',
+    this.online = false,
+    this.vehicle,
+    this.plate,
+    this.iban,
+    this.nationalId,
+    this.district,
+    this.reviewNote,
+    this.completedDeliveries = 0,
+    this.rating = 0,
+  });
+
+  final int id;
+  final String name;
+  final String phone;
+  final String status;
+  final bool online;
+  final String? vehicle;
+  final String? plate;
+  final String? iban;
+  final String? nationalId;
+  final String? district;
+  final String? reviewNote;
+  final int completedDeliveries;
+  final double rating;
+
+  factory PrintRiderProfile.fromJson(Map<String, dynamic> json) {
+    return PrintRiderProfile(
+      id: PrintSpec._asInt(json['id']) ?? 0,
+      name: json['name']?.toString() ?? '',
+      phone: json['phone']?.toString() ?? '',
+      status: json['status']?.toString() ?? 'pending',
+      online: json['online'] == true,
+      vehicle: json['vehicle']?.toString(),
+      plate: json['plate']?.toString(),
+      iban: json['iban']?.toString(),
+      nationalId: json['national_id']?.toString(),
+      district: json['district']?.toString(),
+      reviewNote: json['review_note']?.toString(),
+      completedDeliveries: PrintSpec._asInt(json['completed_deliveries']) ?? 0,
+      rating: PrintShopSummary._asDouble(json['rating']) ?? 0,
     );
   }
 }

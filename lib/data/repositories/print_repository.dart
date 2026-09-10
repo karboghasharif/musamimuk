@@ -237,6 +237,191 @@ class PrintRepository {
     }
   }
 
+  Future<PrintResult<PrintOrder>> confirmPickup(int orderId) {
+    return _sendOrder(
+      () => _dio.post<Map<String, dynamic>>(
+        'print/orders/$orderId/pickup/confirm',
+      ),
+    );
+  }
+
+  Future<PrintResult<PrintOrder>> verifyPickup({
+    required int orderId,
+    required String code,
+  }) {
+    return _sendOrder(
+      () => _dio.post<Map<String, dynamic>>(
+        'print/orders/$orderId/pickup/verify',
+        data: {'code': code},
+      ),
+    );
+  }
+
+  Future<PrintResult<PrintDeliveryQuote>> previewDelivery({
+    required int orderId,
+    required String address,
+    required double lat,
+    required double lng,
+  }) {
+    return _sendDeliveryQuote(
+      () => _dio.post<Map<String, dynamic>>(
+        'print/orders/$orderId/delivery',
+        data: {'address': address, 'lat': lat, 'lng': lng},
+      ),
+    );
+  }
+
+  Future<PrintResult<PrintDeliveryQuote>> confirmDelivery(int orderId) {
+    return _sendDeliveryQuote(
+      () => _dio.post<Map<String, dynamic>>(
+        'print/orders/$orderId/delivery/confirm',
+      ),
+      acceptConflict: true,
+    );
+  }
+
+  Future<PrintResult<PrintDeliveryQuote>> deliveryStatus(int orderId) {
+    return _sendDeliveryQuote(
+      () => _dio.get<Map<String, dynamic>>('print/orders/$orderId/delivery'),
+    );
+  }
+
+  Future<PrintResult<PrintOrder>> verifyDeliveryOtp({
+    required int orderId,
+    required String otp,
+  }) {
+    return _sendOrder(
+      () => _dio.post<Map<String, dynamic>>(
+        'print/orders/$orderId/delivery/otp',
+        data: {'otp': otp},
+      ),
+    );
+  }
+
+  Future<PrintResult<PrintRiderProfile?>> myRider() async {
+    try {
+      final response = await _dio.get<Map<String, dynamic>>('print/rider/me');
+      final data = response.data;
+      if (data == null || !apiResponseIsSuccess(data)) {
+        return PrintFailure(apiExtractMessage(data) ?? 'Unable to load rider.');
+      }
+      final map = apiExtractPayloadMap(data);
+      if (map == null || map.isEmpty) {
+        return PrintSuccess(null);
+      }
+      return PrintSuccess(PrintRiderProfile.fromJson(map));
+    } on DioException catch (e) {
+      return PrintFailure(apiMessageFromDioException(e));
+    }
+  }
+
+  Future<PrintResult<PrintRiderProfile>> registerRider({
+    required String name,
+    required String phone,
+    String? nationalId,
+    String? vehicle,
+    String? plate,
+    String? iban,
+    String? district,
+    double? lat,
+    double? lng,
+  }) async {
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        'print/rider/register',
+        data: {
+          'name': name,
+          'phone': phone,
+          if (nationalId != null) 'national_id': nationalId,
+          if (vehicle != null) 'vehicle': vehicle,
+          if (plate != null) 'plate': plate,
+          if (iban != null) 'iban': iban,
+          if (district != null) 'district': district,
+          if (lat != null) 'lat': lat,
+          if (lng != null) 'lng': lng,
+        },
+      );
+      final map = apiExtractPayloadMap(response.data);
+      if (response.data == null ||
+          !apiResponseIsSuccess(response.data!) ||
+          map == null) {
+        return PrintFailure(
+          apiExtractMessage(response.data) ?? 'Registration failed.',
+        );
+      }
+      return PrintSuccess(PrintRiderProfile.fromJson(map));
+    } on DioException catch (e) {
+      return PrintFailure(apiMessageFromDioException(e));
+    }
+  }
+
+  Future<PrintResult<PrintRiderProfile>> setRiderOnline({
+    required bool online,
+    double? lat,
+    double? lng,
+  }) async {
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        'print/rider/online',
+        data: {
+          'online': online,
+          if (lat != null) 'lat': lat,
+          if (lng != null) 'lng': lng,
+        },
+      );
+      final map = apiExtractPayloadMap(response.data);
+      if (response.data == null ||
+          !apiResponseIsSuccess(response.data!) ||
+          map == null) {
+        return PrintFailure(
+          apiExtractMessage(response.data) ?? 'Unable to update availability.',
+        );
+      }
+      return PrintSuccess(PrintRiderProfile.fromJson(map));
+    } on DioException catch (e) {
+      return PrintFailure(apiMessageFromDioException(e));
+    }
+  }
+
+  Future<PrintResult<List<PrintDeliveryInfo>>> riderJobs() async {
+    try {
+      final response = await _dio.get<Map<String, dynamic>>('print/rider/jobs');
+      final data = response.data;
+      if (data == null || !apiResponseIsSuccess(data)) {
+        return PrintFailure(apiExtractMessage(data) ?? 'Unable to load jobs.');
+      }
+      return PrintSuccess(
+        apiExtractDataList(data).map(PrintDeliveryInfo.fromJson).toList(),
+      );
+    } on DioException catch (e) {
+      return PrintFailure(apiMessageFromDioException(e));
+    }
+  }
+
+  Future<PrintResult<PrintDeliveryInfo>> acceptDelivery(int deliveryId) {
+    return _sendDelivery(
+      () => _dio.post<Map<String, dynamic>>(
+        'print/deliveries/$deliveryId/accept',
+      ),
+    );
+  }
+
+  Future<PrintResult<PrintDeliveryInfo>> advanceDelivery({
+    required int deliveryId,
+    required String action,
+    String? code,
+  }) {
+    return _sendDelivery(
+      () => _dio.post<Map<String, dynamic>>(
+        'print/deliveries/$deliveryId/advance',
+        data: {
+          'action': action,
+          if (code != null && code.trim().isNotEmpty) 'code': code.trim(),
+        },
+      ),
+    );
+  }
+
   Future<PrintResult<PrintOrder>> _sendOrder(
     Future<Response<Map<String, dynamic>>> Function() request,
   ) async {
@@ -270,6 +455,53 @@ class PrintRepository {
       return PrintSuccess(
         apiExtractDataList(data).map(PrintOrder.fromJson).toList(),
       );
+    } on DioException catch (e) {
+      return PrintFailure(apiMessageFromDioException(e));
+    }
+  }
+
+  Future<PrintResult<PrintDeliveryQuote>> _sendDeliveryQuote(
+    Future<Response<Map<String, dynamic>>> Function() request, {
+    bool acceptConflict = false,
+  }) async {
+    try {
+      final response = await request();
+      return _parseDeliveryQuote(response.data);
+    } on DioException catch (e) {
+      if (acceptConflict && e.response?.statusCode == 409) {
+        final parsed = _parseDeliveryQuote(e.response?.data);
+        if (parsed is PrintSuccess<PrintDeliveryQuote>) {
+          return parsed;
+        }
+      }
+      return PrintFailure(apiMessageFromDioException(e));
+    }
+  }
+
+  PrintResult<PrintDeliveryQuote> _parseDeliveryQuote(
+    Map<String, dynamic>? data,
+  ) {
+    final map = apiExtractPayloadMap(data);
+    if (data == null || map == null) {
+      return PrintFailure(apiExtractMessage(data) ?? 'Delivery request failed.');
+    }
+    return PrintSuccess(PrintDeliveryQuote.fromJson(map));
+  }
+
+  Future<PrintResult<PrintDeliveryInfo>> _sendDelivery(
+    Future<Response<Map<String, dynamic>>> Function() request,
+  ) async {
+    try {
+      final response = await request();
+      final map = apiExtractPayloadMap(response.data);
+      if (response.data == null ||
+          !apiResponseIsSuccess(response.data!) ||
+          map == null) {
+        return PrintFailure(
+          apiExtractMessage(response.data) ?? 'Delivery request failed.',
+        );
+      }
+      return PrintSuccess(PrintDeliveryInfo.fromJson(map));
     } on DioException catch (e) {
       return PrintFailure(apiMessageFromDioException(e));
     }

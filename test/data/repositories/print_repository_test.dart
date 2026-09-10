@@ -67,6 +67,104 @@ void main() {
       expect(order.payment?.status, 'protected');
       expect(order.payment?.spendable, isFalse);
     });
+
+    test('confirmPickup posts ready order without coin fields', () async {
+      RequestOptions? captured;
+      final repository = PrintRepository(
+        dio: _dioReturning({
+          'success': true,
+          'data': {
+            'id': 11,
+            'number': 10480,
+            'pickup_code': 'M-10480',
+            'status': 'ready',
+            'fulfillment': 'pickup',
+            'quotes': [],
+            'messages': [],
+            'timeline': [],
+          },
+        }, onRequest: (request) => captured = request),
+      );
+
+      final result = await repository.confirmPickup(11);
+      expect(result, isA<PrintSuccess<PrintOrder>>());
+      expect(captured?.path, 'print/orders/11/pickup/confirm');
+      expect(captured?.method, 'POST');
+      final payload = captured?.data;
+      if (payload is Map) {
+        expect(payload.containsKey('coins'), isFalse);
+        expect(payload.containsKey('wallet'), isFalse);
+      }
+    });
+
+    test('previewDelivery posts address and reads fee totals', () async {
+      RequestOptions? captured;
+      final repository = PrintRepository(
+        dio: _dioReturning({
+          'success': true,
+          'data': {
+            'print_subtotal': 80,
+            'delivery_fee': 10,
+            'total': 90,
+            'currency': 'SAR',
+            'area': {'code': 'A', 'fee': 10},
+            'delivery': {'id': 3, 'status': 'requested', 'fee': 10},
+          },
+        }, onRequest: (request) => captured = request),
+      );
+
+      final result = await repository.previewDelivery(
+        orderId: 11,
+        address: 'King Road',
+        lat: 21.57,
+        lng: 39.17,
+      );
+      expect(result, isA<PrintSuccess<PrintDeliveryQuote>>());
+      final quote = (result as PrintSuccess<PrintDeliveryQuote>).data;
+      expect(quote.deliveryFee, 10);
+      expect(quote.total, 90);
+      expect(captured?.path, 'print/orders/11/delivery');
+      final data = captured?.data as Map;
+      expect(data.containsKey('coins'), isFalse);
+      expect(data['address'], 'King Road');
+    });
+
+    test('verifyDeliveryOtp posts otp without wallet fields', () async {
+      RequestOptions? captured;
+      final repository = PrintRepository(
+        dio: _dioReturning({
+          'success': true,
+          'data': {
+            'id': 11,
+            'number': 10480,
+            'pickup_code': 'M-10480',
+            'status': 'completed',
+            'payment': {
+              'amount': 90,
+              'method': 'mada',
+              'status': 'protected',
+              'spendable': false,
+            },
+            'quotes': [],
+            'messages': [],
+            'timeline': [],
+          },
+        }, onRequest: (request) => captured = request),
+      );
+
+      final result = await repository.verifyDeliveryOtp(
+        orderId: 11,
+        otp: '1234',
+      );
+      expect(result, isA<PrintSuccess<PrintOrder>>());
+      final order = (result as PrintSuccess<PrintOrder>).data;
+      expect(order.status, 'completed');
+      expect(order.payment?.status, 'protected');
+      expect(captured?.path, 'print/orders/11/delivery/otp');
+      final data = captured?.data as Map;
+      expect(data['otp'], '1234');
+      expect(data.containsKey('coins'), isFalse);
+    });
   });
 }
 

@@ -266,7 +266,14 @@ class _ShopOrderCard extends StatefulWidget {
 
 class _ShopOrderCardState extends State<_ShopOrderCard> {
   final _repo = PrintRepository();
+  final _pickupCode = TextEditingController();
   bool _busy = false;
+
+  @override
+  void dispose() {
+    _pickupCode.dispose();
+    super.dispose();
+  }
 
   Future<void> _quote() async {
     setState(() => _busy = true);
@@ -283,6 +290,21 @@ class _ShopOrderCardState extends State<_ShopOrderCard> {
   Future<void> _advance(String action) async {
     setState(() => _busy = true);
     final result = await _repo.advance(orderId: widget.order.id, action: action);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (result is PrintFailure<PrintOrder>) {
+      showAppToast(result.message, type: ToastificationType.error);
+      return;
+    }
+    widget.onChanged();
+  }
+
+  Future<void> _verifyPickup() async {
+    setState(() => _busy = true);
+    final result = await _repo.verifyPickup(
+      orderId: widget.order.id,
+      code: _pickupCode.text.trim(),
+    );
     if (!mounted) return;
     setState(() => _busy = false);
     if (result is PrintFailure<PrintOrder>) {
@@ -326,6 +348,28 @@ class _ShopOrderCardState extends State<_ShopOrderCard> {
                 onPressed: () => _advance(order.nextAction!),
               ),
             ),
+          if (order.status == 'ready') ...[
+            SizedBox(height: 10.v),
+            TextField(
+              controller: _pickupCode,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                labelText: 'lbl_print_pickup_code'.tr,
+                labelStyle: const TextStyle(color: AppDs.textOnDarkSecondary),
+                filled: true,
+                fillColor: AppDs.surfaceBase,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+            SizedBox(height: 8.v),
+            PrintGoldButton(
+              label: 'lbl_print_verify_pickup'.tr,
+              loading: _busy,
+              onPressed: _verifyPickup,
+            ),
+          ],
         ],
       ),
     );
