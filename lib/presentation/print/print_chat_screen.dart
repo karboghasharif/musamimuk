@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:toastification/toastification.dart';
 
@@ -9,14 +11,25 @@ import '../../data/repositories/print_repository.dart';
 import 'print_ui.dart';
 
 class PrintChatScreen extends StatefulWidget {
-  const PrintChatScreen({super.key, required this.orderId});
+  const PrintChatScreen({
+    super.key,
+    required this.orderId,
+    this.thread = 'customer_shop',
+    this.viewer = 'customer',
+  });
 
   final int orderId;
+  final String thread;
+  final String viewer;
 
   static Widget builder(BuildContext context) {
     final args = ModalRoute.of(context)?.settings.arguments;
     final map = args is Map ? args.cast<String, dynamic>() : <String, dynamic>{};
-    return PrintChatScreen(orderId: apiParseInt(map['orderId']));
+    return PrintChatScreen(
+      orderId: apiParseInt(map['orderId']),
+      thread: map['thread']?.toString() ?? 'customer_shop',
+      viewer: map['viewer']?.toString() ?? 'customer',
+    );
   }
 
   @override
@@ -26,30 +39,44 @@ class PrintChatScreen extends StatefulWidget {
 class _PrintChatScreenState extends State<PrintChatScreen> {
   final _repo = PrintRepository();
   final _input = TextEditingController();
+  final _scroll = ScrollController();
   PrintOrder? _order;
   bool _loading = true;
   bool _busy = false;
+  Timer? _poll;
 
   @override
   void initState() {
     super.initState();
     _reload();
+    _poll = Timer.periodic(const Duration(seconds: 2), (_) => _reload(scroll: false));
   }
 
   @override
   void dispose() {
+    _poll?.cancel();
     _input.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
-  Future<void> _reload() async {
+  Future<void> _reload({bool scroll = true}) async {
     final result = await _repo.order(widget.orderId);
     if (!mounted) return;
     if (result is PrintSuccess<PrintOrder>) {
+      final next = result.data.messages.where((m) => m.thread == widget.thread).length;
+      final prev = _order?.messages.where((m) => m.thread == widget.thread).length ?? 0;
       setState(() {
         _order = result.data;
         _loading = false;
       });
+      if (scroll || next != prev) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_scroll.hasClients) {
+            _scroll.jumpTo(_scroll.position.maxScrollExtent);
+          }
+        });
+      }
     } else {
       setState(() => _loading = false);
     }
@@ -59,7 +86,11 @@ class _PrintChatScreenState extends State<PrintChatScreen> {
     final body = _input.text.trim();
     if (body.isEmpty || _busy) return;
     setState(() => _busy = true);
-    final result = await _repo.sendMessage(orderId: widget.orderId, body: body);
+    final result = await _repo.sendMessage(
+      orderId: widget.orderId,
+      body: body,
+      thread: widget.thread,
+    );
     if (!mounted) return;
     setState(() => _busy = false);
     if (result is PrintFailure<PrintOrder>) {
@@ -84,6 +115,21 @@ class _PrintChatScreenState extends State<PrintChatScreen> {
     }
     setState(() => _order = (result as PrintSuccess<PrintOrder>).data);
     await _showPaySheet();
+  }
+
+  Future<void> _decline(PrintQuote quote) async {
+    setState(() => _busy = true);
+    final result = await _repo.declineQuote(
+      orderId: widget.orderId,
+      quoteId: quote.id,
+    );
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (result is PrintFailure<PrintOrder>) {
+      showAppToast(result.message, type: ToastificationType.error);
+      return;
+    }
+    setState(() => _order = (result as PrintSuccess<PrintOrder>).data);
   }
 
   Future<void> _showPaySheet() async {
@@ -153,10 +199,16 @@ class _PrintChatScreenState extends State<PrintChatScreen> {
               children: [
                 Expanded(
                   child: ListView.builder(
+                    controller: _scroll,
                     padding: EdgeInsets.all(16.h),
-                    itemCount: order?.messages.length ?? 0,
+                    itemCount: order?.messages
+                            .where((m) => m.thread == widget.thread)
+                            .length ??
+                        0,
                     itemBuilder: (context, index) {
-                      final msg = order!.messages[index];
+                      final msg = order!.messages
+                          .where((m) => m.thread == widget.thread)
+                          .elementAt(index);
                       final mine = msg.from == 'customer';
                       return Align(
                         alignment: mine
@@ -182,7 +234,9 @@ class _PrintChatScreenState extends State<PrintChatScreen> {
                     },
                   ),
                 ),
-                if (quote != null && quote.status == 'offered')
+                if (quote != null &&
+                    quote.status == 'offered' &&
+                    widget.thread == 'customer_shop')
                   Container(
                     width: double.infinity,
                     color: AppDs.surfaceRaised,
@@ -191,35 +245,37 @@ class _PrintChatScreenState extends State<PrintChatScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Text(
-                          '${printSar(quote.total)} · ${quote.etaHours}h',
+                          '${'lbl_print_system_price'.tr}: ${printSar(quote.total)}',
+                          style: const TextStyle(color: Colors.white70),
+                        ),
+                        Text(
+                          '${'lbl_print_shop_price'.tr}: ${printSar(quote.shopTotal ?? quote.total)} · ${quote.etaHours}h',
                           style: const TextStyle(
                             color: AppDs.printGold,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
-                        Text(
-                          '${'lbl_print_subtotal'.tr}: ${printSar(quote.subtotal)} · ${'lbl_print_finishing'.tr}: ${printSar(quote.finishingTotal)}',
-                          style: const TextStyle(color: Colors.white70),
-                        ),
-                        SizedBox(height: 8.v),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: _busy ? null : _reload,
-                                child: Text('lbl_print_decline'.tr),
+                        if (widget.viewer == 'customer') ...[
+                          SizedBox(height: 8.v),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed: _busy ? null : () => _decline(quote),
+                                  child: Text('lbl_print_decline'.tr),
+                                ),
                               ),
-                            ),
-                            SizedBox(width: 8.h),
-                            Expanded(
-                              child: PrintGoldButton(
-                                label: 'lbl_print_accept'.tr,
-                                loading: _busy,
-                                onPressed: () => _accept(quote),
+                              SizedBox(width: 8.h),
+                              Expanded(
+                                child: PrintGoldButton(
+                                  label: 'lbl_print_accept'.tr,
+                                  loading: _busy,
+                                  onPressed: () => _accept(quote),
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
+                            ],
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -238,6 +294,7 @@ class _PrintChatScreenState extends State<PrintChatScreen> {
                       Expanded(
                         child: TextField(
                           controller: _input,
+                          onSubmitted: (_) => _send(),
                           style: const TextStyle(color: Colors.white),
                           decoration: InputDecoration(
                             hintText: 'lbl_print_message_hint'.tr,

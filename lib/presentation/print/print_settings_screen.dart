@@ -5,7 +5,6 @@ import '../../core/app_export.dart';
 import '../../core/network/api_utils.dart';
 import '../../core/utils/app_toast.dart';
 import '../../data/models/print_models.dart';
-import '../../data/repositories/print_repository.dart';
 import 'print_ui.dart';
 
 class PrintSettingsScreen extends StatefulWidget {
@@ -52,7 +51,6 @@ class _PrintSettingsScreenState extends State<PrintSettingsScreen> {
     'custom',
   ];
 
-  final _repo = PrintRepository();
   String _sizeId = 'a4';
   int _quantity = 100;
   int _sides = 1;
@@ -61,18 +59,33 @@ class _PrintSettingsScreenState extends State<PrintSettingsScreen> {
   final Set<String> _finishing = {};
   final _customW = TextEditingController();
   final _customH = TextEditingController();
-  bool _saving = false;
+  final _dropoff = TextEditingController();
+  final _dropLat = TextEditingController();
+  final _dropLng = TextEditingController();
+  String _fulfillment = 'pickup';
 
   @override
   void dispose() {
     _customW.dispose();
     _customH.dispose();
+    _dropoff.dispose();
+    _dropLat.dispose();
+    _dropLng.dispose();
     super.dispose();
   }
 
   Future<void> _continue() async {
-    if (_saving) return;
-    setState(() => _saving = true);
+    if (_fulfillment == 'delivery') {
+      final lat = double.tryParse(_dropLat.text.trim());
+      final lng = double.tryParse(_dropLng.text.trim());
+      if (_dropoff.text.trim().isEmpty || lat == null || lng == null) {
+        showAppToast(
+          'lbl_print_dropoff_required'.tr,
+          type: ToastificationType.error,
+        );
+        return;
+      }
+    }
     final spec = PrintSpec(
       sizeId: _sizeId,
       customWmm: int.tryParse(_customW.text.trim()),
@@ -83,17 +96,16 @@ class _PrintSettingsScreenState extends State<PrintSettingsScreen> {
       paper: _paper,
       finishing: _finishing.toList(),
     );
-    final result = await _repo.createJob(designId: widget.designId, spec: spec);
-    if (!mounted) return;
-    setState(() => _saving = false);
-    if (result is PrintFailure<PrintOrder>) {
-      showAppToast(result.message, type: ToastificationType.error);
-      return;
-    }
-    final order = (result as PrintSuccess<PrintOrder>).data;
     NavigatorService.pushNamed(
       AppRoutes.printShopsScreen,
-      arguments: {'orderId': order.id, 'spec': spec.toJson()},
+      arguments: {
+        'designId': widget.designId,
+        'spec': spec.toJson(),
+        'fulfillment': _fulfillment,
+        'dropoffAddress': _dropoff.text.trim(),
+        'dropoffLat': double.tryParse(_dropLat.text.trim()),
+        'dropoffLng': double.tryParse(_dropLng.text.trim()),
+      },
     );
   }
 
@@ -215,10 +227,65 @@ class _PrintSettingsScreenState extends State<PrintSettingsScreen> {
                 )
                 .toList(),
           ),
+          SizedBox(height: AppDs.space4.v),
+          Text('lbl_print_fulfillment'.tr, style: _label),
+          Wrap(
+            spacing: 8,
+            children: [
+              ChoiceChip(
+                label: Text('lbl_print_pick_up'.tr),
+                selected: _fulfillment == 'pickup',
+                selectedColor: AppDs.printGold,
+                labelStyle: TextStyle(
+                  color: _fulfillment == 'pickup' ? Colors.black : Colors.white,
+                ),
+                onSelected: (_) => setState(() => _fulfillment = 'pickup'),
+              ),
+              ChoiceChip(
+                label: Text('lbl_print_deliver_to_me'.tr),
+                selected: _fulfillment == 'delivery',
+                selectedColor: AppDs.printGold,
+                labelStyle: TextStyle(
+                  color: _fulfillment == 'delivery' ? Colors.black : Colors.white,
+                ),
+                onSelected: (_) => setState(() => _fulfillment = 'delivery'),
+              ),
+            ],
+          ),
+          if (_fulfillment == 'delivery') ...[
+            SizedBox(height: AppDs.space3.v),
+            TextField(
+              controller: _dropoff,
+              style: const TextStyle(color: Colors.white),
+              decoration: _field('lbl_print_delivery_address'.tr),
+            ),
+            SizedBox(height: AppDs.space3.v),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _dropLat,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                    style: const TextStyle(color: Colors.white),
+                    decoration: _field('lbl_print_lat'.tr),
+                  ),
+                ),
+                SizedBox(width: AppDs.space3.h),
+                Expanded(
+                  child: TextField(
+                    controller: _dropLng,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                    style: const TextStyle(color: Colors.white),
+                    decoration: _field('lbl_print_lng'.tr),
+                  ),
+                ),
+              ],
+            ),
+          ],
           SizedBox(height: AppDs.space8.v),
           PrintGoldButton(
             label: 'lbl_print_find_shops'.tr,
-            loading: _saving,
+            loading: false,
             onPressed: _continue,
           ),
         ],

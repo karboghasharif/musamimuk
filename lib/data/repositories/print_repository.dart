@@ -11,11 +11,24 @@ class PrintRepository {
   Future<PrintResult<PrintOrder>> createJob({
     required int designId,
     required PrintSpec spec,
+    int? shopId,
+    String? fulfillment,
+    String? dropoffAddress,
+    double? dropoffLat,
+    double? dropoffLng,
   }) {
     return _sendOrder(
       () => _dio.post<Map<String, dynamic>>(
         'print/jobs',
-        data: {'design_id': designId, 'spec': spec.toJson()},
+        data: {
+          'design_id': designId,
+          'spec': spec.toJson(),
+          if (shopId != null) 'shop_id': shopId,
+          if (fulfillment != null) 'fulfillment': fulfillment,
+          if (dropoffAddress != null) 'dropoff_address': dropoffAddress,
+          if (dropoffLat != null) 'dropoff_lat': dropoffLat,
+          if (dropoffLng != null) 'dropoff_lng': dropoffLng,
+        },
       ),
     );
   }
@@ -122,11 +135,12 @@ class PrintRepository {
   Future<PrintResult<PrintOrder>> sendMessage({
     required int orderId,
     required String body,
+    String thread = 'customer_shop',
   }) {
     return _sendOrder(
       () => _dio.post<Map<String, dynamic>>(
         'print/orders/$orderId/messages',
-        data: {'body': body},
+        data: {'body': body, 'thread': thread},
       ),
     );
   }
@@ -134,11 +148,42 @@ class PrintRepository {
   Future<PrintResult<PrintOrder>> createQuote({
     required int orderId,
     String? note,
+    double? shopTotal,
+    int? etaHours,
   }) {
     return _sendOrder(
       () => _dio.post<Map<String, dynamic>>(
         'print/orders/$orderId/quotes',
-        data: {if (note != null && note.trim().isNotEmpty) 'note': note.trim()},
+        data: {
+          if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
+          if (shopTotal != null) 'shop_total': shopTotal,
+          if (etaHours != null) 'eta_hours': etaHours,
+        },
+      ),
+    );
+  }
+
+  Future<PrintResult<PrintOrder>> declineRequest(int orderId) {
+    return _sendOrder(
+      () => _dio.post<Map<String, dynamic>>('print/orders/$orderId/decline'),
+    );
+  }
+
+  Future<PrintResult<PrintOrder>> declineQuote({
+    required int orderId,
+    required int quoteId,
+  }) {
+    return _sendOrder(
+      () => _dio.post<Map<String, dynamic>>(
+        'print/orders/$orderId/quotes/$quoteId/decline',
+      ),
+    );
+  }
+
+  Future<PrintResult<PrintOrder>> requestRider(int orderId) {
+    return _sendOrder(
+      () => _dio.post<Map<String, dynamic>>(
+        'print/orders/$orderId/delivery/request',
       ),
     );
   }

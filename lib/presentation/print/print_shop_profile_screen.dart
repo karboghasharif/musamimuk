@@ -13,17 +13,21 @@ class PrintShopProfileScreen extends StatefulWidget {
     super.key,
     required this.shopId,
     required this.orderId,
+    this.request,
   });
 
   final int shopId;
   final int orderId;
+  final Map<String, dynamic>? request;
 
   static Widget builder(BuildContext context) {
     final args = ModalRoute.of(context)?.settings.arguments;
     final map = args is Map ? args.cast<String, dynamic>() : <String, dynamic>{};
+    final request = map['request'];
     return PrintShopProfileScreen(
       shopId: apiParseInt(map['shopId']),
       orderId: apiParseInt(map['orderId']),
+      request: request is Map ? request.cast<String, dynamic>() : null,
     );
   }
 
@@ -69,11 +73,28 @@ class _PrintShopProfileScreenState extends State<PrintShopProfileScreen> {
   Future<void> _chat() async {
     if (_chatting) return;
     setState(() => _chatting = true);
-    final result = await _repo.startChat(
-      shopId: widget.shopId,
-      orderId: widget.orderId,
-      body: 'lbl_print_hello_shop'.tr,
-    );
+    final request = widget.request;
+    final PrintResult<PrintOrder> result;
+    if (request != null && apiParseInt(request['designId']) > 0) {
+      final specMap = request['spec'];
+      result = await _repo.createJob(
+        designId: apiParseInt(request['designId']),
+        spec: specMap is Map
+            ? PrintSpec.fromJson(specMap.cast<String, dynamic>())
+            : const PrintSpec(sizeId: 'a4', quantity: 100, sides: 1, color: 'color', paper: '80gsm'),
+        shopId: widget.shopId,
+        fulfillment: request['fulfillment']?.toString(),
+        dropoffAddress: request['dropoffAddress']?.toString(),
+        dropoffLat: request['dropoffLat'] is num ? (request['dropoffLat'] as num).toDouble() : null,
+        dropoffLng: request['dropoffLng'] is num ? (request['dropoffLng'] as num).toDouble() : null,
+      );
+    } else {
+      result = await _repo.startChat(
+        shopId: widget.shopId,
+        orderId: widget.orderId,
+        body: 'lbl_print_hello_shop'.tr,
+      );
+    }
     if (!mounted) return;
     setState(() => _chatting = false);
     if (result is PrintFailure<PrintOrder>) {

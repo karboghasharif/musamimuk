@@ -340,6 +340,7 @@ class PrefUtils {
     await removeToken();
     await clearUserSession();
     await clearOfflineHomeSession();
+    await setWorkMode(workModeNormal);
   }
 
   static const String _keyEditorFabDx = 'editor_fab_dx';
@@ -365,24 +366,30 @@ class PrefUtils {
   }
 
   static const String _keyPrintRoleMode = 'print_role_mode';
-  static const String printRoleDesigner = 'designer';
-  static const String printRoleShop = 'shop';
+  static const String workModeNormal = 'normal';
+  static const String workModeShop = 'shop';
+  static const String workModeRider = 'rider';
 
-  String getPrintRoleMode() {
+  /// Active app mode. Shop and rider are not account roles.
+  /// Older builds stored `designer` for the normal design app.
+  String getWorkMode() {
     try {
       final value = _sharedPreferences?.getString(_keyPrintRoleMode);
-      if (value == printRoleShop) return printRoleShop;
+      if (value == workModeShop) return workModeShop;
+      if (value == workModeRider) return workModeRider;
     } catch (_) {}
-    return printRoleDesigner;
+    return workModeNormal;
   }
 
-  Future<void> setPrintRoleMode(String mode) async {
+  Future<void> setWorkMode(String mode) async {
     final prefs = _sharedPreferences ?? await SharedPreferences.getInstance();
     _sharedPreferences ??= prefs;
-    await prefs.setString(
-      _keyPrintRoleMode,
-      mode == printRoleShop ? printRoleShop : printRoleDesigner,
-    );
+    final stored = mode == workModeShop
+        ? workModeShop
+        : mode == workModeRider
+            ? workModeRider
+            : workModeNormal;
+    await prefs.setString(_keyPrintRoleMode, stored);
   }
 
   static String? _encodeSession(Map<String, dynamic> json) {

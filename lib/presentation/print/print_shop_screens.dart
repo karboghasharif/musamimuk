@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:toastification/toastification.dart';
 
@@ -8,6 +10,7 @@ import '../../data/repositories/print_repository.dart';
 import 'print_earnings_card.dart';
 import 'print_dispute_sheet.dart';
 import 'print_review_sheet.dart';
+import 'print_mode_switch.dart';
 import 'print_ui.dart';
 
 class PrintShopRegisterScreen extends StatefulWidget {
@@ -93,6 +96,8 @@ class _PrintShopRegisterScreenState extends State<PrintShopRegisterScreen> {
 
     return PrintScaffold(
       title: 'lbl_print_register_shop'.tr,
+      showBack: false,
+      actions: const [PrintModeButton()],
       body: ListView(
         padding: EdgeInsets.all(16.h),
         children: [
@@ -131,11 +136,20 @@ class _PrintShopHomeScreenState extends State<PrintShopHomeScreen> {
   List<PrintOrder> _orders = const [];
   bool _loading = true;
   String? _error;
+  int _section = 0;
+  Timer? _poll;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _poll = Timer.periodic(const Duration(seconds: 2), (_) => _refreshOrders());
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -154,10 +168,8 @@ class _PrintShopHomeScreenState extends State<PrintShopHomeScreen> {
     }
     final shop = (shopResult as PrintSuccess<PrintShopSummary?>).data;
     if (shop == null) {
-      setState(() {
-        _shop = null;
-        _loading = false;
-      });
+      if (!mounted) return;
+      NavigatorService.pushReplacementNamed(AppRoutes.printShopRegisterScreen);
       return;
     }
     final ordersResult = await _repo.shopOrders();
@@ -171,56 +183,91 @@ class _PrintShopHomeScreenState extends State<PrintShopHomeScreen> {
     });
   }
 
+  Future<void> _refreshOrders() async {
+    final ordersResult = await _repo.shopOrders();
+    if (!mounted || ordersResult is! PrintSuccess<List<PrintOrder>>) return;
+    setState(() => _orders = ordersResult.data);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
       return PrintScaffold(
         title: 'lbl_print_shop_mode'.tr,
+        showBack: false,
+        actions: const [PrintModeButton()],
         body: const Center(child: CircularProgressIndicator()),
       );
     }
-    if (_shop == null) {
+    final shop = _shop;
+    if (shop == null || !shop.canOperate) {
+      final message = shop == null
+          ? 'msg_print_register_prompt'.tr
+          : shop.status == 'pending'
+              ? 'msg_print_shop_pending'.tr
+              : 'lbl_print_status_${shop.status}'.tr;
       return PrintScaffold(
         title: 'lbl_print_shop_mode'.tr,
-        body: Padding(
-          padding: EdgeInsets.all(16.h),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                'msg_print_register_prompt'.tr,
-                style: const TextStyle(color: Colors.white70),
-                textAlign: TextAlign.center,
-              ),
-              SizedBox(height: 16.v),
-              PrintGoldButton(
-                label: 'lbl_print_register_shop'.tr,
-                onPressed: () => NavigatorService.pushNamed(
-                  AppRoutes.printShopRegisterScreen,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-    if (_shop!.status == 'pending') {
-      return PrintScaffold(
-        title: 'lbl_print_shop_mode'.tr,
+        showBack: false,
+        actions: const [PrintModeButton()],
         body: Center(
           child: Padding(
             padding: EdgeInsets.all(24.h),
-            child: Text(
-              'msg_print_shop_pending'.tr,
-              style: const TextStyle(color: Colors.white70),
-              textAlign: TextAlign.center,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  message,
+                  style: const TextStyle(color: Colors.white70),
+                  textAlign: TextAlign.center,
+                ),
+                if (_orders.isNotEmpty) ...[
+                  SizedBox(height: 16.v),
+                  ..._orders.map(
+                    (order) => Padding(
+                      padding: EdgeInsets.only(bottom: 8.v),
+                      child: Text(
+                        '#${order.number} · ${order.customerName ?? ''} · ${'lbl_print_status_${order.status}'.tr}',
+                        style: const TextStyle(color: Colors.white),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ),
       );
     }
     return PrintScaffold(
-      title: _shop!.name,
+      title: shop.name,
+      showBack: false,
+      actions: const [PrintModeButton()],
+      bottom: NavigationBar(
+        backgroundColor: AppDs.surfaceRaised,
+        indicatorColor: AppDs.printGold.withValues(alpha: 0.25),
+        selectedIndex: _section,
+        onDestinationSelected: (index) => setState(() => _section = index),
+        destinations: [
+          NavigationDestination(
+            icon: const Icon(Icons.storefront_outlined),
+            label: 'lbl_home'.tr,
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.receipt_long_outlined),
+            label: 'lbl_print_shop_orders'.tr,
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.payments_outlined),
+            label: 'lbl_print_earnings'.tr,
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.badge_outlined),
+            label: 'lbl_print_profile'.tr,
+          ),
+        ],
+      ),
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
@@ -228,33 +275,82 @@ class _PrintShopHomeScreenState extends State<PrintShopHomeScreen> {
           children: [
             if (_error != null)
               Text(_error!, style: const TextStyle(color: Colors.redAccent)),
-            Text(
-              _shop!.verified
-                  ? 'lbl_print_verified'.tr
-                  : 'lbl_print_status_${_shop!.status}'.tr,
-              style: const TextStyle(color: AppDs.printGold),
-            ),
-            PrintLevelBadge(
-              label: _shop!.levelLabel,
-              labelAr: _shop!.levelLabelAr,
-            ),
-            const PrintEarningsCard(kind: 'shop'),
-            if (_shop!.levelProgress?.hint != null)
-              Padding(
-                padding: EdgeInsets.only(top: 6.v, bottom: 12.v),
-                child: Text(
-                  _shop!.levelProgress!.hint!,
-                  style: const TextStyle(color: Colors.white70),
+            if (_section == 0) ...[
+              Text(
+                shop.verified
+                    ? 'lbl_print_verified'.tr
+                    : 'lbl_print_status_${shop.status}'.tr,
+                style: const TextStyle(color: AppDs.printGold),
+              ),
+              PrintLevelBadge(label: shop.levelLabel, labelAr: shop.levelLabelAr),
+              if (shop.levelProgress?.hint != null)
+                Padding(
+                  padding: EdgeInsets.only(top: 6.v, bottom: 12.v),
+                  child: Text(
+                    shop.levelProgress!.hint!,
+                    style: const TextStyle(color: Colors.white70),
+                  ),
+                ),
+              Text(
+                '${_orders.length}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 28,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
-            ..._orders.map(
-              (order) => Padding(
-                padding: EdgeInsets.only(bottom: 10.v),
-                child: _ShopOrderCard(order: order, onChanged: _load),
+              Text(
+                'lbl_print_shop_orders'.tr,
+                style: const TextStyle(color: Colors.white70),
               ),
-            ),
+            ],
+            if (_section == 1)
+              ..._orders.map(
+                (order) => Padding(
+                  padding: EdgeInsets.only(bottom: 10.v),
+                  child: _ShopOrderCard(order: order, onChanged: _load),
+                ),
+              ),
+            if (_section == 1 && _orders.isEmpty)
+              Text(
+                'msg_print_no_orders'.tr,
+                style: const TextStyle(color: Colors.white70),
+              ),
+            if (_section == 2) const PrintEarningsCard(kind: 'shop'),
+            if (_section == 3) ...[
+              _ShopFact('lbl_print_shop_name'.tr, shop.name),
+              if (shop.phone != null) _ShopFact('lbl_print_phone'.tr, shop.phone!),
+              if (shop.address != null) _ShopFact('lbl_print_address'.tr, shop.address!),
+              if (shop.district != null) _ShopFact('lbl_print_district'.tr, shop.district!),
+              _ShopFact(
+                'lbl_print_status_${shop.status}'.tr,
+                shop.reviewNote ?? '',
+              ),
+            ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ShopFact extends StatelessWidget {
+  const _ShopFact(this.label, this.value);
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: 12.v),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(color: AppDs.printGold)),
+          if (value.isNotEmpty)
+            Text(value, style: const TextStyle(color: Colors.white)),
+        ],
       ),
     );
   }
@@ -282,17 +378,33 @@ class _ShopOrderCard extends StatefulWidget {
 class _ShopOrderCardState extends State<_ShopOrderCard> {
   final _repo = PrintRepository();
   final _pickupCode = TextEditingController();
+  final _shopPrice = TextEditingController();
+  final _eta = TextEditingController(text: '24');
+  final _note = TextEditingController();
   bool _busy = false;
 
   @override
   void dispose() {
     _pickupCode.dispose();
+    _shopPrice.dispose();
+    _eta.dispose();
+    _note.dispose();
     super.dispose();
   }
 
   Future<void> _quote() async {
+    final price = double.tryParse(_shopPrice.text.trim());
+    if (price == null || price <= 0) {
+      showAppToast('lbl_print_shop_price'.tr, type: ToastificationType.error);
+      return;
+    }
     setState(() => _busy = true);
-    final result = await _repo.createQuote(orderId: widget.order.id);
+    final result = await _repo.createQuote(
+      orderId: widget.order.id,
+      shopTotal: price,
+      etaHours: int.tryParse(_eta.text.trim()),
+      note: _note.text.trim(),
+    );
     if (!mounted) return;
     setState(() => _busy = false);
     if (result is PrintFailure<PrintOrder>) {
@@ -348,11 +460,93 @@ class _ShopOrderCardState extends State<_ShopOrderCard> {
               fontWeight: FontWeight.w600,
             ),
           ),
-          if (order.status == 'quote')
+          if (order.designName != null)
+            Text(order.designName!, style: const TextStyle(color: Colors.white70)),
+          if (order.customerName != null)
+            Text(order.customerName!, style: const TextStyle(color: Colors.white70)),
+          if (order.systemTotal != null)
+            Text(
+              '${'lbl_print_system_price'.tr}: SAR ${order.systemTotal!.toStringAsFixed(2)}',
+              style: const TextStyle(color: AppDs.printGold),
+            ),
+          if (order.status == 'quote') ...[
+            TextField(
+              controller: _shopPrice,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(labelText: 'lbl_print_shop_price'.tr),
+            ),
+            TextField(
+              controller: _eta,
+              keyboardType: TextInputType.number,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(labelText: 'lbl_print_eta_hours'.tr),
+            ),
+            TextField(
+              controller: _note,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(labelText: 'lbl_print_note'.tr),
+            ),
             PrintGoldButton(
               label: 'lbl_print_send_quote'.tr,
               loading: _busy,
               onPressed: _quote,
+            ),
+            TextButton(
+              onPressed: _busy
+                  ? null
+                  : () async {
+                      setState(() => _busy = true);
+                      final result = await _repo.declineRequest(order.id);
+                      if (!mounted) return;
+                      setState(() => _busy = false);
+                      if (result is PrintFailure<PrintOrder>) {
+                        showAppToast(result.message, type: ToastificationType.error);
+                        return;
+                      }
+                      widget.onChanged();
+                    },
+              child: Text('lbl_print_decline'.tr),
+            ),
+          ],
+          TextButton(
+            onPressed: () => NavigatorService.pushNamed(
+              AppRoutes.printChatScreen,
+              arguments: {
+                'orderId': order.id,
+                'thread': 'customer_shop',
+                'viewer': 'shop',
+              },
+            ),
+            child: Text('lbl_print_designer_chat'.tr),
+          ),
+          if (order.delivery?.riderId != null)
+            TextButton(
+              onPressed: () => NavigatorService.pushNamed(
+                AppRoutes.printChatScreen,
+                arguments: {
+                  'orderId': order.id,
+                  'thread': 'shop_rider',
+                  'viewer': 'shop',
+                },
+              ),
+              child: Text('lbl_print_rider_chat'.tr),
+            ),
+          if (order.status == 'ready' && order.fulfillment == 'delivery' && order.delivery?.riderId == null)
+            PrintGoldButton(
+              label: 'lbl_print_request_rider'.tr,
+              loading: _busy,
+              onPressed: () async {
+                setState(() => _busy = true);
+                final result = await _repo.requestRider(order.id);
+                if (!mounted) return;
+                setState(() => _busy = false);
+                if (result is PrintFailure<PrintOrder>) {
+                  showAppToast(result.message, type: ToastificationType.error);
+                  return;
+                }
+                widget.onChanged();
+              },
             ),
           if (order.nextAction != null && order.status != 'quote')
             Padding(

@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../core/app_export.dart';
 import '../core/utils/app_toast.dart';
 import '../data/repositories/auth_repository.dart';
+import '../presentation/print/print_mode_switch.dart';
 import '../presentation/wallet/wallet_auth_sync.dart';
 
 const _kGooglePlayListingUrl =
@@ -169,24 +170,11 @@ class AppNavigationDrawer extends StatelessWidget {
                     ),
                   if (!isGuest)
                     _DrawerNavTile(
-                      icon: Icons.storefront_outlined,
-                      label: 'lbl_print_shop_mode'.tr,
+                      icon: Icons.swap_horiz,
+                      label: 'lbl_switch_mode'.tr,
                       onTap: () {
                         Navigator.pop(context);
-                        NavigatorService.pushNamed(
-                          AppRoutes.printShopHomeScreen,
-                        );
-                      },
-                    ),
-                  if (!isGuest)
-                    _DrawerNavTile(
-                      icon: Icons.two_wheeler_outlined,
-                      label: 'lbl_print_rider_mode'.tr,
-                      onTap: () {
-                        Navigator.pop(context);
-                        NavigatorService.pushNamed(
-                          AppRoutes.printRiderHomeScreen,
-                        );
+                        showPrintModeSheet(context);
                       },
                     ),
                   _DrawerNavTile(

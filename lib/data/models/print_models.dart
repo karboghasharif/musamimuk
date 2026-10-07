@@ -110,6 +110,8 @@ class PrintShopSummary {
   final String? levelLabelAr;
   final PrintLevelProgress? levelProgress;
 
+  bool get canOperate => status == 'verified' || status == 'active';
+
   factory PrintShopSummary.fromJson(Map<String, dynamic> json) {
     final services = json['services'];
     final hours = json['hours'];
@@ -163,6 +165,7 @@ class PrintQuote {
     required this.finishingTotal,
     required this.total,
     required this.etaHours,
+    this.shopTotal,
     this.note,
     this.status = 'offered',
     this.currency = 'SAR',
@@ -172,6 +175,7 @@ class PrintQuote {
   final double subtotal;
   final double finishingTotal;
   final double total;
+  final double? shopTotal;
   final int etaHours;
   final String? note;
   final String status;
@@ -183,6 +187,7 @@ class PrintQuote {
       subtotal: PrintShopSummary._asDouble(json['subtotal']) ?? 0,
       finishingTotal: PrintShopSummary._asDouble(json['finishing_total']) ?? 0,
       total: PrintShopSummary._asDouble(json['total']) ?? 0,
+      shopTotal: PrintShopSummary._asDouble(json['shop_total']),
       etaHours: PrintSpec._asInt(json['eta_hours']) ?? 0,
       note: json['note']?.toString(),
       status: json['status']?.toString() ?? 'offered',
@@ -238,6 +243,7 @@ class PrintChatMessage {
     required this.from,
     required this.body,
     this.quoteId,
+    this.thread = 'customer_shop',
     this.createdAt,
   });
 
@@ -245,6 +251,7 @@ class PrintChatMessage {
   final String from;
   final String body;
   final int? quoteId;
+  final String thread;
   final String? createdAt;
 
   factory PrintChatMessage.fromJson(Map<String, dynamic> json) {
@@ -253,6 +260,7 @@ class PrintChatMessage {
       from: json['from']?.toString() ?? 'system',
       body: json['body']?.toString() ?? '',
       quoteId: PrintSpec._asInt(json['quote_id']),
+      thread: json['thread']?.toString() ?? 'customer_shop',
       createdAt: json['created_at']?.toString(),
     );
   }
@@ -306,6 +314,11 @@ class PrintOrder {
     this.delivery,
     this.pendingReviews = const [],
     this.dispute,
+    this.systemTotal,
+    this.designName,
+    this.designFile,
+    this.customerName,
+    this.dropoffAddress,
   });
 
   final int id;
@@ -331,6 +344,11 @@ class PrintOrder {
   final PrintDeliveryInfo? delivery;
   final List<PrintPendingReview> pendingReviews;
   final PrintDispute? dispute;
+  final double? systemTotal;
+  final String? designName;
+  final String? designFile;
+  final String? customerName;
+  final String? dropoffAddress;
 
   PrintQuote? get offeredQuote {
     for (final quote in quotes) {
@@ -347,6 +365,10 @@ class PrintOrder {
     final timeline = json['timeline'];
     final payment = json['payment'];
     final pending = json['pending_reviews'];
+    final design = json['design'];
+    final customer = json['customer'];
+    final systemQuote = json['system_quote'];
+    final dropoff = json['dropoff'];
     return PrintOrder(
       id: PrintSpec._asInt(json['id']) ?? 0,
       number: PrintSpec._asInt(json['number']) ?? 0,
@@ -411,6 +433,13 @@ class PrintOrder {
               (json['dispute'] as Map).cast<String, dynamic>(),
             )
           : null,
+      systemTotal: systemQuote is Map
+          ? PrintShopSummary._asDouble(systemQuote['total'])
+          : null,
+      designName: design is Map ? design['name']?.toString() : null,
+      designFile: design is Map ? design['file_path']?.toString() : null,
+      customerName: customer is Map ? customer['name']?.toString() : null,
+      dropoffAddress: dropoff is Map ? dropoff['address']?.toString() : null,
     );
   }
 }
@@ -578,6 +607,8 @@ class PrintRiderProfile {
   final String? levelLabel;
   final String? levelLabelAr;
   final PrintLevelProgress? levelProgress;
+
+  bool get isApproved => status == 'approved';
 
   factory PrintRiderProfile.fromJson(Map<String, dynamic> json) {
     return PrintRiderProfile(

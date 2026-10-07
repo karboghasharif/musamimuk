@@ -96,6 +96,7 @@ class PrintScaffold extends StatelessWidget {
     this.actions,
     this.bottom,
     this.floatingActionButton,
+    this.showBack = true,
   });
 
   final String title;
@@ -103,16 +104,19 @@ class PrintScaffold extends StatelessWidget {
   final List<Widget>? actions;
   final Widget? bottom;
   final Widget? floatingActionButton;
+  final bool showBack;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppDs.surfaceBase,
       appBar: CustomAppBar(
-        leading: AppbarLeadingImage(
-          imagePath: ImageConstant.imgArrowLeftPrimary,
-          onTap: () => Navigator.of(context).pop(),
-        ),
+        leading: showBack
+            ? AppbarLeadingImage(
+                imagePath: ImageConstant.imgArrowLeftPrimary,
+                onTap: () => Navigator.of(context).pop(),
+              )
+            : const SizedBox(width: 48),
         centerTitle: true,
         title: AppbarTitle(text: title),
         actions: actions,

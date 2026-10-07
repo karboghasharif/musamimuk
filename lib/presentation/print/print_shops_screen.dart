@@ -7,14 +7,19 @@ import '../../data/repositories/print_repository.dart';
 import 'print_ui.dart';
 
 class PrintShopsScreen extends StatefulWidget {
-  const PrintShopsScreen({super.key, required this.orderId});
+  const PrintShopsScreen({super.key, this.orderId = 0, this.request});
 
   final int orderId;
+  final Map<String, dynamic>? request;
 
   static Widget builder(BuildContext context) {
     final args = ModalRoute.of(context)?.settings.arguments;
     final map = args is Map ? args.cast<String, dynamic>() : <String, dynamic>{};
-    return PrintShopsScreen(orderId: apiParseInt(map['orderId']));
+    final request = map['designId'] != null ? map : null;
+    return PrintShopsScreen(
+      orderId: apiParseInt(map['orderId']),
+      request: request,
+    );
   }
 
   @override
@@ -79,7 +84,11 @@ class _PrintShopsScreenState extends State<PrintShopsScreen> {
   void _openShop(PrintShopSummary shop) {
     NavigatorService.pushNamed(
       AppRoutes.printShopProfileScreen,
-      arguments: {'shopId': shop.id, 'orderId': widget.orderId},
+      arguments: {
+        'shopId': shop.id,
+        'orderId': widget.orderId,
+        if (widget.request != null) 'request': widget.request,
+      },
     );
   }
 

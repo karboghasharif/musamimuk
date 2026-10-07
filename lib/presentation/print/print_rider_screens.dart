@@ -9,6 +9,7 @@ import '../../data/models/print_models.dart';
 import '../../data/repositories/print_repository.dart';
 import 'print_earnings_card.dart';
 import 'print_review_sheet.dart';
+import 'print_mode_switch.dart';
 import 'print_ui.dart';
 
 class PrintRiderHomeScreen extends StatefulWidget {
@@ -26,13 +27,14 @@ class _PrintRiderHomeScreenState extends State<PrintRiderHomeScreen> {
   List<PrintDeliveryInfo> _jobs = const [];
   List<PrintReview> _reviews = const [];
   bool _loading = true;
+  int _section = 0;
   Timer? _poll;
 
   @override
   void initState() {
     super.initState();
     _load();
-    _poll = Timer.periodic(const Duration(seconds: 5), (_) => _load());
+    _poll = Timer.periodic(const Duration(seconds: 2), (_) => _load());
   }
 
   @override
@@ -49,19 +51,22 @@ class _PrintRiderHomeScreenState extends State<PrintRiderHomeScreen> {
       return;
     }
     final rider = (riderResult as PrintSuccess<PrintRiderProfile?>).data;
+    if (rider == null) {
+      if (!mounted) return;
+      NavigatorService.pushReplacementNamed(AppRoutes.printRiderRegisterScreen);
+      return;
+    }
     var jobs = const <PrintDeliveryInfo>[];
-    if (rider != null && rider.status == 'approved') {
+    if (rider.isApproved) {
       final jobsResult = await _repo.riderJobs();
       if (jobsResult is PrintSuccess<List<PrintDeliveryInfo>>) {
         jobs = jobsResult.data;
       }
     }
     List<PrintReview> reviews = const [];
-    if (rider != null) {
-      final reviewResult = await _repo.riderReviews(rider.id);
-      if (reviewResult is PrintSuccess<List<PrintReview>>) {
-        reviews = reviewResult.data;
-      }
+    final reviewResult = await _repo.riderReviews(rider.id);
+    if (reviewResult is PrintSuccess<List<PrintReview>>) {
+      reviews = reviewResult.data;
     }
     if (!mounted) return;
     setState(() {
@@ -92,42 +97,24 @@ class _PrintRiderHomeScreenState extends State<PrintRiderHomeScreen> {
     if (_loading) {
       return PrintScaffold(
         title: 'lbl_print_rider_mode'.tr,
+        showBack: false,
+        actions: const [PrintModeButton()],
         body: const Center(child: CircularProgressIndicator()),
       );
     }
-    if (_rider == null) {
+    final rider = _rider;
+    if (rider == null || !rider.isApproved) {
       return PrintScaffold(
         title: 'lbl_print_rider_mode'.tr,
-        body: Padding(
-          padding: EdgeInsets.all(16.h),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                'msg_print_register_rider'.tr,
-                style: const TextStyle(color: Colors.white70),
-                textAlign: TextAlign.center,
-              ),
-              SizedBox(height: 16.v),
-              PrintGoldButton(
-                label: 'lbl_print_register_rider'.tr,
-                onPressed: () => NavigatorService.pushNamed(
-                  AppRoutes.printRiderRegisterScreen,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-    if (_rider!.status != 'approved') {
-      return PrintScaffold(
-        title: 'lbl_print_rider_mode'.tr,
+        showBack: false,
+        actions: const [PrintModeButton()],
         body: Center(
           child: Padding(
             padding: EdgeInsets.all(24.h),
             child: Text(
-              'msg_print_rider_pending'.tr,
+              rider == null
+                  ? 'msg_print_register_rider'.tr
+                  : 'msg_print_rider_pending'.tr,
               style: const TextStyle(color: Colors.white70),
               textAlign: TextAlign.center,
             ),
@@ -136,50 +123,76 @@ class _PrintRiderHomeScreenState extends State<PrintRiderHomeScreen> {
       );
     }
     return PrintScaffold(
-      title: _rider!.name,
+      title: rider.name,
+      showBack: false,
+      actions: const [PrintModeButton()],
+      bottom: NavigationBar(
+        backgroundColor: AppDs.surfaceRaised,
+        indicatorColor: AppDs.printGold.withValues(alpha: 0.25),
+        selectedIndex: _section,
+        onDestinationSelected: (index) => setState(() => _section = index),
+        destinations: [
+          NavigationDestination(
+            icon: const Icon(Icons.home_outlined),
+            label: 'lbl_home'.tr,
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.local_shipping_outlined),
+            label: 'lbl_print_jobs'.tr,
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.wifi_tethering),
+            label: 'lbl_print_online'.tr,
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.payments_outlined),
+            label: 'lbl_print_earnings'.tr,
+          ),
+        ],
+      ),
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
           padding: EdgeInsets.all(16.h),
           children: [
-            SwitchListTile(
-              value: _rider!.online,
-              activeThumbColor: AppDs.printGold,
-              title: Text(
-                'lbl_print_online'.tr,
-                style: const TextStyle(color: Colors.white),
-              ),
-              onChanged: _toggleOnline,
-            ),
-            PrintLevelBadge(
-              label: _rider!.levelLabel,
-              labelAr: _rider!.levelLabelAr,
-            ),
-            const PrintEarningsCard(kind: 'rider'),
-            if (_rider!.levelProgress?.hint != null)
-              Padding(
-                padding: EdgeInsets.only(top: 6.v, bottom: 12.v),
-                child: Text(
-                  _rider!.levelProgress!.hint!,
-                  style: const TextStyle(color: Colors.white70),
+            if (_section == 0) ...[
+              PrintLevelBadge(label: rider.levelLabel, labelAr: rider.levelLabelAr),
+              if (rider.levelProgress?.hint != null)
+                Padding(
+                  padding: EdgeInsets.only(top: 6.v, bottom: 12.v),
+                  child: Text(
+                    rider.levelProgress!.hint!,
+                    style: const TextStyle(color: Colors.white70),
+                  ),
+                ),
+              Text(
+                'lbl_print_verified_reviews'.tr,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
-            Text(
-              'lbl_print_verified_reviews'.tr,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
+              SizedBox(height: 8.v),
+              PrintVerifiedReviewList(reviews: _reviews),
+            ],
+            if (_section == 1)
+              ..._jobs.map(
+                (job) => Padding(
+                  padding: EdgeInsets.only(bottom: 10.v),
+                  child: _RiderJobCard(job: job, onChanged: _load),
+                ),
               ),
-            ),
-            SizedBox(height: 8.v),
-            PrintVerifiedReviewList(reviews: _reviews),
-            SizedBox(height: 12.v),
-            ..._jobs.map(
-              (job) => Padding(
-                padding: EdgeInsets.only(bottom: 10.v),
-                child: _RiderJobCard(job: job, onChanged: _load),
+            if (_section == 2)
+              SwitchListTile(
+                value: rider.online,
+                activeThumbColor: AppDs.printGold,
+                title: Text(
+                  'lbl_print_online'.tr,
+                  style: const TextStyle(color: Colors.white),
+                ),
+                onChanged: _toggleOnline,
               ),
-            ),
+            if (_section == 3) const PrintEarningsCard(kind: 'rider'),
           ],
         ),
       ),
@@ -265,6 +278,8 @@ class _PrintRiderRegisterScreenState extends State<PrintRiderRegisterScreen> {
 
     return PrintScaffold(
       title: 'lbl_print_register_rider'.tr,
+      showBack: false,
+      actions: const [PrintModeButton()],
       body: ListView(
         padding: EdgeInsets.all(16.h),
         children: [
@@ -369,6 +384,16 @@ class _RiderJobCardState extends State<_RiderJobCard> {
           ),
           if (job.shopName != null)
             Text(job.shopName!, style: const TextStyle(color: Colors.white70)),
+          if (job.pickupCode != null)
+            Text('${'lbl_print_pickup_code'.tr}: ${job.pickupCode}'),
+          if (job.areaCode != null)
+            Text('${'lbl_print_area'.tr}: ${job.areaCode}'),
+          if (job.address != null)
+            Text(job.address!, style: const TextStyle(color: Colors.white70)),
+          Text(
+            '${'lbl_print_delivery_fee'.tr}: ${printSar(job.fee)} · ${job.distanceKm.toStringAsFixed(1)} km',
+            style: const TextStyle(color: Colors.white70),
+          ),
           Text(
             '${'lbl_print_expected_earning'.tr}: ${printSar(job.expectedEarning)}',
             style: const TextStyle(color: AppDs.printGold),
@@ -393,6 +418,18 @@ class _RiderJobCardState extends State<_RiderJobCard> {
               ),
             ),
           ],
+          if (job.status != 'requested' && job.orderId != null)
+            TextButton(
+              onPressed: () => NavigatorService.pushNamed(
+                AppRoutes.printChatScreen,
+                arguments: {
+                  'orderId': job.orderId,
+                  'thread': 'shop_rider',
+                  'viewer': 'rider',
+                },
+              ),
+              child: Text('lbl_print_rider_chat'.tr),
+            ),
           if (action != null)
             Padding(
               padding: EdgeInsets.only(top: 8.v),

@@ -43,7 +43,7 @@ class _PrintTrackingScreenState extends State<PrintTrackingScreen> {
   void initState() {
     super.initState();
     _load();
-    _poll = Timer.periodic(const Duration(seconds: 5), (_) => _load());
+    _poll = Timer.periodic(const Duration(seconds: 2), (_) => _load());
   }
 
   @override

@@ -15,6 +15,17 @@ class ScreenTwentythreeBloc
     on<ScreenTwentythreeInitialEvent>(_onInitialize);
   }
 
+  String _launchRoute() {
+    if (!PrefUtils().isLoggedIn() || PrefUtils().isGuestAccount()) {
+      return AppRoutes.screen1HomeScreen;
+    }
+    return switch (PrefUtils().getWorkMode()) {
+      PrefUtils.workModeShop => AppRoutes.printShopHomeScreen,
+      PrefUtils.workModeRider => AppRoutes.printRiderHomeScreen,
+      _ => AppRoutes.screen1HomeScreen,
+    };
+  }
+
   _onInitialize(
     ScreenTwentythreeInitialEvent event,
     Emitter<ScreenTwentythreeState> emit,
@@ -34,7 +45,7 @@ class ScreenTwentythreeBloc
 
     await Future.delayed(const Duration(milliseconds: 3000));
     if (PrefUtils().isLoggedIn() || PrefUtils().hasOfflineHomeAccess()) {
-      await NavigatorService.popAndPushNamed(AppRoutes.screen1HomeScreen);
+      await NavigatorService.popAndPushNamed(_launchRoute());
     } else {
       await NavigatorService.popAndPushNamed(AppRoutes.screen0LoginScreen);
     }
