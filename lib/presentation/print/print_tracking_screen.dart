@@ -11,6 +11,7 @@ import '../../data/models/print_models.dart';
 import '../../data/repositories/print_repository.dart';
 import 'print_dispute_sheet.dart';
 import 'print_review_sheet.dart';
+import 'print_live.dart';
 import 'print_ui.dart';
 
 class PrintTrackingScreen extends StatefulWidget {
@@ -38,17 +39,20 @@ class _PrintTrackingScreenState extends State<PrintTrackingScreen> {
   bool _busy = false;
   bool _reviewPrompted = false;
   Timer? _poll;
+  VoidCallback? _stopLive;
 
   @override
   void initState() {
     super.initState();
     _load();
     _poll = Timer.periodic(const Duration(seconds: 2), (_) => _load());
+    _stopLive = PrintLive.instance.listen(_load);
   }
 
   @override
   void dispose() {
     _poll?.cancel();
+    _stopLive?.call();
     _address.dispose();
     _otp.dispose();
     super.dispose();

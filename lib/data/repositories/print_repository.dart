@@ -217,6 +217,22 @@ class PrintRepository {
     }
   }
 
+  Future<PrintResult<Map<String, dynamic>>> realtime() async {
+    try {
+      final response = await _dio.get<Map<String, dynamic>>('print/realtime');
+      final data = response.data;
+      final map = apiExtractPayloadMap(data);
+      if (data == null || !apiResponseIsSuccess(data) || map == null) {
+        return PrintFailure(
+          apiExtractMessage(data) ?? 'Unable to open the live connection.',
+        );
+      }
+      return PrintSuccess(map);
+    } on DioException catch (e) {
+      return PrintFailure(apiMessageFromDioException(e));
+    }
+  }
+
   Future<PrintResult<PrintShopSummary>> registerShop({
     required String name,
     String? nameAr,

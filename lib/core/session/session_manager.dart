@@ -6,7 +6,9 @@ import 'package:toastification/toastification.dart';
 import '../utils/app_toast.dart';
 import '../utils/navigator_service.dart';
 import '../utils/pref_utils.dart';
+import '../../data/models/print_models.dart';
 import '../../data/models/wallet_models.dart';
+import '../../data/repositories/print_repository.dart';
 import '../../localization/app_localization.dart';
 import '../../routes/app_routes.dart';
 import 'app_route_observer.dart';
@@ -295,12 +297,34 @@ class SessionManager {
     });
   }
 
+  /// A shop account opens shop mode. A rider account opens rider mode.
+  /// Designers stay in the normal app. A shop profile wins when both exist.
+  Future<void> _enterWorkModeForPrintProfile() async {
+    if (PrefUtils().isGuestAccount() || !PrefUtils().isLoggedIn()) return;
+    final repo = PrintRepository();
+    final shop = await repo.myShop();
+    if (shop is PrintSuccess<PrintShopSummary?> &&
+        shop.data != null &&
+        shop.data!.id > 0) {
+      await PrefUtils().setWorkMode(PrefUtils.workModeShop);
+      return;
+    }
+    final rider = await repo.myRider();
+    if (rider is PrintSuccess<PrintRiderProfile?> &&
+        rider.data != null &&
+        rider.data!.id > 0) {
+      await PrefUtils().setWorkMode(PrefUtils.workModeRider);
+    }
+  }
+
   /// Navigate to the intended page after login, or Home by default.
   Future<void> navigateAfterLogin() async {
+    await _enterWorkModeForPrintProfile();
     final pending = takePendingNavigation();
     final route = pending?.route;
     if (route != null &&
         route.isNotEmpty &&
+        route != AppRoutes.screen1HomeScreen &&
         !_nonRestorableRoutes.contains(route) &&
         canAccessRoute(route)) {
       await NavigatorService.pushNamedAndRemoveUntil(
@@ -310,8 +334,13 @@ class SessionManager {
       );
       return;
     }
+    final home = switch (PrefUtils().getWorkMode()) {
+      PrefUtils.workModeShop => AppRoutes.printShopHomeScreen,
+      PrefUtils.workModeRider => AppRoutes.printRiderHomeScreen,
+      _ => AppRoutes.screen1HomeScreen,
+    };
     await NavigatorService.pushNamedAndRemoveUntil(
-      AppRoutes.screen1HomeScreen,
+      home,
       routePredicate: false,
     );
   }

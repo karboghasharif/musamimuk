@@ -11,6 +11,7 @@ import 'print_earnings_card.dart';
 import 'print_dispute_sheet.dart';
 import 'print_review_sheet.dart';
 import 'print_mode_switch.dart';
+import 'print_live.dart';
 import 'print_ui.dart';
 
 class PrintShopRegisterScreen extends StatefulWidget {
@@ -138,17 +139,22 @@ class _PrintShopHomeScreenState extends State<PrintShopHomeScreen> {
   String? _error;
   int _section = 0;
   Timer? _poll;
+  VoidCallback? _stopLive;
+  Set<int>? _knownOrderIds;
+  PrintOrder? _banner;
 
   @override
   void initState() {
     super.initState();
     _load();
     _poll = Timer.periodic(const Duration(seconds: 2), (_) => _refreshOrders());
+    _stopLive = PrintLive.instance.listen(_refreshOrders);
   }
 
   @override
   void dispose() {
     _poll?.cancel();
+    _stopLive?.call();
     super.dispose();
   }
 
@@ -174,11 +180,13 @@ class _PrintShopHomeScreenState extends State<PrintShopHomeScreen> {
     }
     final ordersResult = await _repo.shopOrders();
     if (!mounted) return;
+    final rows = ordersResult is PrintSuccess<List<PrintOrder>>
+        ? ordersResult.data
+        : const <PrintOrder>[];
     setState(() {
       _shop = shop;
-      _orders = ordersResult is PrintSuccess<List<PrintOrder>>
-          ? ordersResult.data
-          : const [];
+      _orders = rows;
+      _knownOrderIds = rows.map((order) => order.id).toSet();
       _loading = false;
     });
   }
@@ -186,7 +194,29 @@ class _PrintShopHomeScreenState extends State<PrintShopHomeScreen> {
   Future<void> _refreshOrders() async {
     final ordersResult = await _repo.shopOrders();
     if (!mounted || ordersResult is! PrintSuccess<List<PrintOrder>>) return;
-    setState(() => _orders = ordersResult.data);
+    final rows = ordersResult.data;
+    final known = _knownOrderIds;
+    PrintOrder? fresh;
+    if (known != null) {
+      for (final order in rows) {
+        if (!known.contains(order.id)) {
+          fresh = order;
+          break;
+        }
+      }
+    }
+    setState(() {
+      _orders = rows;
+      _knownOrderIds = rows.map((order) => order.id).toSet();
+      if (fresh != null) _banner = fresh;
+    });
+    if (fresh != null) {
+      showAppToast(
+        '${'lbl_print_new_request'.tr} #${fresh.number}',
+        type: ToastificationType.info,
+        autoCloseDuration: const Duration(seconds: 6),
+      );
+    }
   }
 
   @override
@@ -255,7 +285,11 @@ class _PrintShopHomeScreenState extends State<PrintShopHomeScreen> {
             label: 'lbl_home'.tr,
           ),
           NavigationDestination(
-            icon: const Icon(Icons.receipt_long_outlined),
+            icon: Badge(
+              isLabelVisible: _orders.where((order) => order.status == 'quote').isNotEmpty,
+              label: Text('${_orders.where((order) => order.status == 'quote').length}'),
+              child: const Icon(Icons.receipt_long_outlined),
+            ),
             label: 'lbl_print_shop_orders'.tr,
           ),
           NavigationDestination(
@@ -275,33 +309,74 @@ class _PrintShopHomeScreenState extends State<PrintShopHomeScreen> {
           children: [
             if (_error != null)
               Text(_error!, style: const TextStyle(color: Colors.redAccent)),
-            if (_section == 0) ...[
-              Text(
-                shop.verified
-                    ? 'lbl_print_verified'.tr
-                    : 'lbl_print_status_${shop.status}'.tr,
-                style: const TextStyle(color: AppDs.printGold),
-              ),
-              PrintLevelBadge(label: shop.levelLabel, labelAr: shop.levelLabelAr),
-              if (shop.levelProgress?.hint != null)
-                Padding(
-                  padding: EdgeInsets.only(top: 6.v, bottom: 12.v),
-                  child: Text(
-                    shop.levelProgress!.hint!,
-                    style: const TextStyle(color: Colors.white70),
+            if (_banner != null)
+              Padding(
+                padding: EdgeInsets.only(bottom: 12.v),
+                child: Material(
+                  color: AppDs.printGold,
+                  borderRadius: BorderRadius.circular(16),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: () => setState(() {
+                      _section = 1;
+                      _banner = null;
+                    }),
+                    child: Padding(
+                      padding: EdgeInsets.all(14.h),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.notifications_active, color: Colors.black),
+                          SizedBox(width: 12.h),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${'lbl_print_new_request'.tr} #${_banner!.number}',
+                                  style: const TextStyle(
+                                    color: Colors.black,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                Text(
+                                  _banner!.customerName ?? 'msg_print_new_request'.tr,
+                                  style: const TextStyle(color: Colors.black87),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => setState(() => _banner = null),
+                            icon: const Icon(Icons.close, color: Colors.black),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
+              ),
+            if (_section == 0) ...[
+              _ShopDesk(shop: shop, orders: _orders),
+              SizedBox(height: 16.v),
               Text(
-                '${_orders.length}',
-                style: const TextStyle(
+                'lbl_print_incoming'.tr,
+                style: TextStyle(
                   color: Colors.white,
-                  fontSize: 28,
                   fontWeight: FontWeight.w700,
+                  fontSize: 16.fSize,
                 ),
               ),
-              Text(
-                'lbl_print_shop_orders'.tr,
-                style: const TextStyle(color: Colors.white70),
+              SizedBox(height: 8.v),
+              if (_orders.where((order) => order.status == 'quote').isEmpty)
+                Text(
+                  'msg_print_no_orders'.tr,
+                  style: const TextStyle(color: Colors.white70),
+                ),
+              ..._orders.where((order) => order.status == 'quote').map(
+                (order) => Padding(
+                  padding: EdgeInsets.only(bottom: 10.v),
+                  child: _ShopOrderCard(order: order, onChanged: _load),
+                ),
               ),
             ],
             if (_section == 1)
@@ -329,6 +404,107 @@ class _PrintShopHomeScreenState extends State<PrintShopHomeScreen> {
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ShopDesk extends StatelessWidget {
+  const _ShopDesk({required this.shop, required this.orders});
+
+  final PrintShopSummary shop;
+  final List<PrintOrder> orders;
+
+  @override
+  Widget build(BuildContext context) {
+    final waiting = orders.where((order) => order.status == 'quote').length;
+    return Container(
+      padding: EdgeInsets.all(16.h),
+      decoration: BoxDecoration(
+        color: AppDs.surfaceRaised,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppDs.printGold.withValues(alpha: 0.45)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: AppDs.printGold,
+                child: Text(
+                  shop.name.isEmpty ? 'S' : shop.name.characters.first.toUpperCase(),
+                  style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w800),
+                ),
+              ),
+              SizedBox(width: 12.h),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      shop.name,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 18,
+                      ),
+                    ),
+                    Text(
+                      shop.verified
+                          ? 'lbl_print_verified'.tr
+                          : 'lbl_print_status_${shop.status}'.tr,
+                      style: const TextStyle(color: AppDs.printGold),
+                    ),
+                  ],
+                ),
+              ),
+              PrintLevelBadge(label: shop.levelLabel, labelAr: shop.levelLabelAr),
+            ],
+          ),
+          if (shop.address != null) ...[
+            SizedBox(height: 10.v),
+            Text(shop.address!, style: const TextStyle(color: Colors.white70)),
+          ],
+          SizedBox(height: 14.v),
+          Row(
+            children: [
+              _DeskStat('$waiting', 'lbl_print_incoming'.tr),
+              _DeskStat(shop.rating.toStringAsFixed(1), 'lbl_print_verified_reviews'.tr),
+              _DeskStat('${shop.completedOrders}', 'lbl_print_shop_orders'.tr),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DeskStat extends StatelessWidget {
+  const _DeskStat(this.value, this.label);
+
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              fontSize: 20,
+            ),
+          ),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white54, fontSize: 11),
+          ),
+        ],
       ),
     );
   }
@@ -509,7 +685,18 @@ class _ShopOrderCardState extends State<_ShopOrderCard> {
               child: Text('lbl_print_decline'.tr),
             ),
           ],
-          TextButton(
+          if (order.messages.any((message) => message.thread == 'customer_shop' && message.from != 'system'))
+            Padding(
+              padding: EdgeInsets.only(top: 8.v),
+              child: Text(
+                order.messages.lastWhere((message) => message.thread == 'customer_shop' && message.from != 'system').body,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white70, fontStyle: FontStyle.italic),
+              ),
+            ),
+          SizedBox(height: 8.v),
+          OutlinedButton.icon(
             onPressed: () => NavigatorService.pushNamed(
               AppRoutes.printChatScreen,
               arguments: {
@@ -518,7 +705,13 @@ class _ShopOrderCardState extends State<_ShopOrderCard> {
                 'viewer': 'shop',
               },
             ),
-            child: Text('lbl_print_designer_chat'.tr),
+            icon: const Icon(Icons.chat_bubble_outline, color: AppDs.printGold),
+            label: Text('lbl_print_designer_chat'.tr),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.white,
+              side: const BorderSide(color: AppDs.printGold),
+              minimumSize: const Size.fromHeight(44),
+            ),
           ),
           if (order.delivery?.riderId != null)
             TextButton(

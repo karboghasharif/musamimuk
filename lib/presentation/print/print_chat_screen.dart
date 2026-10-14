@@ -8,6 +8,7 @@ import '../../core/network/api_utils.dart';
 import '../../core/utils/app_toast.dart';
 import '../../data/models/print_models.dart';
 import '../../data/repositories/print_repository.dart';
+import 'print_live.dart';
 import 'print_ui.dart';
 
 class PrintChatScreen extends StatefulWidget {
@@ -44,17 +45,20 @@ class _PrintChatScreenState extends State<PrintChatScreen> {
   bool _loading = true;
   bool _busy = false;
   Timer? _poll;
+  VoidCallback? _stopLive;
 
   @override
   void initState() {
     super.initState();
     _reload();
     _poll = Timer.periodic(const Duration(seconds: 2), (_) => _reload(scroll: false));
+    _stopLive = PrintLive.instance.listen(() => _reload(scroll: false));
   }
 
   @override
   void dispose() {
     _poll?.cancel();
+    _stopLive?.call();
     _input.dispose();
     _scroll.dispose();
     super.dispose();
@@ -80,6 +84,20 @@ class _PrintChatScreenState extends State<PrintChatScreen> {
     } else {
       setState(() => _loading = false);
     }
+  }
+
+  bool _isMine(PrintChatMessage message) {
+    if (widget.viewer == 'shop') return message.from == 'printer';
+    if (widget.viewer == 'rider') return message.from == 'rider';
+    return message.from == 'customer';
+  }
+
+  String _sender(PrintChatMessage message, PrintOrder order) {
+    if (_isMine(message)) return 'lbl_print_you'.tr;
+    if (message.from == 'customer') return order.customerName ?? 'lbl_print_designer_chat'.tr;
+    if (message.from == 'rider') return 'lbl_print_rider_chat'.tr;
+    if (message.from == 'printer') return 'lbl_print_shop_mode'.tr;
+    return 'lbl_print_update'.tr;
   }
 
   Future<void> _send() async {
@@ -192,7 +210,9 @@ class _PrintChatScreenState extends State<PrintChatScreen> {
     final order = _order;
     final quote = order?.offeredQuote;
     return PrintScaffold(
-      title: 'lbl_print_chat'.tr,
+      title: order == null
+          ? 'lbl_print_chat'.tr
+          : '#${order.number} · ${widget.viewer == 'shop' ? (order.customerName ?? 'lbl_print_designer_chat'.tr) : 'lbl_print_chat'.tr}',
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : Column(
@@ -209,24 +229,50 @@ class _PrintChatScreenState extends State<PrintChatScreen> {
                       final msg = order!.messages
                           .where((m) => m.thread == widget.thread)
                           .elementAt(index);
-                      final mine = msg.from == 'customer';
-                      return Align(
-                        alignment: mine
-                            ? Alignment.centerRight
-                            : Alignment.centerLeft,
-                        child: Container(
-                          margin: EdgeInsets.only(bottom: 8.v),
-                          padding: EdgeInsets.all(12.h),
-                          decoration: BoxDecoration(
-                            color: mine
-                                ? AppDs.printGold
-                                : AppDs.surfaceRaised,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                      if (msg.from == 'system') {
+                        return Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8.v),
                           child: Text(
                             msg.body,
-                            style: TextStyle(
-                              color: mine ? Colors.black : Colors.white,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.white54, fontSize: 12),
+                          ),
+                        );
+                      }
+                      final mine = _isMine(msg);
+                      return Align(
+                        alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.78),
+                          child: Container(
+                            margin: EdgeInsets.only(bottom: 8.v),
+                            padding: EdgeInsets.symmetric(horizontal: 14.h, vertical: 10.v),
+                            decoration: BoxDecoration(
+                              color: mine ? AppDs.printGold : AppDs.surfaceRaised,
+                              borderRadius: BorderRadius.only(
+                                topLeft: const Radius.circular(16),
+                                topRight: const Radius.circular(16),
+                                bottomLeft: Radius.circular(mine ? 16 : 4),
+                                bottomRight: Radius.circular(mine ? 4 : 16),
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _sender(msg, order),
+                                  style: TextStyle(
+                                    color: mine ? Colors.black54 : AppDs.printGold,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                SizedBox(height: 2.v),
+                                Text(
+                                  msg.body,
+                                  style: TextStyle(color: mine ? Colors.black : Colors.white),
+                                ),
+                              ],
                             ),
                           ),
                         ),

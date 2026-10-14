@@ -10,6 +10,7 @@ import '../../data/repositories/print_repository.dart';
 import 'print_earnings_card.dart';
 import 'print_review_sheet.dart';
 import 'print_mode_switch.dart';
+import 'print_live.dart';
 import 'print_ui.dart';
 
 class PrintRiderHomeScreen extends StatefulWidget {
@@ -29,17 +30,20 @@ class _PrintRiderHomeScreenState extends State<PrintRiderHomeScreen> {
   bool _loading = true;
   int _section = 0;
   Timer? _poll;
+  VoidCallback? _stopLive;
 
   @override
   void initState() {
     super.initState();
     _load();
     _poll = Timer.periodic(const Duration(seconds: 2), (_) => _load());
+    _stopLive = PrintLive.instance.listen(_load);
   }
 
   @override
   void dispose() {
     _poll?.cancel();
+    _stopLive?.call();
     super.dispose();
   }
 
