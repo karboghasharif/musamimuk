@@ -151,6 +151,56 @@ class _PrintChatScreenState extends State<PrintChatScreen> {
     setState(() => _order = (result as PrintSuccess<PrintOrder>).data);
   }
 
+  Future<void> _cancelOrder() async {
+    final order = _order;
+    if (order == null || !order.canCancel || _busy) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppDs.surfaceRaised,
+        title: Text(
+          'lbl_print_cancel_order'.tr,
+          style: const TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          'msg_print_cancel_confirm'.tr,
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('lbl_cancel'.tr),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              'lbl_print_cancel_order'.tr,
+              style: const TextStyle(color: AppDs.printGold),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _busy = true);
+    final result = await _repo.cancelOrder(order.id);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (result is PrintFailure<PrintOrder>) {
+      showAppToast(result.message, type: ToastificationType.error);
+      return;
+    }
+    final cancelled = (result as PrintSuccess<PrintOrder>).data;
+    setState(() => _order = cancelled);
+    final paymentStatus = cancelled.payment?.status;
+    showAppToast(
+      paymentStatus == 'refund_pending' || paymentStatus == 'refunded'
+          ? 'msg_print_refund_pending'.tr
+          : 'msg_print_cancel_ok'.tr,
+      type: ToastificationType.success,
+    );
+  }
+
   Future<void> _showPaySheet() async {
     final order = _order;
     if (order == null) return;
@@ -374,7 +424,27 @@ class _PrintChatScreenState extends State<PrintChatScreen> {
                     padding: EdgeInsets.all(16.h),
                     child: PrintGoldButton(
                       label: 'lbl_print_pay_now'.tr,
+                      loading: _busy,
                       onPressed: _showPaySheet,
+                    ),
+                  ),
+                if (widget.viewer == 'customer' &&
+                    order != null &&
+                    order.canCancel)
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(16.h, 0, 16.h, 8.v),
+                    child: SizedBox(
+                      height: 44.v,
+                      width: double.infinity,
+                      child: OutlinedButton(
+                        onPressed: _busy ? null : _cancelOrder,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white70,
+                          side: const BorderSide(color: Colors.white24),
+                          minimumSize: Size(double.infinity, 44.v),
+                        ),
+                        child: Text('lbl_print_cancel_order'.tr),
+                      ),
                     ),
                   ),
                 Padding(

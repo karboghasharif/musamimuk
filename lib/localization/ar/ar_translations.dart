@@ -956,6 +956,12 @@ final Map<String, String> arSa = {
   "lbl_print_decline": "رفض",
   "lbl_print_subtotal": "المجموع الفرعي",
   "lbl_print_pay_now": "ادفع الآن",
+  "lbl_print_cancel_order": "إلغاء الطلب",
+  "msg_print_cancel_confirm":
+      "إلغاء طلب الطباعة؟ إذا دفعت بالفعل سيبدأ استرداد المبلغ.",
+  "msg_print_cancel_ok": "تم إلغاء الطلب.",
+  "msg_print_refund_pending":
+      "تم إلغاء الطلب. جاري استرداد المبلغ وسيظهر على الدفع قريباً.",
   "lbl_print_protected_pay": "دفع محمي",
   "msg_print_payment_protected":
       "دفعتك محمية. لا يمكن للمطبعة صرف هذا المبلغ بالريال حتى تستلم الطلب.",

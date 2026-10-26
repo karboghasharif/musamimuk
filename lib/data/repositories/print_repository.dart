@@ -166,6 +166,12 @@ class PrintRepository {
     );
   }
 
+  Future<PrintResult<PrintOrder>> cancelOrder(int orderId) {
+    return _sendOrder(
+      () => _dio.post<Map<String, dynamic>>('print/orders/$orderId/cancel'),
+    );
+  }
+
   Future<PrintResult<PrintStripeConnect>> startStripeConnect(String kind) async {
     try {
       final path = kind == 'rider'

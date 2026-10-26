@@ -988,6 +988,12 @@ final Map<String, String> enUs = {
   "lbl_print_decline": "Decline",
   "lbl_print_subtotal": "Subtotal",
   "lbl_print_pay_now": "Pay now",
+  "lbl_print_cancel_order": "Cancel order",
+  "msg_print_cancel_confirm":
+      "Cancel this print order? If you already paid, a refund will be started.",
+  "msg_print_cancel_ok": "Order cancelled.",
+  "msg_print_refund_pending":
+      "Order cancelled. Your refund is processing and will appear on the payment shortly.",
   "lbl_print_protected_pay": "Protected payment",
   "msg_print_payment_protected":
       "Your payment is protected. The shop cannot spend this SAR until you pick up the order.",
