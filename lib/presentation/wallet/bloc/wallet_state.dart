@@ -18,6 +18,7 @@ class WalletState extends Equatable {
     this.purchasingSku,
     this.storeProductsReady = false,
     this.iapAvailable = false,
+    this.rcPriceLabels = const {},
     this.errorMessage,
     this.purchaseMessage,
   });
@@ -38,6 +39,8 @@ class WalletState extends Equatable {
   final String? purchasingSku;
   final bool storeProductsReady;
   final bool iapAvailable;
+  /// Localized prices from RevenueCat offerings, keyed by SKU.
+  final Map<String, String> rcPriceLabels;
   final String? errorMessage;
   final String? purchaseMessage;
 
@@ -63,6 +66,7 @@ class WalletState extends Equatable {
     bool clearPurchasingSku = false,
     bool? storeProductsReady,
     bool? iapAvailable,
+    Map<String, String>? rcPriceLabels,
     String? errorMessage,
     bool clearError = false,
     String? purchaseMessage,
@@ -88,6 +92,7 @@ class WalletState extends Equatable {
           clearPurchasingSku ? null : (purchasingSku ?? this.purchasingSku),
       storeProductsReady: storeProductsReady ?? this.storeProductsReady,
       iapAvailable: iapAvailable ?? this.iapAvailable,
+      rcPriceLabels: rcPriceLabels ?? this.rcPriceLabels,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       purchaseMessage: clearPurchaseMessage
           ? null
@@ -113,6 +118,7 @@ class WalletState extends Equatable {
         purchasingSku,
         storeProductsReady,
         iapAvailable,
+        rcPriceLabels,
         errorMessage,
         purchaseMessage,
       ];

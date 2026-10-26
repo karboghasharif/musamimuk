@@ -1,3 +1,7 @@
+import 'print_kyc.dart';
+
+export 'print_kyc.dart' show PrintDocument, PrintKyc, PrintPickedDoc;
+
 class PrintSpec {
   const PrintSpec({
     this.sizeId = 'a4',
@@ -58,6 +62,7 @@ class PrintShopSummary {
     required this.id,
     required this.name,
     this.nameAr,
+    this.ownerName,
     this.phone,
     this.status = 'pending',
     this.verified = false,
@@ -66,6 +71,9 @@ class PrintShopSummary {
     this.address,
     this.district,
     this.about,
+    this.crNumber,
+    this.vatNumber,
+    this.iban,
     this.services = const [],
     this.hours = const {},
     this.rating = 0,
@@ -78,6 +86,8 @@ class PrintShopSummary {
     this.distanceKm,
     this.openNow = false,
     this.reviewNote,
+    this.kycReviewRequired = false,
+    this.documents = const [],
     this.levelLabel,
     this.levelLabelAr,
     this.levelProgress,
@@ -86,6 +96,7 @@ class PrintShopSummary {
   final int id;
   final String name;
   final String? nameAr;
+  final String? ownerName;
   final String? phone;
   final String status;
   final bool verified;
@@ -94,6 +105,9 @@ class PrintShopSummary {
   final String? address;
   final String? district;
   final String? about;
+  final String? crNumber;
+  final String? vatNumber;
+  final String? iban;
   final List<String> services;
   final Map<String, dynamic> hours;
   final double rating;
@@ -106,19 +120,26 @@ class PrintShopSummary {
   final double? distanceKm;
   final bool openNow;
   final String? reviewNote;
+  final bool kycReviewRequired;
+  final List<PrintDocument> documents;
   final String? levelLabel;
   final String? levelLabelAr;
   final PrintLevelProgress? levelProgress;
 
   bool get canOperate => status == 'verified' || status == 'active';
 
+  bool get needsKycAction =>
+      status == 'needs_info' || status == 'pending' || kycReviewRequired;
+
   factory PrintShopSummary.fromJson(Map<String, dynamic> json) {
     final services = json['services'];
     final hours = json['hours'];
+    final docs = json['documents'];
     return PrintShopSummary(
       id: PrintSpec._asInt(json['id']) ?? 0,
       name: json['name']?.toString() ?? '',
       nameAr: json['name_ar']?.toString(),
+      ownerName: json['owner_name']?.toString(),
       phone: json['phone']?.toString(),
       status: json['status']?.toString() ?? 'pending',
       verified: json['verified'] == true,
@@ -127,6 +148,9 @@ class PrintShopSummary {
       address: json['address']?.toString(),
       district: json['district']?.toString(),
       about: json['about']?.toString(),
+      crNumber: json['cr_number']?.toString(),
+      vatNumber: json['vat_number']?.toString(),
+      iban: json['iban']?.toString(),
       services: services is List
           ? services.map((e) => e.toString()).toList()
           : const [],
@@ -141,6 +165,13 @@ class PrintShopSummary {
       distanceKm: _asDouble(json['distance_km']),
       openNow: json['open_now'] == true,
       reviewNote: json['review_note']?.toString(),
+      kycReviewRequired: json['kyc_review_required'] == true,
+      documents: docs is List
+          ? docs
+              .whereType<Map>()
+              .map((e) => PrintDocument.fromJson(e.cast<String, dynamic>()))
+              .toList()
+          : const [],
       levelLabel: json['level_label']?.toString(),
       levelLabelAr: json['level_label_ar']?.toString(),
       levelProgress: json['level_progress'] is Map
@@ -579,7 +610,12 @@ class PrintRiderProfile {
     this.iban,
     this.nationalId,
     this.district,
+    this.lat,
+    this.lng,
+    this.areas = const [],
     this.reviewNote,
+    this.kycReviewRequired = false,
+    this.documents = const [],
     this.completedDeliveries = 0,
     this.rating = 0,
     this.reviewCount = 0,
@@ -599,7 +635,12 @@ class PrintRiderProfile {
   final String? iban;
   final String? nationalId;
   final String? district;
+  final double? lat;
+  final double? lng;
+  final List<String> areas;
   final String? reviewNote;
+  final bool kycReviewRequired;
+  final List<PrintDocument> documents;
   final int completedDeliveries;
   final double rating;
   final int reviewCount;
@@ -610,7 +651,12 @@ class PrintRiderProfile {
 
   bool get isApproved => status == 'approved';
 
+  bool get needsKycAction =>
+      status == 'needs_info' || status == 'pending' || kycReviewRequired;
+
   factory PrintRiderProfile.fromJson(Map<String, dynamic> json) {
+    final areas = json['areas'];
+    final docs = json['documents'];
     return PrintRiderProfile(
       id: PrintSpec._asInt(json['id']) ?? 0,
       name: json['name']?.toString() ?? '',
@@ -622,7 +668,17 @@ class PrintRiderProfile {
       iban: json['iban']?.toString(),
       nationalId: json['national_id']?.toString(),
       district: json['district']?.toString(),
+      lat: PrintShopSummary._asDouble(json['lat']),
+      lng: PrintShopSummary._asDouble(json['lng']),
+      areas: areas is List ? areas.map((e) => e.toString()).toList() : const [],
       reviewNote: json['review_note']?.toString(),
+      kycReviewRequired: json['kyc_review_required'] == true,
+      documents: docs is List
+          ? docs
+              .whereType<Map>()
+              .map((e) => PrintDocument.fromJson(e.cast<String, dynamic>()))
+              .toList()
+          : const [],
       completedDeliveries: PrintSpec._asInt(json['completed_deliveries']) ?? 0,
       rating: PrintShopSummary._asDouble(json['rating']) ?? 0,
       reviewCount: PrintSpec._asInt(json['review_count']) ?? 0,
@@ -850,6 +906,85 @@ class PrintPayoutRecord {
   }
 }
 
+class PrintStripeCheckout {
+  const PrintStripeCheckout({
+    required this.mode,
+    this.publishableKey,
+    this.paymentIntentId,
+    this.clientSecret,
+    this.status,
+    this.currency,
+    this.amount,
+    this.message,
+  });
+
+  final String mode;
+  final String? publishableKey;
+  final String? paymentIntentId;
+  final String? clientSecret;
+  final String? status;
+  final String? currency;
+  final double? amount;
+  final String? message;
+
+  bool get isSimulated => mode == 'simulated';
+  bool get needsClientPayment =>
+      mode == 'payment_intent' &&
+      clientSecret != null &&
+      clientSecret!.isNotEmpty &&
+      status != 'succeeded' &&
+      status != 'already_protected';
+
+  factory PrintStripeCheckout.fromJson(Map<String, dynamic> json) {
+    return PrintStripeCheckout(
+      mode: json['mode']?.toString() ?? 'simulated',
+      publishableKey: json['publishable_key']?.toString(),
+      paymentIntentId: json['payment_intent_id']?.toString(),
+      clientSecret: json['client_secret']?.toString(),
+      status: json['status']?.toString(),
+      currency: json['currency']?.toString(),
+      amount: PrintShopSummary._asDouble(json['amount']),
+      message: json['message']?.toString(),
+    );
+  }
+}
+
+class PrintPaySession {
+  const PrintPaySession({required this.order, this.stripe});
+
+  final PrintOrder order;
+  final PrintStripeCheckout? stripe;
+}
+
+class PrintStripeConnect {
+  const PrintStripeConnect({
+    required this.mode,
+    this.accountId,
+    this.onboardingComplete = false,
+    this.payoutsEnabled = false,
+    this.required = false,
+    this.url,
+  });
+
+  final String mode;
+  final String? accountId;
+  final bool onboardingComplete;
+  final bool payoutsEnabled;
+  final bool required;
+  final String? url;
+
+  factory PrintStripeConnect.fromJson(Map<String, dynamic> json) {
+    return PrintStripeConnect(
+      mode: json['mode']?.toString() ?? 'simulated',
+      accountId: json['account_id']?.toString(),
+      onboardingComplete: json['onboarding_complete'] == true,
+      payoutsEnabled: json['payouts_enabled'] == true,
+      required: json['required'] == true,
+      url: json['url']?.toString(),
+    );
+  }
+}
+
 class PrintEarnings {
   const PrintEarnings({
     this.kind = 'shop',
@@ -861,6 +996,7 @@ class PrintEarnings {
     this.iban,
     this.currency = 'SAR',
     this.payouts = const [],
+    this.stripe,
   });
 
   final String kind;
@@ -872,9 +1008,11 @@ class PrintEarnings {
   final String? iban;
   final String currency;
   final List<PrintPayoutRecord> payouts;
+  final PrintStripeConnect? stripe;
 
   factory PrintEarnings.fromJson(Map<String, dynamic> json) {
     final payouts = json['payouts'];
+    final stripe = json['stripe'];
     return PrintEarnings(
       kind: json['kind']?.toString() ?? 'shop',
       available: PrintShopSummary._asDouble(json['available']) ?? 0,
@@ -894,6 +1032,9 @@ class PrintEarnings {
                 )
                 .toList()
           : const [],
+      stripe: stripe is Map
+          ? PrintStripeConnect.fromJson(stripe.cast<String, dynamic>())
+          : null,
     );
   }
 }

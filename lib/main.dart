@@ -1,3 +1,4 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,8 +9,13 @@ import 'core/app_export.dart';
 import 'core/deeplink/app_deep_link_service.dart';
 import 'data/repositories/auth_repository.dart';
 import 'data/services/custom_font_library.dart';
+import 'data/services/push/push_notification_service.dart';
+import 'data/services/revenue_cat/revenue_cat_service.dart';
 import 'data/services/user_font_library.dart';
+import 'firebase_options.dart';
 import 'presentation/guest_upgrade/guest_upgrade_prompt.dart';
+import 'presentation/subscription/push_auth_sync.dart';
+import 'presentation/subscription/revenue_cat_auth_sync.dart';
 import 'presentation/wallet/bloc/wallet_bloc.dart';
 import 'presentation/wallet/wallet_auth_sync.dart';
 import 'presentation/wallet/widgets/insufficient_coins_sheet.dart';
@@ -17,6 +23,19 @@ import 'presentation/wallet/widgets/insufficient_coins_sheet.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   Logger.init(kReleaseMode ? LogMode.live : LogMode.debug);
+
+  // Firebase + FCM (Android / iOS). Skip on unsupported platforms.
+  if (!kIsWeb) {
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+      await PushNotificationService.instance.initialize();
+    } catch (e, st) {
+      debugPrint('Firebase / FCM init failed: $e\n$st');
+    }
+  }
+
   await AppDeepLinkService.instance.init();
   const startupBackground = Color(0xFF252A30);
   await Future.wait([
@@ -47,6 +66,24 @@ Future<void> main() async {
       // Network or other non-expiry failure: keep cached session for offline use.
     }
   }
+
+  // RevenueCat: configure once; identify known users so Pro travels with the account.
+  String? rcAppUserId;
+  if (prefs.isLoggedIn() && !prefs.isGuestAccount()) {
+    final sessionMap = prefs.getUserSession();
+    if (sessionMap != null) {
+      final id = UserSession.fromJson(sessionMap).id;
+      if (id > 0) rcAppUserId = id.toString();
+    }
+  }
+  await RevenueCatService.instance.configure(appUserId: rcAppUserId);
+  if (rcAppUserId != null) {
+    // ignore: unawaited_futures
+    syncRevenueCatAfterAuth();
+    // ignore: unawaited_futures
+    syncPushTokenAfterAuth();
+  }
+
   appLocaleNotifier.syncFromPrefs();
   // Warm custom font catalog in the background (text editor uses it as primary).
   if (prefs.isLoggedIn()) {
@@ -61,8 +98,11 @@ Future<void> main() async {
       showGuestUpgradePrompt(message);
   SessionManager.instance.insufficientCoinsHandler = (info) =>
       showInsufficientCoinsSheet(info);
-  SessionManager.instance.authClearedHandler = () =>
-      syncWalletAfterAuth(forceReset: true);
+  SessionManager.instance.authClearedHandler = () {
+    syncWalletAfterAuth(forceReset: true);
+    // ignore: unawaited_futures
+    syncRevenueCatAfterAuth(forceAnonymous: true);
+  };
   runApp(const MyApp());
 }
 

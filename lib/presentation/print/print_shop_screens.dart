@@ -12,6 +12,9 @@ import 'print_dispute_sheet.dart';
 import 'print_review_sheet.dart';
 import 'print_mode_switch.dart';
 import 'print_live.dart';
+import 'print_hours_services.dart';
+import 'print_kyc_wizard.dart';
+import 'print_location_picker.dart';
 import 'print_ui.dart';
 
 class PrintShopRegisterScreen extends StatefulWidget {
@@ -25,16 +28,35 @@ class PrintShopRegisterScreen extends StatefulWidget {
 }
 
 class _PrintShopRegisterScreenState extends State<PrintShopRegisterScreen> {
+  static const _totalSteps = 5;
+
   final _repo = PrintRepository();
+  final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _nameAr = TextEditingController();
   final _owner = TextEditingController();
   final _phone = TextEditingController();
+  final _about = TextEditingController();
   final _cr = TextEditingController();
   final _vat = TextEditingController();
   final _iban = TextEditingController();
   final _address = TextEditingController();
   final _district = TextEditingController();
+  final _lat = TextEditingController();
+  final _lng = TextEditingController();
+  final _starting = TextEditingController();
+  final Map<String, PrintPickedDoc?> _docs = {
+    for (final k in [
+      ...PrintKyc.shopRequiredKinds,
+      ...PrintKyc.shopOptionalKinds,
+    ])
+      k: null,
+  };
+  String _open = '09:00';
+  String _close = '22:00';
+  Set<int> _days = {0, 1, 2, 3, 4, 5, 6};
+  Set<String> _services = {'digital'};
+  int _step = 1;
   bool _saving = false;
 
   @override
@@ -43,29 +65,72 @@ class _PrintShopRegisterScreenState extends State<PrintShopRegisterScreen> {
     _nameAr.dispose();
     _owner.dispose();
     _phone.dispose();
+    _about.dispose();
     _cr.dispose();
     _vat.dispose();
     _iban.dispose();
     _address.dispose();
     _district.dispose();
+    _lat.dispose();
+    _lng.dispose();
+    _starting.dispose();
     super.dispose();
+  }
+
+  bool _validateStep() {
+    if (_step == 4) {
+      for (final kind in PrintKyc.shopRequiredKinds) {
+        if (_docs[kind] == null) {
+          showAppToast('msg_print_docs_required'.tr, type: ToastificationType.error);
+          return false;
+        }
+      }
+      return true;
+    }
+    return _formKey.currentState?.validate() ?? false;
+  }
+
+  Future<void> _next() async {
+    if (!_validateStep()) return;
+    if (_step == 2) {
+      await fillDebugLocationIfEmpty(lat: _lat, lng: _lng);
+      if (_lat.text.trim().isEmpty || _lng.text.trim().isEmpty) {
+        showAppToast('msg_print_location_required'.tr, type: ToastificationType.error);
+        return;
+      }
+    }
+    if (_step < _totalSteps) {
+      setState(() => _step++);
+      return;
+    }
+    await _submit();
   }
 
   Future<void> _submit() async {
     if (_saving) return;
     setState(() => _saving = true);
+    final docs = _docs.values.whereType<PrintPickedDoc>().toList();
     final result = await _repo.registerShop(
       name: _name.text.trim(),
       nameAr: _nameAr.text.trim().isEmpty ? null : _nameAr.text.trim(),
       ownerName: _owner.text.trim(),
       phone: _phone.text.trim(),
+      about: _about.text.trim().isEmpty ? null : _about.text.trim(),
       crNumber: _cr.text.trim().isEmpty ? null : _cr.text.trim(),
       vatNumber: _vat.text.trim().isEmpty ? null : _vat.text.trim(),
       iban: _iban.text.trim().isEmpty ? null : _iban.text.trim(),
-      lat: 21.54,
-      lng: 39.17,
+      lat: double.tryParse(_lat.text.trim()),
+      lng: double.tryParse(_lng.text.trim()),
       address: _address.text.trim().isEmpty ? null : _address.text.trim(),
       district: _district.text.trim().isEmpty ? null : _district.text.trim(),
+      startingPrice: double.tryParse(_starting.text.trim()),
+      services: _services.toList(),
+      hours: {
+        'open': _open,
+        'close': _close,
+        'days': _days.toList()..sort(),
+      },
+      documents: docs,
     );
     if (!mounted) return;
     setState(() => _saving = false);
@@ -73,50 +138,163 @@ class _PrintShopRegisterScreenState extends State<PrintShopRegisterScreen> {
       showAppToast(result.message, type: ToastificationType.error);
       return;
     }
+    showAppToast('msg_print_kyc_submitted'.tr, type: ToastificationType.success);
     NavigatorService.pushReplacementNamed(AppRoutes.printShopHomeScreen);
   }
 
   @override
   Widget build(BuildContext context) {
-    InputDecoration deco(String label) => InputDecoration(
-      labelText: label,
-      labelStyle: const TextStyle(color: AppDs.textOnDarkSecondary),
-      filled: true,
-      fillColor: AppDs.surfaceRaised,
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-    );
-
-    Widget field(TextEditingController c, String label) => Padding(
-      padding: EdgeInsets.only(bottom: 10.v),
-      child: TextField(
-        controller: c,
-        style: const TextStyle(color: Colors.white),
-        decoration: deco(label),
-      ),
-    );
-
+    final titles = [
+      'lbl_print_step_business'.tr,
+      'lbl_print_step_location'.tr,
+      'lbl_print_step_commerce'.tr,
+      'lbl_print_step_documents'.tr,
+      'lbl_print_step_review'.tr,
+    ];
     return PrintScaffold(
       title: 'lbl_print_register_shop'.tr,
       showBack: false,
       actions: const [PrintModeButton()],
-      body: ListView(
-        padding: EdgeInsets.all(16.h),
-        children: [
-          field(_name, 'lbl_print_shop_name'.tr),
-          field(_nameAr, 'lbl_print_shop_name_ar'.tr),
-          field(_owner, 'lbl_print_owner_name'.tr),
-          field(_phone, 'lbl_print_phone'.tr),
-          field(_cr, 'lbl_print_cr'.tr),
-          field(_vat, 'lbl_print_vat'.tr),
-          field(_iban, 'lbl_print_iban'.tr),
-          field(_address, 'lbl_print_address'.tr),
-          field(_district, 'lbl_print_district'.tr),
-          PrintGoldButton(
-            label: 'lbl_print_submit'.tr,
-            loading: _saving,
-            onPressed: _submit,
-          ),
-        ],
+      body: Form(
+        key: _formKey,
+        child: ListView(
+          padding: EdgeInsets.all(16.h),
+          children: [
+            PrintKycStepHeader(
+              step: _step,
+              total: _totalSteps,
+              title: titles[_step - 1],
+            ),
+            if (_step == 1) ...[
+              PrintKycTextField(
+                controller: _name,
+                label: 'lbl_print_shop_name'.tr,
+                validator: requiredText,
+              ),
+              PrintKycTextField(
+                controller: _nameAr,
+                label: 'lbl_print_shop_name_ar'.tr,
+              ),
+              PrintKycTextField(
+                controller: _owner,
+                label: 'lbl_print_owner_name'.tr,
+                validator: requiredText,
+              ),
+              PrintKycTextField(
+                controller: _phone,
+                label: 'lbl_print_phone'.tr,
+                keyboardType: TextInputType.phone,
+                validator: requiredText,
+              ),
+              PrintKycTextField(
+                controller: _about,
+                label: 'lbl_print_about'.tr,
+                maxLines: 3,
+              ),
+            ],
+            if (_step == 2) ...[
+              PrintKycTextField(
+                controller: _address,
+                label: 'lbl_print_address'.tr,
+                validator: requiredText,
+              ),
+              PrintKycTextField(
+                controller: _district,
+                label: 'lbl_print_district'.tr,
+                validator: requiredText,
+              ),
+              PrintLocationPicker(
+                latController: _lat,
+                lngController: _lng,
+                onChanged: () => setState(() {}),
+              ),
+            ],
+            if (_step == 3) ...[
+              PrintKycTextField(controller: _cr, label: 'lbl_print_cr'.tr),
+              PrintKycTextField(controller: _vat, label: 'lbl_print_vat'.tr),
+              PrintKycTextField(
+                controller: _iban,
+                label: 'lbl_print_iban'.tr,
+                validator: requiredText,
+              ),
+              PrintKycTextField(
+                controller: _starting,
+                label: 'lbl_print_starting_price'.tr,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              ),
+              SizedBox(height: 8.v),
+              PrintHoursEditor(
+                open: _open,
+                close: _close,
+                days: _days,
+                onOpenChanged: (v) => setState(() => _open = v),
+                onCloseChanged: (v) => setState(() => _close = v),
+                onDaysChanged: (v) => setState(() => _days = v),
+              ),
+              SizedBox(height: 12.v),
+              PrintServicesChips(
+                selected: _services,
+                onChanged: (v) => setState(() => _services = v),
+              ),
+            ],
+            if (_step == 4)
+              ..._docs.keys.map(
+                (kind) => PrintKycDocSlot(
+                  kind: kind,
+                  required: PrintKyc.shopRequiredKinds.contains(kind),
+                  picked: _docs[kind],
+                  onPick: () async {
+                    final doc = await pickPrintKycFile(kind);
+                    if (doc != null) setState(() => _docs[kind] = doc);
+                  },
+                  onClear: () => setState(() => _docs[kind] = null),
+                ),
+              ),
+            if (_step == 5) ...[
+              _ShopFact('lbl_print_shop_name'.tr, _name.text),
+              _ShopFact('lbl_print_owner_name'.tr, _owner.text),
+              _ShopFact('lbl_print_phone'.tr, _phone.text),
+              _ShopFact('lbl_print_address'.tr, _address.text),
+              _ShopFact('lbl_print_iban'.tr, _iban.text),
+              _ShopFact(
+                'lbl_print_documents'.tr,
+                '${_docs.values.whereType<PrintPickedDoc>().length}',
+              ),
+            ],
+            SizedBox(height: 16.v),
+            Row(
+              children: [
+                if (_step > 1)
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _saving
+                          ? null
+                          : () => setState(() => _step--),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(44, 48),
+                        side: const BorderSide(color: Colors.white24),
+                      ),
+                      child: Text(
+                        'lbl_print_back'.tr,
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                    ),
+                  ),
+                if (_step > 1) SizedBox(width: 12.h),
+                Expanded(
+                  flex: 2,
+                  child: PrintGoldButton(
+                    label: _step == _totalSteps
+                        ? 'lbl_print_submit'.tr
+                        : 'lbl_print_next'.tr,
+                    loading: _saving,
+                    onPressed: _next,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -231,42 +409,50 @@ class _PrintShopHomeScreenState extends State<PrintShopHomeScreen> {
     }
     final shop = _shop;
     if (shop == null || !shop.canOperate) {
-      final message = shop == null
-          ? 'msg_print_register_prompt'.tr
-          : shop.status == 'pending'
-              ? 'msg_print_shop_pending'.tr
-              : 'lbl_print_status_${shop.status}'.tr;
       return PrintScaffold(
         title: 'lbl_print_shop_mode'.tr,
         showBack: false,
         actions: const [PrintModeButton()],
-        body: Center(
-          child: Padding(
-            padding: EdgeInsets.all(24.h),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  message,
-                  style: const TextStyle(color: Colors.white70),
-                  textAlign: TextAlign.center,
+        body: ListView(
+          padding: EdgeInsets.all(24.h),
+          children: [
+            if (shop == null)
+              Text(
+                'msg_print_register_prompt'.tr,
+                style: const TextStyle(color: Colors.white70),
+                textAlign: TextAlign.center,
+              )
+            else ...[
+              PrintKycStatusBanner(
+                status: shop.status,
+                reviewNote: shop.reviewNote,
+                onFixDocs: () => _uploadDocsSheet(shop),
+                onEdit: () => _editProfileSheet(shop),
+              ),
+              Text(
+                'lbl_print_documents'.tr,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
                 ),
-                if (_orders.isNotEmpty) ...[
-                  SizedBox(height: 16.v),
-                  ..._orders.map(
-                    (order) => Padding(
-                      padding: EdgeInsets.only(bottom: 8.v),
-                      child: Text(
-                        '#${order.number} · ${order.customerName ?? ''} · ${'lbl_print_status_${order.status}'.tr}',
-                        style: const TextStyle(color: Colors.white),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
+              ),
+              SizedBox(height: 8.v),
+              PrintDocumentList(documents: shop.documents),
+            ],
+            if (_orders.isNotEmpty) ...[
+              SizedBox(height: 16.v),
+              ..._orders.map(
+                (order) => Padding(
+                  padding: EdgeInsets.only(bottom: 8.v),
+                  child: Text(
+                    '#${order.number} · ${order.customerName ?? ''} · ${'lbl_print_status_${order.status}'.tr}',
+                    style: const TextStyle(color: Colors.white),
+                    textAlign: TextAlign.center,
                   ),
-                ],
-              ],
-            ),
-          ),
+                ),
+              ),
+            ],
+          ],
         ),
       );
     }
@@ -393,18 +579,246 @@ class _PrintShopHomeScreenState extends State<PrintShopHomeScreen> {
               ),
             if (_section == 2) const PrintEarningsCard(kind: 'shop'),
             if (_section == 3) ...[
+              if (shop.needsKycAction)
+                PrintKycStatusBanner(
+                  status: shop.status,
+                  reviewNote: shop.reviewNote,
+                  onFixDocs: () => _uploadDocsSheet(shop),
+                  onEdit: () => _editProfileSheet(shop),
+                ),
               _ShopFact('lbl_print_shop_name'.tr, shop.name),
+              if (shop.ownerName != null)
+                _ShopFact('lbl_print_owner_name'.tr, shop.ownerName!),
               if (shop.phone != null) _ShopFact('lbl_print_phone'.tr, shop.phone!),
-              if (shop.address != null) _ShopFact('lbl_print_address'.tr, shop.address!),
-              if (shop.district != null) _ShopFact('lbl_print_district'.tr, shop.district!),
-              _ShopFact(
-                'lbl_print_status_${shop.status}'.tr,
-                shop.reviewNote ?? '',
+              if (shop.address != null)
+                _ShopFact('lbl_print_address'.tr, shop.address!),
+              if (shop.district != null)
+                _ShopFact('lbl_print_district'.tr, shop.district!),
+              if (shop.iban != null) _ShopFact('lbl_print_iban'.tr, shop.iban!),
+              if (shop.crNumber != null) _ShopFact('lbl_print_cr'.tr, shop.crNumber!),
+              SizedBox(height: 12.v),
+              Text(
+                'lbl_print_documents'.tr,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              PrintDocumentList(documents: shop.documents),
+              SizedBox(height: 16.v),
+              PrintGoldButton(
+                label: 'lbl_print_edit_profile'.tr,
+                onPressed: () => _editProfileSheet(shop),
+              ),
+              SizedBox(height: 10.v),
+              OutlinedButton(
+                onPressed: () => _uploadDocsSheet(shop),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(48),
+                  side: const BorderSide(color: AppDs.printGold),
+                ),
+                child: Text(
+                  'lbl_print_upload_docs'.tr,
+                  style: const TextStyle(color: AppDs.printGold),
+                ),
               ),
             ],
           ],
         ),
       ),
+    );
+  }
+
+  Future<void> _editProfileSheet(PrintShopSummary shop) async {
+    final name = TextEditingController(text: shop.name);
+    final phone = TextEditingController(text: shop.phone ?? '');
+    final address = TextEditingController(text: shop.address ?? '');
+    final district = TextEditingController(text: shop.district ?? '');
+    final about = TextEditingController(text: shop.about ?? '');
+    final iban = TextEditingController(text: shop.iban ?? '');
+    final lat = TextEditingController(text: shop.lat?.toString() ?? '');
+    final lng = TextEditingController(text: shop.lng?.toString() ?? '');
+    var saving = false;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppDs.surfaceRaised,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setModal) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 16.h,
+                right: 16.h,
+                top: 16.v,
+                bottom: MediaQuery.viewInsetsOf(ctx).bottom + 16.v,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'lbl_print_edit_profile'.tr,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 18,
+                      ),
+                    ),
+                    SizedBox(height: 12.v),
+                    PrintKycTextField(controller: name, label: 'lbl_print_shop_name'.tr),
+                    PrintKycTextField(controller: phone, label: 'lbl_print_phone'.tr),
+                    PrintKycTextField(controller: address, label: 'lbl_print_address'.tr),
+                    PrintKycTextField(controller: district, label: 'lbl_print_district'.tr),
+                    PrintKycTextField(controller: iban, label: 'lbl_print_iban'.tr),
+                    PrintKycTextField(controller: about, label: 'lbl_print_about'.tr, maxLines: 3),
+                    PrintKycTextField(controller: lat, label: 'lbl_print_lat'.tr),
+                    PrintKycTextField(controller: lng, label: 'lbl_print_lng'.tr),
+                    PrintGoldButton(
+                      label: 'lbl_print_save'.tr,
+                      loading: saving,
+                      onPressed: () async {
+                        if (saving) return;
+                        setModal(() => saving = true);
+                        final result = await _repo.updateShop({
+                          'name': name.text.trim(),
+                          'phone': phone.text.trim(),
+                          'address': address.text.trim(),
+                          'district': district.text.trim(),
+                          'about': about.text.trim(),
+                          'iban': iban.text.trim(),
+                          if (double.tryParse(lat.text.trim()) != null)
+                            'lat': double.parse(lat.text.trim()),
+                          if (double.tryParse(lng.text.trim()) != null)
+                            'lng': double.parse(lng.text.trim()),
+                        });
+                        if (!mounted) return;
+                        setModal(() => saving = false);
+                        if (result is PrintFailure<PrintShopSummary>) {
+                          showAppToast(
+                            result.message,
+                            type: ToastificationType.error,
+                          );
+                          return;
+                        }
+                        showAppToast(
+                          'msg_print_profile_saved'.tr,
+                          type: ToastificationType.success,
+                        );
+                        Navigator.pop(ctx);
+                        _load();
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+    name.dispose();
+    phone.dispose();
+    address.dispose();
+    district.dispose();
+    about.dispose();
+    iban.dispose();
+    lat.dispose();
+    lng.dispose();
+  }
+
+  Future<void> _uploadDocsSheet(PrintShopSummary shop) async {
+    final kinds = [
+      ...PrintKyc.shopRequiredKinds,
+      ...PrintKyc.shopOptionalKinds,
+    ];
+    final picked = <String, PrintPickedDoc?>{for (final k in kinds) k: null};
+    var saving = false;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppDs.surfaceRaised,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setModal) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 16.h,
+                right: 16.h,
+                top: 16.v,
+                bottom: MediaQuery.viewInsetsOf(ctx).bottom + 16.v,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'lbl_print_upload_docs'.tr,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 18,
+                      ),
+                    ),
+                    if (shop.reviewNote != null && shop.reviewNote!.isNotEmpty)
+                      Padding(
+                        padding: EdgeInsets.only(top: 8.v, bottom: 8.v),
+                        child: Text(
+                          shop.reviewNote!,
+                          style: const TextStyle(color: Colors.orangeAccent),
+                        ),
+                      ),
+                    ...kinds.map(
+                      (kind) => PrintKycDocSlot(
+                        kind: kind,
+                        required: false,
+                        picked: picked[kind],
+                        onPick: () async {
+                          final doc = await pickPrintKycFile(kind);
+                          if (doc != null) setModal(() => picked[kind] = doc);
+                        },
+                        onClear: () => setModal(() => picked[kind] = null),
+                      ),
+                    ),
+                    PrintGoldButton(
+                      label: 'lbl_print_submit'.tr,
+                      loading: saving,
+                      onPressed: () async {
+                        final docs =
+                            picked.values.whereType<PrintPickedDoc>().toList();
+                        if (docs.isEmpty) {
+                          showAppToast(
+                            'msg_print_docs_required'.tr,
+                            type: ToastificationType.error,
+                          );
+                          return;
+                        }
+                        setModal(() => saving = true);
+                        final result = await _repo.uploadShopDocuments(docs);
+                        if (!mounted) return;
+                        setModal(() => saving = false);
+                        if (result is PrintFailure<PrintShopSummary>) {
+                          showAppToast(
+                            result.message,
+                            type: ToastificationType.error,
+                          );
+                          return;
+                        }
+                        showAppToast(
+                          'msg_print_docs_uploaded'.tr,
+                          type: ToastificationType.success,
+                        );
+                        Navigator.pop(ctx);
+                        _load();
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }

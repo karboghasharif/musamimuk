@@ -137,6 +137,14 @@ Map<String, dynamic>? apiExtractPayloadMap(dynamic data) {
   return null;
 }
 
+/// Optional `meta` object from the unified API envelope.
+Map<String, dynamic>? apiExtractMetaMap(dynamic data) {
+  if (data is! Map) return null;
+  final meta = data['meta'];
+  if (meta is Map) return meta.cast<String, dynamic>();
+  return null;
+}
+
 /// List payload from unified APIs (`data: [...]`) or legacy `dbData` lists.
 List<Map<String, dynamic>> apiExtractDataList(dynamic data) {
   if (data is! Map) return const [];

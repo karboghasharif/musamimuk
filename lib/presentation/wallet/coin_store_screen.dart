@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
+import 'package:purchases_ui_flutter/purchases_ui_flutter.dart';
 import 'package:toastification/toastification.dart';
 
 import '../../core/app_export.dart';
 import '../../core/utils/app_toast.dart';
 import '../../data/models/wallet_models.dart';
+import '../../data/services/revenue_cat/revenue_cat_service.dart';
 import '../../presentation/guest_upgrade/guest_upgrade_prompt.dart';
 import '../../widgets/app_bar/appbar_leading_image.dart';
 import '../../widgets/app_bar/appbar_title.dart';
@@ -91,12 +93,47 @@ class _CoinStoreBody extends StatefulWidget {
 }
 
 class _CoinStoreBodyState extends State<_CoinStoreBody> {
+  bool _openingPaywall = false;
+
   @override
   void initState() {
     super.initState();
     final bloc = context.read<WalletBloc>();
     bloc.add(const WalletRefreshEvent());
     bloc.add(const WalletLoadPackagesEvent());
+  }
+
+  Future<void> _openCoinsPaywall() async {
+    if (_openingPaywall) return;
+    final bloc = context.read<WalletBloc>();
+    if (bloc.state.isPurchasing) return;
+
+    setState(() => _openingPaywall = true);
+    try {
+      final result = await RevenueCatService.instance.presentCoinsPaywall(
+        onPurchaseCompleted: (info, transaction) {
+          final productId = transaction.productIdentifier.trim();
+          final txnId = transaction.transactionIdentifier.trim();
+          if (productId.isEmpty || txnId.isEmpty) return;
+          bloc.add(
+            WalletCreditRevenueCatPurchaseEvent(
+              productId: productId,
+              storeTransactionId: txnId,
+            ),
+          );
+        },
+      );
+      if (!mounted) return;
+      if (result == PaywallResult.error) {
+        showAppToast(
+          'msg_coin_paywall_error'.tr,
+          type: ToastificationType.error,
+        );
+      }
+      bloc.add(const WalletRefreshEvent());
+    } finally {
+      if (mounted) setState(() => _openingPaywall = false);
+    }
   }
 
   @override
@@ -169,6 +206,16 @@ class _CoinStoreBodyState extends State<_CoinStoreBody> {
                   color: AppDs.textOnDarkSecondary,
                 ),
                 SizedBox(height: AppDs.space4.v),
+                if (RevenueCatService.instance.isConfigured) ...[
+                  AppPrimaryButton(
+                    label: 'lbl_buy_coins'.tr,
+                    isLoading: _openingPaywall || state.isPurchasing,
+                    onPressed: (_openingPaywall || state.isPurchasing)
+                        ? null
+                        : _openCoinsPaywall,
+                  ),
+                  SizedBox(height: AppDs.space4.v),
+                ],
                 if (state.packages.isEmpty)
                   Padding(
                     padding: EdgeInsets.symmetric(vertical: AppDs.space8.v),
@@ -189,6 +236,7 @@ class _CoinStoreBodyState extends State<_CoinStoreBody> {
                             .read<WalletBloc>()
                             .iapService
                             .productForSku(pkg.sku),
+                        rcPriceLabel: state.rcPriceLabels[pkg.sku],
                         purchasing: state.isPurchasing &&
                             state.purchasingSku == pkg.sku,
                         disabled: state.isPurchasing,
@@ -267,20 +315,24 @@ class _PackageTile extends StatelessWidget {
     required this.package,
     required this.onBuy,
     this.product,
+    this.rcPriceLabel,
     this.purchasing = false,
     this.disabled = false,
   });
 
   final WalletPackage package;
   final ProductDetails? product;
+  final String? rcPriceLabel;
   final VoidCallback onBuy;
   final bool purchasing;
   final bool disabled;
 
   @override
   Widget build(BuildContext context) {
-    final priceLabel = product?.price ??
-        _formatMicros(package.priceMicros, package.currency);
+    final priceLabel = (rcPriceLabel != null && rcPriceLabel!.isNotEmpty)
+        ? rcPriceLabel!
+        : (product?.price ??
+            _formatMicros(package.priceMicros, package.currency));
     final bonus = package.bonusCoins;
 
     return Container(

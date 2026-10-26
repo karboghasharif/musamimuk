@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "774036147464",
+    "project_id": "musamimuk-1556b",
+    "storage_bucket": "musamimuk-1556b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:774036147464:android:970ba390644946facdb0bd",
+        "android_client_info": {
+          "package_name": "com.musamimuk.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAbAtGxF-NwJ0VHYe-WxQBh6bF3ROlve9g"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

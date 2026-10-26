@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:equatable/equatable.dart';
 import '../../../core/app_export.dart';
 import '../../../data/repositories/auth_repository.dart';
+import '../../subscription/push_auth_sync.dart';
+import '../../subscription/revenue_cat_auth_sync.dart';
 import '../../wallet/wallet_auth_sync.dart';
 import '../models/screen_0_register_model.dart';
 part 'screen_0_register_event.dart';
@@ -80,6 +82,10 @@ class Screen0RegisterBloc
           await prefs.setUserSession(data.user!.toJson());
         }
         syncWalletAfterAuth(walletFromAuth: data.wallet);
+        // ignore: unawaited_futures
+        syncRevenueCatAfterAuth();
+        // ignore: unawaited_futures
+        syncPushTokenAfterAuth();
         emit(state.copyWith(
           isLoading: false,
           registerError: null,

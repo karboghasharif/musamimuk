@@ -36,6 +36,8 @@
 	<string>Musamimuk uses the microphone when you dictate text for your design.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Musamimuk converts your speech to text when you use voice input on the Add Text screen.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Musamimuk uses your location to place your print shop or rider map pin.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -59,6 +61,11 @@
 	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>remote-notification</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

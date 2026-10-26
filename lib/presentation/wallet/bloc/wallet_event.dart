@@ -49,6 +49,20 @@ class WalletBuyPackageEvent extends WalletEvent {
   List<Object?> get props => [package.sku];
 }
 
+/// Credit wallet after a RevenueCat Coin packs paywall purchase.
+class WalletCreditRevenueCatPurchaseEvent extends WalletEvent {
+  const WalletCreditRevenueCatPurchaseEvent({
+    required this.productId,
+    required this.storeTransactionId,
+  });
+
+  final String productId;
+  final String storeTransactionId;
+
+  @override
+  List<Object?> get props => [productId, storeTransactionId];
+}
+
 class WalletClearErrorEvent extends WalletEvent {
   const WalletClearErrorEvent();
 }

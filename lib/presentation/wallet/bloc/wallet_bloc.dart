@@ -1,9 +1,13 @@
+import 'dart:io' show Platform;
+
 import 'package:equatable/equatable.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:musamimuk/core/utils/pref_utils.dart';
 import 'package:musamimuk/data/models/wallet_models.dart';
 import 'package:musamimuk/data/repositories/wallet_repository.dart';
 import 'package:musamimuk/data/services/iap/iap_purchase_service.dart';
+import 'package:musamimuk/data/services/revenue_cat/revenue_cat_service.dart';
 
 part 'wallet_event.dart';
 part 'wallet_state.dart';
@@ -13,8 +17,10 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
   WalletBloc({
     WalletRepository? repository,
     IapPurchaseService? iapService,
+    RevenueCatService? revenueCat,
   })  : _repository = repository ?? WalletRepository(),
         _iap = iapService ?? IapPurchaseService(),
+        _rc = revenueCat ?? RevenueCatService.instance,
         super(const WalletState()) {
     on<WalletBootstrapEvent>(_onBootstrap);
     on<WalletRefreshEvent>(_onRefresh);
@@ -22,12 +28,14 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     on<WalletLoadTransactionsEvent>(_onLoadTransactions);
     on<WalletApplyServerBalanceEvent>(_onApplyBalance);
     on<WalletBuyPackageEvent>(_onBuyPackage);
+    on<WalletCreditRevenueCatPurchaseEvent>(_onCreditRevenueCatPurchase);
     on<WalletClearErrorEvent>(_onClearError);
     on<WalletResetEvent>(_onReset);
   }
 
   final WalletRepository _repository;
   final IapPurchaseService _iap;
+  final RevenueCatService _rc;
 
   IapPurchaseService get iapService => _iap;
 
@@ -120,17 +128,31 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     final packages =
         (result as WalletSuccess<List<WalletPackage>>).data;
     final skus = packages.map((p) => p.sku).where((s) => s.isNotEmpty).toSet();
-    await _iap.ensureInitialized();
-    if (skus.isNotEmpty) {
-      await _iap.queryProducts(skus);
+
+    var rcLabels = <String, String>{};
+    var storeReady = false;
+    var storeAvailable = false;
+
+    if (_rc.isConfigured) {
+      rcLabels = await _rc.coinPriceLabels(skus);
+      storeReady = true;
+      storeAvailable = true;
+    } else {
+      await _iap.ensureInitialized();
+      if (skus.isNotEmpty) {
+        await _iap.queryProducts(skus);
+      }
+      storeReady = true;
+      storeAvailable = _iap.isAvailableSync;
     }
 
     emit(
       state.copyWith(
         isLoadingPackages: false,
         packages: packages,
-        storeProductsReady: true,
-        iapAvailable: _iap.isAvailableSync,
+        storeProductsReady: storeReady,
+        iapAvailable: storeAvailable,
+        rcPriceLabels: rcLabels,
       ),
     );
   }
@@ -207,6 +229,11 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
       ),
     );
 
+    if (_rc.isConfigured) {
+      await _buyViaRevenueCat(event.package, emit);
+      return;
+    }
+
     final outcome = await _iap.buyConsumable(event.package);
     if (outcome.canceled) {
       emit(
@@ -243,6 +270,111 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
             : (outcome.message.isNotEmpty
                 ? outcome.message
                 : 'Coins added successfully.'),
+      ),
+    );
+  }
+
+  Future<void> _buyViaRevenueCat(
+    WalletPackage package,
+    Emitter<WalletState> emit,
+  ) async {
+    final purchase = await _rc.purchaseCoinProduct(package.sku);
+    if (purchase.canceled) {
+      emit(
+        state.copyWith(
+          isPurchasing: false,
+          clearPurchasingSku: true,
+        ),
+      );
+      return;
+    }
+    if (!purchase.ok) {
+      emit(
+        state.copyWith(
+          isPurchasing: false,
+          clearPurchasingSku: true,
+          errorMessage: purchase.message.isNotEmpty
+              ? purchase.message
+              : 'Purchase could not be completed.',
+        ),
+      );
+      return;
+    }
+
+    final txnId = purchase.storeTransaction?.transactionIdentifier.trim() ?? '';
+    if (txnId.isEmpty) {
+      emit(
+        state.copyWith(
+          isPurchasing: false,
+          clearPurchasingSku: true,
+          errorMessage: 'Missing store transaction id. Please try again.',
+        ),
+      );
+      return;
+    }
+
+    await _creditRevenueCatPurchase(
+      productId: package.sku,
+      storeTransactionId: txnId,
+      emit: emit,
+    );
+  }
+
+  Future<void> _onCreditRevenueCatPurchase(
+    WalletCreditRevenueCatPurchaseEvent event,
+    Emitter<WalletState> emit,
+  ) async {
+    if (PrefUtils().isGuestAccount()) {
+      emit(state.copyWith(errorMessage: 'guest_required'));
+      return;
+    }
+    emit(
+      state.copyWith(
+        isPurchasing: true,
+        purchasingSku: event.productId,
+        clearError: true,
+        clearPurchaseMessage: true,
+      ),
+    );
+    await _creditRevenueCatPurchase(
+      productId: event.productId,
+      storeTransactionId: event.storeTransactionId,
+      emit: emit,
+    );
+  }
+
+  Future<void> _creditRevenueCatPurchase({
+    required String productId,
+    required String storeTransactionId,
+    required Emitter<WalletState> emit,
+  }) async {
+    final platform = (!kIsWeb && Platform.isIOS) ? 'ios' : 'android';
+    final verify = await _repository.verifyRevenueCatPurchase(
+      productId: productId,
+      storeTransactionId: storeTransactionId,
+      platform: platform,
+    );
+
+    if (verify is WalletFailure<WalletIapVerifyResult>) {
+      emit(
+        state.copyWith(
+          isPurchasing: false,
+          clearPurchasingSku: true,
+          errorMessage: verify.message,
+        ),
+      );
+      return;
+    }
+
+    final success = verify as WalletSuccess<WalletIapVerifyResult>;
+    emit(
+      state.copyWith(
+        isPurchasing: false,
+        clearPurchasingSku: true,
+        balance: success.data.wallet,
+        purchaseMessage: success.data.alreadyCredited
+            ? (success.message ?? 'Purchase already credited.')
+            : (success.message ?? 'Coins added successfully.'),
       ),
     );
   }

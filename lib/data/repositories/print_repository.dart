@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:musamimuk/core/network/api_client.dart';
 import 'package:musamimuk/core/network/api_utils.dart';
@@ -120,16 +122,90 @@ class PrintRepository {
     );
   }
 
-  Future<PrintResult<PrintOrder>> pay({
+  Future<PrintResult<PrintPaySession>> pay({
     required int orderId,
     required String method,
+  }) async {
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        'print/orders/$orderId/pay',
+        data: {'method': method},
+      );
+      final map = apiExtractPayloadMap(response.data);
+      if (response.data == null ||
+          !apiResponseIsSuccess(response.data!) ||
+          map == null) {
+        return PrintFailure(
+          apiExtractMessage(response.data) ?? 'Payment failed.',
+        );
+      }
+      final meta = apiExtractMetaMap(response.data);
+      final stripeRaw = meta?['stripe'];
+      return PrintSuccess(
+        PrintPaySession(
+          order: PrintOrder.fromJson(map),
+          stripe: stripeRaw is Map
+              ? PrintStripeCheckout.fromJson(stripeRaw.cast<String, dynamic>())
+              : null,
+        ),
+      );
+    } on DioException catch (e) {
+      return PrintFailure(apiMessageFromDioException(e));
+    }
+  }
+
+  Future<PrintResult<PrintOrder>> confirmPay({
+    required int orderId,
+    required String paymentIntentId,
   }) {
     return _sendOrder(
       () => _dio.post<Map<String, dynamic>>(
-        'print/orders/$orderId/pay',
-        data: {'method': method},
+        'print/orders/$orderId/pay/confirm',
+        data: {'payment_intent_id': paymentIntentId},
       ),
     );
+  }
+
+  Future<PrintResult<PrintStripeConnect>> startStripeConnect(String kind) async {
+    try {
+      final path = kind == 'rider'
+          ? 'print/rider/stripe/connect'
+          : 'print/shop/stripe/connect';
+      final response = await _dio.post<Map<String, dynamic>>(path);
+      final map = apiExtractPayloadMap(response.data);
+      if (response.data == null ||
+          !apiResponseIsSuccess(response.data!) ||
+          map == null) {
+        return PrintFailure(
+          apiExtractMessage(response.data) ?? 'Unable to start Stripe Connect.',
+        );
+      }
+      return PrintSuccess(PrintStripeConnect.fromJson(map));
+    } on DioException catch (e) {
+      return PrintFailure(apiMessageFromDioException(e));
+    }
+  }
+
+  Future<PrintResult<PrintStripeConnect>> refreshStripeConnect(
+    String kind,
+  ) async {
+    try {
+      final path = kind == 'rider'
+          ? 'print/rider/stripe/status'
+          : 'print/shop/stripe/status';
+      final response = await _dio.get<Map<String, dynamic>>(path);
+      final map = apiExtractPayloadMap(response.data);
+      if (response.data == null ||
+          !apiResponseIsSuccess(response.data!) ||
+          map == null) {
+        return PrintFailure(
+          apiExtractMessage(response.data) ?? 'Unable to refresh Stripe status.',
+        );
+      }
+      return PrintSuccess(PrintStripeConnect.fromJson(map));
+    } on DioException catch (e) {
+      return PrintFailure(apiMessageFromDioException(e));
+    }
   }
 
   Future<PrintResult<PrintOrder>> sendMessage({
@@ -246,37 +322,96 @@ class PrintRepository {
     String? address,
     String? district,
     String? about,
+    List<String>? services,
+    Map<String, dynamic>? hours,
+    int? responseMins,
+    double? startingPrice,
+    required List<PrintPickedDoc> documents,
   }) async {
     try {
+      final form = FormData();
+      form.fields.addAll([
+        MapEntry('name', name),
+        if (nameAr != null && nameAr.isNotEmpty) MapEntry('name_ar', nameAr),
+        MapEntry('owner_name', ownerName),
+        MapEntry('phone', phone),
+        if (crNumber != null) MapEntry('cr_number', crNumber),
+        if (vatNumber != null) MapEntry('vat_number', vatNumber),
+        if (iban != null) MapEntry('iban', iban),
+        if (lat != null) MapEntry('lat', '$lat'),
+        if (lng != null) MapEntry('lng', '$lng'),
+        if (address != null) MapEntry('address', address),
+        if (district != null) MapEntry('district', district),
+        if (about != null) MapEntry('about', about),
+        if (responseMins != null) MapEntry('response_mins', '$responseMins'),
+        if (startingPrice != null) MapEntry('starting_price', '$startingPrice'),
+        if (services != null) MapEntry('services', jsonEncode(services)),
+        if (hours != null) MapEntry('hours', jsonEncode(hours)),
+      ]);
+      for (var i = 0; i < documents.length; i++) {
+        final doc = documents[i];
+        form.files.add(MapEntry(
+          'documents[]',
+          await MultipartFile.fromFile(doc.path, filename: doc.name),
+        ));
+        form.fields.add(MapEntry('document_kinds[$i]', doc.kind));
+      }
       final response = await _dio.post<Map<String, dynamic>>(
         'print/shop/register',
-        data: {
-          'name': name,
-          if (nameAr != null) 'name_ar': nameAr,
-          'owner_name': ownerName,
-          'phone': phone,
-          if (crNumber != null) 'cr_number': crNumber,
-          if (vatNumber != null) 'vat_number': vatNumber,
-          if (iban != null) 'iban': iban,
-          if (lat != null) 'lat': lat,
-          if (lng != null) 'lng': lng,
-          if (address != null) 'address': address,
-          if (district != null) 'district': district,
-          if (about != null) 'about': about,
-        },
+        data: form,
       );
-      final map = apiExtractPayloadMap(response.data);
-      if (response.data == null ||
-          !apiResponseIsSuccess(response.data!) ||
-          map == null) {
-        return PrintFailure(
-          apiExtractMessage(response.data) ?? 'Registration failed.',
-        );
-      }
-      return PrintSuccess(PrintShopSummary.fromJson(map));
+      return _parseShop(response.data, 'Registration failed.');
     } on DioException catch (e) {
       return PrintFailure(apiMessageFromDioException(e));
     }
+  }
+
+  Future<PrintResult<PrintShopSummary>> updateShop(
+    Map<String, dynamic> fields,
+  ) async {
+    try {
+      final response = await _dio.put<Map<String, dynamic>>(
+        'print/shop/me',
+        data: fields,
+      );
+      return _parseShop(response.data, 'Unable to update shop.');
+    } on DioException catch (e) {
+      return PrintFailure(apiMessageFromDioException(e));
+    }
+  }
+
+  Future<PrintResult<PrintShopSummary>> uploadShopDocuments(
+    List<PrintPickedDoc> documents,
+  ) async {
+    try {
+      final form = FormData();
+      for (var i = 0; i < documents.length; i++) {
+        final doc = documents[i];
+        form.files.add(MapEntry(
+          'documents[]',
+          await MultipartFile.fromFile(doc.path, filename: doc.name),
+        ));
+        form.fields.add(MapEntry('document_kinds[$i]', doc.kind));
+      }
+      final response = await _dio.post<Map<String, dynamic>>(
+        'print/shop/me/documents',
+        data: form,
+      );
+      return _parseShop(response.data, 'Unable to upload documents.');
+    } on DioException catch (e) {
+      return PrintFailure(apiMessageFromDioException(e));
+    }
+  }
+
+  PrintResult<PrintShopSummary> _parseShop(
+    Map<String, dynamic>? data,
+    String fallback,
+  ) {
+    final map = apiExtractPayloadMap(data);
+    if (data == null || !apiResponseIsSuccess(data) || map == null) {
+      return PrintFailure(apiExtractMessage(data) ?? fallback);
+    }
+    return PrintSuccess(PrintShopSummary.fromJson(map));
   }
 
   Future<PrintResult<List<PrintOrder>>> shopOrders() {
@@ -390,34 +525,87 @@ class PrintRepository {
     String? district,
     double? lat,
     double? lng,
+    List<String>? areas,
+    required List<PrintPickedDoc> documents,
   }) async {
     try {
+      final form = FormData();
+      form.fields.addAll([
+        MapEntry('name', name),
+        MapEntry('phone', phone),
+        if (nationalId != null) MapEntry('national_id', nationalId),
+        if (vehicle != null) MapEntry('vehicle', vehicle),
+        if (plate != null) MapEntry('plate', plate),
+        if (iban != null) MapEntry('iban', iban),
+        if (district != null) MapEntry('district', district),
+        if (lat != null) MapEntry('lat', '$lat'),
+        if (lng != null) MapEntry('lng', '$lng'),
+        if (areas != null) MapEntry('areas', jsonEncode(areas)),
+      ]);
+      for (var i = 0; i < documents.length; i++) {
+        final doc = documents[i];
+        form.files.add(MapEntry(
+          'documents[]',
+          await MultipartFile.fromFile(doc.path, filename: doc.name),
+        ));
+        form.fields.add(MapEntry('document_kinds[$i]', doc.kind));
+      }
       final response = await _dio.post<Map<String, dynamic>>(
         'print/rider/register',
-        data: {
-          'name': name,
-          'phone': phone,
-          if (nationalId != null) 'national_id': nationalId,
-          if (vehicle != null) 'vehicle': vehicle,
-          if (plate != null) 'plate': plate,
-          if (iban != null) 'iban': iban,
-          if (district != null) 'district': district,
-          if (lat != null) 'lat': lat,
-          if (lng != null) 'lng': lng,
-        },
+        data: form,
       );
-      final map = apiExtractPayloadMap(response.data);
-      if (response.data == null ||
-          !apiResponseIsSuccess(response.data!) ||
-          map == null) {
-        return PrintFailure(
-          apiExtractMessage(response.data) ?? 'Registration failed.',
-        );
-      }
-      return PrintSuccess(PrintRiderProfile.fromJson(map));
+      return _parseRider(response.data, 'Registration failed.');
     } on DioException catch (e) {
       return PrintFailure(apiMessageFromDioException(e));
     }
+  }
+
+  Future<PrintResult<PrintRiderProfile>> updateRider(
+    Map<String, dynamic> fields,
+  ) async {
+    try {
+      final response = await _dio.put<Map<String, dynamic>>(
+        'print/rider/me',
+        data: fields,
+      );
+      return _parseRider(response.data, 'Unable to update rider.');
+    } on DioException catch (e) {
+      return PrintFailure(apiMessageFromDioException(e));
+    }
+  }
+
+  Future<PrintResult<PrintRiderProfile>> uploadRiderDocuments(
+    List<PrintPickedDoc> documents,
+  ) async {
+    try {
+      final form = FormData();
+      for (var i = 0; i < documents.length; i++) {
+        final doc = documents[i];
+        form.files.add(MapEntry(
+          'documents[]',
+          await MultipartFile.fromFile(doc.path, filename: doc.name),
+        ));
+        form.fields.add(MapEntry('document_kinds[$i]', doc.kind));
+      }
+      final response = await _dio.post<Map<String, dynamic>>(
+        'print/rider/me/documents',
+        data: form,
+      );
+      return _parseRider(response.data, 'Unable to upload documents.');
+    } on DioException catch (e) {
+      return PrintFailure(apiMessageFromDioException(e));
+    }
+  }
+
+  PrintResult<PrintRiderProfile> _parseRider(
+    Map<String, dynamic>? data,
+    String fallback,
+  ) {
+    final map = apiExtractPayloadMap(data);
+    if (data == null || !apiResponseIsSuccess(data) || map == null) {
+      return PrintFailure(apiExtractMessage(data) ?? fallback);
+    }
+    return PrintSuccess(PrintRiderProfile.fromJson(map));
   }
 
   Future<PrintResult<PrintRiderProfile>> setRiderOnline({

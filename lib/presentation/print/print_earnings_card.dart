@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:toastification/toastification.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/app_export.dart';
 import '../../core/utils/app_toast.dart';
@@ -39,6 +40,29 @@ class _PrintEarningsCardState extends State<PrintEarningsCard> {
   Future<void> _withdraw() async {
     final earnings = _earnings;
     if (earnings == null) return;
+    final stripe = earnings.stripe;
+    if (stripe != null && stripe.required && !stripe.payoutsEnabled) {
+      final started = await _repo.startStripeConnect(widget.kind);
+      if (!mounted) return;
+      if (started is PrintFailure<PrintStripeConnect>) {
+        showAppToast(started.message, type: ToastificationType.error);
+        return;
+      }
+      final connect = (started as PrintSuccess<PrintStripeConnect>).data;
+      final url = connect.url;
+      if (url != null && url.isNotEmpty) {
+        final uri = Uri.tryParse(url);
+        if (uri != null) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        }
+        showAppToast('msg_print_stripe_connect_open'.tr);
+        return;
+      }
+      if (connect.payoutsEnabled) {
+        await _load();
+      }
+    }
+    if (!mounted) return;
     final ok = await showPrintWithdrawSheet(
       context: context,
       kind: widget.kind,
@@ -96,8 +120,20 @@ class _PrintEarningsCardState extends State<PrintEarningsCard> {
           row('lbl_print_protected'.tr, printSar(earnings.protectedBalance)),
           row('lbl_print_pending_hold'.tr, pendingLabel),
           SizedBox(height: 8.v),
+          if (earnings.stripe?.required == true &&
+              earnings.stripe?.payoutsEnabled != true)
+            Padding(
+              padding: EdgeInsets.only(bottom: 8.v),
+              child: Text(
+                'msg_print_stripe_connect_required'.tr,
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+            ),
           PrintGoldButton(
-            label: 'lbl_print_withdraw'.tr,
+            label: earnings.stripe?.required == true &&
+                    earnings.stripe?.payoutsEnabled != true
+                ? 'lbl_print_stripe_connect'.tr
+                : 'lbl_print_withdraw'.tr,
             onPressed: _withdraw,
           ),
         ],

@@ -47,6 +47,7 @@ class PrefUtils {
   }
 
   static const String _keyToken = 'auth_token';
+  static const String _keyFcmToken = 'fcm_token';
   static const String _keyUserSession = 'user_session';
   static const String _keyLanguageCode = 'language_code';
   static const String _keyRememberSession = 'remember_session';
@@ -164,6 +165,27 @@ class PrefUtils {
     final id = _generateUuidV4();
     await prefs.setString(_keyDeviceId, id);
     return id;
+  }
+
+  /// Last known Firebase Cloud Messaging device token (local cache).
+  Future<void> setFcmToken(String? token) async {
+    final prefs = _sharedPreferences ?? await SharedPreferences.getInstance();
+    _sharedPreferences ??= prefs;
+    if (token == null || token.isEmpty) {
+      await prefs.remove(_keyFcmToken);
+      return;
+    }
+    await prefs.setString(_keyFcmToken, token);
+  }
+
+  String? getFcmToken() {
+    try {
+      final t = _sharedPreferences?.getString(_keyFcmToken);
+      if (t == null || t.isEmpty) return null;
+      return t;
+    } catch (_) {
+      return null;
+    }
   }
 
   /// RFC-4122 v4 UUID from a cryptographically secure RNG (no extra package).

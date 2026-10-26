@@ -10,6 +10,7 @@ import '../../core/app_export.dart';
 import '../../core/utils/app_toast.dart';
 import '../../core/country_names.dart';
 import '../../data/repositories/auth_repository.dart';
+import '../../data/services/revenue_cat/revenue_cat_service.dart';
 import '../print/print_reputation_card.dart';
 import '../../widgets/app_bar/appbar_leading_image.dart';
 import '../../widgets/app_bar/custom_app_bar.dart';
@@ -264,8 +265,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
         s.contains('vip');
   }
 
+  /// Pro if RevenueCat entitlement is active, else fall back to session plan.
+  static bool _isPro(UserSession session) {
+    if (RevenueCatService.isProEntitlementActive(
+      RevenueCatService.instance.customerInfo.value,
+    )) {
+      return true;
+    }
+    return _sessionIsPro(session);
+  }
+
   static String _planTierLabel(UserSession session) {
-    return _sessionIsPro(session) ? 'lbl_pro'.tr : 'lbl_free'.tr;
+    return _isPro(session) ? 'lbl_pro'.tr : 'lbl_free'.tr;
   }
 
   Future<void> _logout() async {
@@ -458,11 +469,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             SizedBox(height: AppDs.space4.v),
                             AppCard(
                               elevated: true,
-                              child: _PlanTierSection(
-                                displayLabel: _planTierLabel(session),
-                                isPro: _sessionIsPro(session),
-                                showUpgrade: !isGuest,
-                                onUpgrade: _openUpgradePlan,
+                              child: ValueListenableBuilder(
+                                valueListenable:
+                                    RevenueCatService.instance.customerInfo,
+                                builder: (context, _, _) {
+                                  final isPro = _isPro(session);
+                                  return _PlanTierSection(
+                                    displayLabel: _planTierLabel(session),
+                                    isPro: isPro,
+                                    showUpgrade: !isGuest,
+                                    upgradeLabel: isPro
+                                        ? 'lbl_manage_subscription'.tr
+                                        : 'lbl_upgrade_plan'.tr,
+                                    onUpgrade: _openUpgradePlan,
+                                  );
+                                },
                               ),
                             ),
                             if (!isGuest) ...[
@@ -562,12 +583,14 @@ class _PlanTierSection extends StatelessWidget {
     required this.displayLabel,
     required this.isPro,
     required this.showUpgrade,
+    required this.upgradeLabel,
     required this.onUpgrade,
   });
 
   final String displayLabel;
   final bool isPro;
   final bool showUpgrade;
+  final String upgradeLabel;
   final VoidCallback onUpgrade;
 
   @override
@@ -608,7 +631,7 @@ class _PlanTierSection extends StatelessWidget {
         if (showUpgrade) ...[
           SizedBox(height: AppDs.space3.v),
           AppSecondaryButton(
-            label: 'lbl_upgrade_plan'.tr,
+            label: upgradeLabel,
             onPressed: onUpgrade,
           ),
         ],

@@ -8,6 +8,7 @@ import '../../core/network/api_utils.dart';
 import '../../core/utils/app_toast.dart';
 import '../../data/models/print_models.dart';
 import '../../data/repositories/print_repository.dart';
+import '../../data/services/stripe/print_stripe_service.dart';
 import 'print_live.dart';
 import 'print_ui.dart';
 
@@ -193,12 +194,55 @@ class _PrintChatScreenState extends State<PrintChatScreen> {
     setState(() => _busy = true);
     final paid = await _repo.pay(orderId: order.id, method: method);
     if (!mounted) return;
-    setState(() => _busy = false);
-    if (paid is PrintFailure<PrintOrder>) {
+    if (paid is PrintFailure<PrintPaySession>) {
+      setState(() => _busy = false);
       showAppToast(paid.message, type: ToastificationType.error);
       return;
     }
-    setState(() => _order = (paid as PrintSuccess<PrintOrder>).data);
+    final session = (paid as PrintSuccess<PrintPaySession>).data;
+    var orderPaid = session.order;
+    final stripe = session.stripe;
+    try {
+      if (stripe != null && stripe.needsClientPayment) {
+        final completed =
+            await PrintStripeService.instance.presentPaymentSheet(stripe);
+        if (!completed) {
+          if (mounted) setState(() => _busy = false);
+          return;
+        }
+        final intentId = stripe.paymentIntentId;
+        if (intentId == null || intentId.isEmpty) {
+          if (mounted) setState(() => _busy = false);
+          showAppToast('msg_print_pay_failed'.tr, type: ToastificationType.error);
+          return;
+        }
+        final confirmed = await _repo.confirmPay(
+          orderId: order.id,
+          paymentIntentId: intentId,
+        );
+        if (!mounted) return;
+        if (confirmed is PrintFailure<PrintOrder>) {
+          setState(() => _busy = false);
+          showAppToast(confirmed.message, type: ToastificationType.error);
+          return;
+        }
+        orderPaid = (confirmed as PrintSuccess<PrintOrder>).data;
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _busy = false);
+        showAppToast(
+          e.toString().replaceFirst('Exception: ', ''),
+          type: ToastificationType.error,
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _order = orderPaid;
+    });
     NavigatorService.pushNamed(
       AppRoutes.printTrackingScreen,
       arguments: {'orderId': order.id},

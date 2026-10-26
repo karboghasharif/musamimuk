@@ -3,8 +3,12 @@
     <!-- Required for API calls and Play-featured network access in release builds
          (debug manifest alone is not merged into release). -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Android 13+ notification permission (FCM / local notifications). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Required for Google Play Billing (Musamimuk Coins IAP). -->
     <uses-permission android:name="com.android.vending.BILLING" />
     <!-- App does not use advertising ID — strip AD_ID if any dependency merges it in. -->
@@ -81,6 +85,14 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- Default FCM notification channel (must match PushNotificationService). -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="musamimuk_default" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@mipmap/ic_launcher" />
 
         <!-- Facebook Login (flutter_facebook_auth) -->
         <meta-data

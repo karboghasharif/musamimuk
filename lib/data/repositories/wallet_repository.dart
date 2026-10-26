@@ -176,6 +176,47 @@ class WalletRepository {
     }
   }
 
+  /// POST `/wallet/revenuecat/verify` — credit coins after a RevenueCat buy.
+  Future<WalletResult<WalletIapVerifyResult>> verifyRevenueCatPurchase({
+    required String productId,
+    required String storeTransactionId,
+    String? platform,
+  }) async {
+    try {
+      final body = <String, dynamic>{
+        'product_id': productId,
+        'store_transaction_id': storeTransactionId,
+        if (platform != null && platform.isNotEmpty) 'platform': platform,
+      };
+      final response = await _api.dio.post<Map<String, dynamic>>(
+        'wallet/revenuecat/verify',
+        data: body,
+        options: Options(
+          extra: const {ApiErrorMapper.skipSessionHandlingKey: true},
+          receiveTimeout: const Duration(seconds: 60),
+        ),
+      );
+      final envelope = response.data;
+      if (envelope == null || !apiResponseIsSuccess(envelope)) {
+        return WalletFailure(
+          apiExtractMessage(envelope) ?? 'Could not verify purchase.',
+        );
+      }
+      final payload = apiExtractPayloadMap(envelope) ?? envelope;
+      return WalletSuccess(
+        WalletIapVerifyResult.fromPayload(
+          payload,
+          message: apiExtractMessage(envelope),
+        ),
+        message: apiExtractMessage(envelope),
+      );
+    } on DioException catch (e) {
+      return _failureFromDio(e);
+    } catch (_) {
+      return WalletFailure('Could not verify purchase.');
+    }
+  }
+
   /// POST `/wallet/iap/verify` — credit coins after a store purchase.
   Future<WalletResult<WalletIapVerifyResult>> verifyIap({
     required String platform,

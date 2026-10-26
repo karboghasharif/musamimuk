@@ -1,5 +1,6 @@
 package com.musamimuk.app
 
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 
-class MainActivity : FlutterActivity()
+/// FlutterFragmentActivity is required for RevenueCat Paywalls / Customer Center.
+class MainActivity : FlutterFragmentActivity()
