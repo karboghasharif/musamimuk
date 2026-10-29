@@ -6,7 +6,7 @@ Repo: [karboghasharif/musamimuk](https://github.com/karboghasharif/musamimuk)
 
 | Workflow | When it runs | What it does |
 |----------|----------------|--------------|
-| **CI** (`.github/workflows/ci.yml`) | Push / PR to `main` | `flutter analyze` + `flutter test` |
+| **CI** (`.github/workflows/ci.yml`) | Push / PR to `main` | `flutter analyze` (errors only) + `flutter test` |
 | **Android Release** (`.github/workflows/android-release.yml`) | Tag `v*` or manual | Signed Play Store **AAB** artifact |
 
 iOS TestFlight / App Store needs a macOS runner + Apple certs (phase 2 below).
