@@ -13,17 +13,16 @@ iOS TestFlight / App Store needs a macOS runner + Apple certs (later).
 
 ---
 
-## Direct to Play Store — checklist
+## Direct to Play **production** — checklist
 
-Do these once, then every release is a tag (or “Run workflow”).
+Do these once. After that: tag → CI builds AAB → uploads to **production**.
 
-### 1. App must already exist in Play Console
+### 1. Play Console app ready for production
 
 1. Open [Google Play Console](https://play.google.com/console)
-2. Create app **Musamimuk** if needed  
-3. Package name must match: `com.musamimuk.app`  
-4. Complete the first-time listing / privacy / content questionnaire enough that **Internal testing** accepts uploads  
-5. Create an **Internal testing** track (or use the default)
+2. App package must be: `com.musamimuk.app`
+3. Finish **all** dashboard items Google marks as required for production (store listing, graphics, content rating, privacy policy, target audience, etc.)
+4. If the app was never published, complete the first production release setup in Console (countries, declarations)
 
 ### 2. Signing secrets (GitHub)
 
@@ -51,21 +50,23 @@ Repo → **Settings** → **Secrets and variables** → **Actions** → add:
 2. Enable **Google Play Android Developer API**  
 3. **IAM** → create a **Service account** → create a JSON key → download the `.json`  
 4. Play Console → **Users and permissions** → **Invite user** → paste the service account email  
-5. Grant **Release to production, exclude devices, and use Play App Signing** (or at least release to testing tracks)  
-6. Accept the invite / wait a few minutes for access to propagate  
-7. GitHub secret `PLAY_SERVICE_ACCOUNT_JSON` = **full contents** of that JSON file (one line or multi-line both work)
+5. Grant **Admin** or at least **Release to production, exclude devices, and use Play App Signing**  
+6. Wait a few minutes for access to propagate  
+7. GitHub secret `PLAY_SERVICE_ACCOUNT_JSON` = **full contents** of that JSON file  
 
-### 4. Ship a build
+You already have the 4 `ANDROID_*` secrets. **Production upload will not work until `PLAY_SERVICE_ACCOUNT_JSON` is added.**
 
-Bump version in `pubspec.yaml` when needed (`1.0.7+26` → higher `+build` each upload):
+### 4. Ship to production
+
+Bump version in `pubspec.yaml` each upload (`+build` must increase):
 
 ```yaml
 version: 1.0.8+27
 ```
 
-Commit + push `main`, then either:
+Commit + push `main`, then:
 
-**A — Tag (auto)**
+**A — Tag (goes to production)**
 
 ```bash
 git tag v1.0.8
@@ -74,15 +75,9 @@ git push origin v1.0.8
 
 **B — Manual**
 
-Actions → **Android Release** → **Run workflow** → pick track (`internal` recommended first).
+Actions → **Android Release** → **Run workflow** → track **`production`** → Run.
 
-The workflow will:
-
-1. Build a signed `app-release.aab`
-2. Save it as an Actions artifact  
-3. Upload it to Play on the chosen track (`internal` by default)
-
-Then open Play Console → **Testing** → **Internal testing** → review / promote to closed/open/production when ready.
+Workflow builds the signed AAB and uploads it to the **production** track. Google may still hold it for review before users see it.
 
 ---
 
@@ -91,8 +86,7 @@ Then open Play Console → **Testing** → **Internal testing** → review / pro
 ```text
 Feature → PR → CI green → merge main
 Bump version in pubspec.yaml
-Tag vX.Y.Z → Android Release → Play internal track
-Promote in Play Console when ready
+Tag vX.Y.Z → Android Release → Play production
 ```
 
 ---

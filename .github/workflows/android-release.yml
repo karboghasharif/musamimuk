@@ -1,6 +1,6 @@
 name: Android Release
 
-# Signed AAB → Play Console (internal track by default).
+# Signed AAB → Google Play production (default).
 # Trigger: git tag v*  OR  Actions → Android Release → Run workflow
 on:
   push:
@@ -9,15 +9,15 @@ on:
   workflow_dispatch:
     inputs:
       track:
-        description: Play track (internal | alpha | beta | production)
+        description: Play track
         required: true
-        default: internal
+        default: production
         type: choice
         options:
-          - internal
-          - alpha
-          - beta
           - production
+          - beta
+          - alpha
+          - internal
 
 jobs:
   build-and-upload:
@@ -84,5 +84,5 @@ jobs:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: com.musamimuk.app
           releaseFiles: build/app/outputs/bundle/release/app-release.aab
-          track: ${{ github.event.inputs.track || 'internal' }}
+          track: ${{ github.event.inputs.track || 'production' }}
           status: completed
