@@ -10,6 +10,15 @@ class PrintRepository {
 
   final Dio _dio;
 
+  /// KYC / portfolio multipart can be several MB over mobile networks.
+  /// Do not force Content-Type — Dio must set multipart boundary itself.
+  static const _kycUploadTimeout = Duration(minutes: 3);
+
+  Options get _kycMultipartOptions => Options(
+        sendTimeout: _kycUploadTimeout,
+        receiveTimeout: _kycUploadTimeout,
+      );
+
   Future<PrintResult<PrintOrder>> createJob({
     required int designId,
     required PrintSpec spec,
@@ -365,6 +374,7 @@ class PrintRepository {
       final response = await _dio.post<Map<String, dynamic>>(
         'print/shop/register',
         data: form,
+        options: _kycMultipartOptions,
       );
       return _parseShop(response.data, 'Registration failed.');
     } on DioException catch (e) {
@@ -402,6 +412,7 @@ class PrintRepository {
       final response = await _dio.post<Map<String, dynamic>>(
         'print/shop/me/documents',
         data: form,
+        options: _kycMultipartOptions,
       );
       return _parseShop(response.data, 'Unable to upload documents.');
     } on DioException catch (e) {
@@ -437,6 +448,24 @@ class PrintRepository {
       }
       return PrintSuccess(
         apiExtractDataList(data).map(PrintNotice.fromJson).toList(),
+      );
+    } on DioException catch (e) {
+      return PrintFailure(apiMessageFromDioException(e));
+    }
+  }
+
+  Future<PrintResult<List<PrintDeliveryArea>>> deliveryAreas() async {
+    try {
+      final response =
+          await _dio.get<Map<String, dynamic>>('print/delivery-areas');
+      final data = response.data;
+      if (data == null || !apiResponseIsSuccess(data)) {
+        return PrintFailure(
+          apiExtractMessage(data) ?? 'Unable to load delivery areas.',
+        );
+      }
+      return PrintSuccess(
+        apiExtractDataList(data).map(PrintDeliveryArea.fromJson).toList(),
       );
     } on DioException catch (e) {
       return PrintFailure(apiMessageFromDioException(e));
@@ -531,7 +560,7 @@ class PrintRepository {
     String? district,
     double? lat,
     double? lng,
-    List<String>? areas,
+    required List<String> areas,
     required List<PrintPickedDoc> documents,
   }) async {
     try {
@@ -546,7 +575,7 @@ class PrintRepository {
         if (district != null) MapEntry('district', district),
         if (lat != null) MapEntry('lat', '$lat'),
         if (lng != null) MapEntry('lng', '$lng'),
-        if (areas != null) MapEntry('areas', jsonEncode(areas)),
+        MapEntry('areas', jsonEncode(areas)),
       ]);
       for (var i = 0; i < documents.length; i++) {
         final doc = documents[i];
@@ -559,6 +588,7 @@ class PrintRepository {
       final response = await _dio.post<Map<String, dynamic>>(
         'print/rider/register',
         data: form,
+        options: _kycMultipartOptions,
       );
       return _parseRider(response.data, 'Registration failed.');
     } on DioException catch (e) {
@@ -596,6 +626,7 @@ class PrintRepository {
       final response = await _dio.post<Map<String, dynamic>>(
         'print/rider/me/documents',
         data: form,
+        options: _kycMultipartOptions,
       );
       return _parseRider(response.data, 'Unable to upload documents.');
     } on DioException catch (e) {
@@ -775,17 +806,87 @@ class PrintRepository {
     required int orderId,
     required String issue,
     String? evidence,
+    List<String> evidenceImagePaths = const [],
   }) async {
     try {
+      final form = FormData();
+      form.fields.add(MapEntry('issue', issue));
+      if (evidence != null && evidence.trim().isNotEmpty) {
+        form.fields.add(MapEntry('evidence', evidence.trim()));
+      }
+      for (final path in evidenceImagePaths) {
+        form.files.add(
+          MapEntry(
+            'evidence_images[]',
+            await MultipartFile.fromFile(
+              path,
+              filename: path.split('/').last,
+            ),
+          ),
+        );
+      }
       final response = await _dio.post<Map<String, dynamic>>(
         'print/orders/$orderId/disputes',
-        data: {
-          'issue': issue,
-          if (evidence != null && evidence.trim().isNotEmpty)
-            'evidence': evidence.trim(),
-        },
+        data: form,
+        options: _kycMultipartOptions,
       );
       return _parseDispute(response.data, 'Unable to open dispute.');
+    } on DioException catch (e) {
+      return PrintFailure(apiMessageFromDioException(e));
+    }
+  }
+
+  Future<PrintResult<PrintShopSummary>> addShopPortfolio({
+    required String imagePath,
+    String? title,
+  }) async {
+    try {
+      final form = FormData();
+      if (title != null && title.trim().isNotEmpty) {
+        form.fields.add(MapEntry('title', title.trim()));
+      }
+      form.files.add(
+        MapEntry(
+          'image',
+          await MultipartFile.fromFile(
+            imagePath,
+            filename: imagePath.split('/').last,
+          ),
+        ),
+      );
+      final response = await _dio.post<Map<String, dynamic>>(
+        'print/shop/me/portfolio',
+        data: form,
+        options: _kycMultipartOptions,
+      );
+      final map = apiExtractPayloadMap(response.data);
+      if (response.data == null ||
+          !apiResponseIsSuccess(response.data!) ||
+          map == null) {
+        return PrintFailure(
+          apiExtractMessage(response.data) ?? 'Unable to upload portfolio.',
+        );
+      }
+      return PrintSuccess(PrintShopSummary.fromJson(map));
+    } on DioException catch (e) {
+      return PrintFailure(apiMessageFromDioException(e));
+    }
+  }
+
+  Future<PrintResult<PrintShopSummary>> deleteShopPortfolio(int itemId) async {
+    try {
+      final response = await _dio.delete<Map<String, dynamic>>(
+        'print/shop/me/portfolio/$itemId',
+      );
+      final map = apiExtractPayloadMap(response.data);
+      if (response.data == null ||
+          !apiResponseIsSuccess(response.data!) ||
+          map == null) {
+        return PrintFailure(
+          apiExtractMessage(response.data) ?? 'Unable to remove portfolio item.',
+        );
+      }
+      return PrintSuccess(PrintShopSummary.fromJson(map));
     } on DioException catch (e) {
       return PrintFailure(apiMessageFromDioException(e));
     }

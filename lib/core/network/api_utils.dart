@@ -78,6 +78,11 @@ String normalizePublicStorageUrl(String url) => url.trim();
 String? apiExtractMessage(dynamic data) {
   if (data is! Map) return null;
   final map = data.cast<String, dynamic>();
+  final nestedErrors = _firstValidationError(map['errors']) ??
+      _firstValidationError(
+        map['data'] is Map ? (map['data'] as Map)['errors'] : null,
+      );
+
   final message =
       map['message'] ??
       map['Message'] ??
@@ -86,19 +91,31 @@ String? apiExtractMessage(dynamic data) {
       map['error'] ??
       map['errorDescription'] ??
       map['error_description'];
-  if (message != null) return message.toString();
-
-  final errors = map['errors'];
-  if (errors is Map && errors.isNotEmpty) {
-    try {
-      final first = errors.values.first;
-      if (first is List && first.isNotEmpty) return first.first.toString();
-      return first.toString();
-    } catch (_) {
-      return null;
+  if (message != null) {
+    final text = message.toString().trim();
+    final lower = text.toLowerCase();
+    // Prefer concrete field errors over Laravel's generic validation title.
+    if (nestedErrors != null &&
+        (lower.contains('the given data was invalid') ||
+            lower == 'validation failed' ||
+            lower == 'request failed')) {
+      return nestedErrors;
     }
+    if (text.isNotEmpty) return text;
   }
-  return null;
+
+  return nestedErrors;
+}
+
+String? _firstValidationError(dynamic errors) {
+  if (errors is! Map || errors.isEmpty) return null;
+  try {
+    final first = errors.values.first;
+    if (first is List && first.isNotEmpty) return first.first.toString();
+    return first.toString();
+  } catch (_) {
+    return null;
+  }
 }
 
 dynamic apiExtractDbData(dynamic data) {

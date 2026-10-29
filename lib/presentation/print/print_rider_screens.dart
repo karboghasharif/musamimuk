@@ -30,23 +30,37 @@ class _PrintRiderHomeScreenState extends State<PrintRiderHomeScreen> {
   List<PrintDeliveryInfo> _jobs = const [];
   List<PrintReview> _reviews = const [];
   bool _loading = true;
+  bool _togglingOnline = false;
   int _section = 0;
   Timer? _poll;
+  Timer? _locationPing;
   VoidCallback? _stopLive;
 
   @override
   void initState() {
     super.initState();
     _load();
-    _poll = Timer.periodic(const Duration(seconds: 2), (_) => _load());
+    _poll = Timer.periodic(const Duration(seconds: 20), (_) => _load());
     _stopLive = PrintLive.instance.listen(_load);
   }
 
   @override
   void dispose() {
     _poll?.cancel();
+    _locationPing?.cancel();
     _stopLive?.call();
     super.dispose();
+  }
+
+  void _syncLocationPing(bool online) {
+    _locationPing?.cancel();
+    _locationPing = null;
+    if (!online) return;
+    _locationPing = Timer.periodic(const Duration(seconds: 60), (_) async {
+      final fix = await printAcquireGps();
+      if (fix == null || !mounted) return;
+      await _repo.setRiderOnline(online: true, lat: fix.lat, lng: fix.lng);
+    });
   }
 
   Future<void> _load() async {
@@ -81,20 +95,37 @@ class _PrintRiderHomeScreenState extends State<PrintRiderHomeScreen> {
       _reviews = reviews;
       _loading = false;
     });
+    _syncLocationPing(rider.online);
   }
 
   Future<void> _toggleOnline(bool online) async {
+    if (_togglingOnline) return;
+    setState(() => _togglingOnline = true);
+    double? lat;
+    double? lng;
+    if (online) {
+      final fix = await printAcquireGps();
+      if (fix == null) {
+        if (mounted) setState(() => _togglingOnline = false);
+        return;
+      }
+      lat = fix.lat;
+      lng = fix.lng;
+    }
     final result = await _repo.setRiderOnline(
       online: online,
-      lat: 21.544,
-      lng: 39.173,
+      lat: lat,
+      lng: lng,
     );
     if (!mounted) return;
+    setState(() => _togglingOnline = false);
     if (result is PrintFailure<PrintRiderProfile>) {
       showAppToast(result.message, type: ToastificationType.error);
       return;
     }
-    setState(() => _rider = (result as PrintSuccess<PrintRiderProfile>).data);
+    final rider = (result as PrintSuccess<PrintRiderProfile>).data;
+    setState(() => _rider = rider);
+    _syncLocationPing(rider.online);
     _load();
   }
 
@@ -482,6 +513,7 @@ class _PrintRiderRegisterScreenState extends State<PrintRiderRegisterScreen> {
   final _lat = TextEditingController();
   final _lng = TextEditingController();
   final Set<String> _areas = {};
+  List<PrintDeliveryArea> _areaChoices = const [];
   final Map<String, PrintPickedDoc?> _docs = {
     for (final k in [
       ...PrintKyc.riderRequiredKinds,
@@ -492,7 +524,19 @@ class _PrintRiderRegisterScreenState extends State<PrintRiderRegisterScreen> {
   int _step = 1;
   bool _saving = false;
 
-  static const _areaChoices = ['A', 'B', 'C', 'D'];
+  @override
+  void initState() {
+    super.initState();
+    _loadAreas();
+  }
+
+  Future<void> _loadAreas() async {
+    final result = await _repo.deliveryAreas();
+    if (!mounted) return;
+    if (result is PrintSuccess<List<PrintDeliveryArea>>) {
+      setState(() => _areaChoices = result.data);
+    }
+  }
 
   @override
   void dispose() {
@@ -509,6 +553,14 @@ class _PrintRiderRegisterScreenState extends State<PrintRiderRegisterScreen> {
   }
 
   bool _validateStep() {
+    if (_step == 2) {
+      if (!(_formKey.currentState?.validate() ?? false)) return false;
+      if (_areas.isEmpty) {
+        showAppToast('msg_print_areas_required'.tr, type: ToastificationType.error);
+        return false;
+      }
+      return true;
+    }
     if (_step == 4) {
       for (final kind in PrintKyc.riderRequiredKinds) {
         if (_docs[kind] == null) {
@@ -539,6 +591,10 @@ class _PrintRiderRegisterScreenState extends State<PrintRiderRegisterScreen> {
 
   Future<void> _submit() async {
     if (_saving) return;
+    if (_areas.isEmpty) {
+      showAppToast('msg_print_areas_required'.tr, type: ToastificationType.error);
+      return;
+    }
     setState(() => _saving = true);
     final result = await _repo.registerRider(
       name: _name.text.trim(),
@@ -551,7 +607,7 @@ class _PrintRiderRegisterScreenState extends State<PrintRiderRegisterScreen> {
       district: _district.text.trim().isEmpty ? null : _district.text.trim(),
       lat: double.tryParse(_lat.text.trim()),
       lng: double.tryParse(_lng.text.trim()),
-      areas: _areas.isEmpty ? null : _areas.toList(),
+      areas: _areas.toList(),
       documents: _docs.values.whereType<PrintPickedDoc>().toList(),
     );
     if (!mounted) return;
@@ -625,37 +681,46 @@ class _PrintRiderRegisterScreenState extends State<PrintRiderRegisterScreen> {
                 'lbl_print_service_areas'.tr,
                 style: const TextStyle(color: Colors.white70),
               ),
-              Wrap(
-                spacing: 8,
-                children: _areaChoices
-                    .map(
-                      (area) => FilterChip(
-                        label: Text(area),
-                        selected: _areas.contains(area),
-                        onSelected: (selected) {
-                          setState(() {
-                            if (selected) {
-                              _areas.add(area);
-                            } else {
-                              _areas.remove(area);
-                            }
-                          });
-                        },
-                        selectedColor: AppDs.printGold,
-                        labelStyle: TextStyle(
-                          color: _areas.contains(area) ? Colors.black : Colors.white,
+              if (_areaChoices.isEmpty)
+                Text(
+                  'msg_print_areas_loading'.tr,
+                  style: const TextStyle(color: Colors.white54),
+                )
+              else
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _areaChoices
+                      .map(
+                        (area) => FilterChip(
+                          label: Text(area.label),
+                          selected: _areas.contains(area.code),
+                          onSelected: (selected) {
+                            setState(() {
+                              if (selected) {
+                                _areas.add(area.code);
+                              } else {
+                                _areas.remove(area.code);
+                              }
+                            });
+                          },
+                          selectedColor: AppDs.printGold,
+                          labelStyle: TextStyle(
+                            color: _areas.contains(area.code)
+                                ? Colors.black
+                                : Colors.white,
+                          ),
+                          backgroundColor: AppDs.surfaceRaised,
                         ),
-                        backgroundColor: AppDs.surfaceRaised,
-                      ),
-                    )
-                    .toList(),
-              ),
+                      )
+                      .toList(),
+                ),
             ],
             if (_step == 3) ...[
               PrintKycTextField(
                 controller: _iban,
                 label: 'lbl_print_iban'.tr,
-                validator: requiredText,
+                validator: saudiIbanText,
               ),
               PrintLocationPicker(
                 latController: _lat,

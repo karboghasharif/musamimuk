@@ -100,6 +100,7 @@ class SessionManager {
     AppRoutes.printShopDashboardScreen,
     AppRoutes.printRiderHomeScreen,
     AppRoutes.printRiderRegisterScreen,
+    AppRoutes.printNoticesScreen,
   };
 
   bool isAuthEndpoint(String path) {

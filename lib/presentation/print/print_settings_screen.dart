@@ -5,6 +5,7 @@ import '../../core/app_export.dart';
 import '../../core/network/api_utils.dart';
 import '../../core/utils/app_toast.dart';
 import '../../data/models/print_models.dart';
+import '../../data/repositories/print_repository.dart';
 import 'print_ui.dart';
 
 class PrintSettingsScreen extends StatefulWidget {
@@ -75,6 +76,15 @@ class _PrintSettingsScreenState extends State<PrintSettingsScreen> {
   }
 
   Future<void> _continue() async {
+    final live = await PrintRepository().realtime();
+    if (live is PrintSuccess<Map<String, dynamic>> &&
+        live.data['marketplace_enabled'] == false) {
+      showAppToast(
+        'msg_print_marketplace_disabled'.tr,
+        type: ToastificationType.error,
+      );
+      return;
+    }
     if (_fulfillment == 'delivery') {
       final lat = double.tryParse(_dropLat.text.trim());
       final lng = double.tryParse(_dropLng.text.trim());

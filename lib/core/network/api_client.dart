@@ -37,8 +37,9 @@ class ApiClient {
         },
       ),
     );
-    _dio.interceptors.add(_AuthSessionInterceptor());
+    // Logger outermost so every request/response/error is printed (incl. after auth).
     _dio.interceptors.add(_ApiLoggerInterceptor());
+    _dio.interceptors.add(_AuthSessionInterceptor());
   }
 
   static final ApiClient _instance = ApiClient._();
@@ -86,9 +87,13 @@ class _AuthSessionInterceptor extends Interceptor {
   }
 }
 
-/// Interceptor that logs API request and response (or error).
+/// Interceptor that logs every API request / response / error in debug builds.
+///
+/// Uses [print] (not [debugPrint]) so Android logcat does not throttle/drop traces
+/// when Purchases and other noisy plugins flood the console. Filter: `[API]`.
 class _ApiLoggerInterceptor extends Interceptor {
-  static const int _maxBodyLength = 2000;
+  static const int _maxBodyLength = 4000;
+  static const String _extraStartedAt = 'api_log_started_at';
   static const Set<String> _sensitiveKeys = {
     'authorization',
     'token',
@@ -102,6 +107,13 @@ class _ApiLoggerInterceptor extends Interceptor {
     'b64_json',
     'design_data',
   };
+
+  /// Unthrottled console output for bug tracing.
+  static void _log(String line) {
+    if (!kDebugMode) return;
+    // ignore: avoid_print
+    print(line);
+  }
 
   static String _truncate(dynamic data) {
     if (data == null) return 'null';
@@ -121,74 +133,106 @@ class _ApiLoggerInterceptor extends Interceptor {
           entry.key.toString(): _redact(entry.value, key: entry.key.toString()),
       };
     }
-    if (value is Iterable) {
+    if (value is Iterable && value is! String) {
       return value.map((entry) => _redact(entry)).toList(growable: false);
     }
     return value;
   }
 
-  static Map<String, dynamic> _safeHeaders(RequestOptions options) {
-    final map = Map<String, dynamic>.from(options.headers);
-    if (map.containsKey('Authorization')) {
-      map['Authorization'] = 'Bearer ***';
+  static Map<String, dynamic> _safeHeaders(Map<String, dynamic> headers) {
+    final map = Map<String, dynamic>.from(headers);
+    for (final key in map.keys.toList()) {
+      if (key.toLowerCase() == 'authorization') {
+        map[key] = 'Bearer ***';
+      }
     }
     return map;
   }
 
+  static String _describeBody(dynamic data) {
+    if (data == null) return 'null';
+    if (data is FormData) {
+      final fields = data.fields
+          .map((e) {
+            final value = _sensitiveKeys.contains(e.key.toLowerCase())
+                ? '<redacted>'
+                : e.value;
+            return '${e.key}=$value';
+          })
+          .join(', ');
+      final files = data.files.map((e) {
+        final file = e.value;
+        final name = file.filename ?? '(no-name)';
+        final len = file.length;
+        final lenLabel = len >= 0 ? '${len}B' : 'stream';
+        return '${e.key}:$name($lenLabel)';
+      }).join(', ');
+      return 'FormData fields={$fields} files={$files}';
+    }
+    return _truncate(data);
+  }
+
+  static String _elapsed(RequestOptions options) {
+    final started = options.extra[_extraStartedAt];
+    if (started is DateTime) {
+      return '${DateTime.now().difference(started).inMilliseconds}ms';
+    }
+    return '?';
+  }
+
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
-    if (kDebugMode) {
-      debugPrint('┌── API Request ──');
-      debugPrint('│ ${options.method} ${options.uri}');
-      debugPrint('│ Headers: ${_safeHeaders(options)}');
-      if (options.data != null) {
-        if (options.data is FormData) {
-          final fd = options.data! as FormData;
-          final fields = fd.fields.map((e) => e.key).toList();
-          final files = fd.files.map((e) => e.key).toList();
-          debugPrint(
-            '│ Body: FormData fields=[${fields.join(', ')}] files=[${files.join(', ')}]',
-          );
-        } else {
-          debugPrint('│ Body: ${_truncate(options.data)}');
-        }
-      }
-      debugPrint('└────────────────');
+    options.extra[_extraStartedAt] = DateTime.now();
+    // Auth runs after this interceptor; re-read token for the log line.
+    final token = PrefUtils().getToken();
+    final headers = _safeHeaders(Map<String, dynamic>.from(options.headers));
+    if (token != null &&
+        token.isNotEmpty &&
+        isTrustedMusamimukUri(options.uri)) {
+      headers['Authorization'] = 'Bearer ***';
     }
+    _log('[API] ── REQUEST ─────────────────────────────');
+    _log('[API] ${options.method} ${options.uri}');
+    if (options.queryParameters.isNotEmpty) {
+      _log('[API] Query: ${options.queryParameters}');
+    }
+    _log('[API] Headers: $headers');
+    if (options.data != null) {
+      _log('[API] Body: ${_describeBody(options.data)}');
+    }
+    _log('[API] ────────────────────────────────────────');
     handler.next(options);
   }
 
   @override
   void onResponse(Response response, ResponseInterceptorHandler handler) {
-    if (kDebugMode) {
-      debugPrint('┌── API Response ──');
-      debugPrint(
-        '│ ${response.requestOptions.method} ${response.requestOptions.uri}',
-      );
-      debugPrint('│ Status: ${response.statusCode}');
-      if (response.data != null) {
-        debugPrint('│ Body: ${_truncate(response.data)}');
-      }
-      debugPrint('└─────────────────');
+    final req = response.requestOptions;
+    _log('[API] ── RESPONSE ────────────────────────────');
+    _log('[API] ${req.method} ${req.uri}');
+    _log('[API] Status: ${response.statusCode}  (${_elapsed(req)})');
+    if (response.data != null) {
+      _log('[API] Body: ${_truncate(response.data)}');
     }
+    _log('[API] ────────────────────────────────────────');
     handler.next(response);
   }
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
-    if (kDebugMode) {
-      debugPrint('┌── API Error ──');
-      debugPrint('│ ${err.requestOptions.method} ${err.requestOptions.uri}');
-      debugPrint('│ Message: ${err.message}');
-      debugPrint('│ Type: ${err.type}');
-      if (err.response != null) {
-        debugPrint('│ Status: ${err.response?.statusCode}');
-        if (err.response?.data != null) {
-          debugPrint('│ Body: ${_truncate(err.response?.data)}');
-        }
+    final req = err.requestOptions;
+    _log('[API] ── ERROR ───────────────────────────────');
+    _log('[API] ${req.method} ${req.uri}');
+    _log('[API] Type: ${err.type}  (${_elapsed(req)})');
+    _log('[API] Message: ${err.message}');
+    if (err.response != null) {
+      _log('[API] Status: ${err.response?.statusCode}');
+      if (err.response?.data != null) {
+        _log('[API] Body: ${_truncate(err.response?.data)}');
       }
-      debugPrint('└───────────────');
+    } else if (err.error != null) {
+      _log('[API] Cause: ${err.error}');
     }
+    _log('[API] ────────────────────────────────────────');
     handler.next(err);
   }
 }

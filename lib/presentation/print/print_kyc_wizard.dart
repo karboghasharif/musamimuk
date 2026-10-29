@@ -359,3 +359,14 @@ String? requiredText(String? value) {
   }
   return null;
 }
+
+/// Saudi IBAN: SA + 22 digits (spaces ignored).
+String? saudiIbanText(String? value) {
+  final required = requiredText(value);
+  if (required != null) return required;
+  final clean = value!.replaceAll(RegExp(r'\s+'), '').toUpperCase();
+  if (!RegExp(r'^SA[0-9]{22}$').hasMatch(clean)) {
+    return 'msg_print_iban_invalid'.tr;
+  }
+  return null;
+}

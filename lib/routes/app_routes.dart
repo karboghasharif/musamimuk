@@ -54,6 +54,8 @@ import '../presentation/print/print_shops_screen.dart';
 import '../presentation/print/print_shop_profile_screen.dart';
 import '../presentation/print/print_chat_screen.dart';
 import '../presentation/print/print_tracking_screen.dart';
+import '../presentation/print/print_notices_screen.dart';
+import '../presentation/print/print_notices_screen.dart';
 import '../presentation/print/print_orders_screen.dart';
 import '../presentation/print/print_shop_screens.dart';
 import '../presentation/print/print_rider_screens.dart';
@@ -143,6 +145,7 @@ class AppRoutes {
   static const String printShopDashboardScreen = '/print_shop_dashboard_screen';
   static const String printRiderHomeScreen = '/print_rider_home_screen';
   static const String printRiderRegisterScreen = '/print_rider_register_screen';
+  static const String printNoticesScreen = '/print_notices_screen';
   static const String initialRoute = '/initialRoute';
   static Map<String, WidgetBuilder> get routes => {
     screenTwentythreeScreen: ScreenTwentythreeScreen.builder,
@@ -210,6 +213,7 @@ class AppRoutes {
     printShopDashboardScreen: PrintShopDashboardScreen.builder,
     printRiderHomeScreen: PrintRiderHomeScreen.builder,
     printRiderRegisterScreen: PrintRiderRegisterScreen.builder,
+    printNoticesScreen: PrintNoticesScreen.builder,
     initialRoute: ScreenTwentythreeScreen.builder,
   };
 }

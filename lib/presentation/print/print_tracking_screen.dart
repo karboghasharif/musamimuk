@@ -10,8 +10,10 @@ import '../../core/utils/app_toast.dart';
 import '../../data/models/print_models.dart';
 import '../../data/repositories/print_repository.dart';
 import 'print_dispute_sheet.dart';
-import 'print_review_sheet.dart';
 import 'print_live.dart';
+import 'print_location_picker.dart';
+import 'print_order_actions.dart';
+import 'print_review_sheet.dart';
 import 'print_ui.dart';
 
 class PrintTrackingScreen extends StatefulWidget {
@@ -32,6 +34,8 @@ class PrintTrackingScreen extends StatefulWidget {
 class _PrintTrackingScreenState extends State<PrintTrackingScreen> {
   final _repo = PrintRepository();
   final _address = TextEditingController();
+  final _dropLat = TextEditingController();
+  final _dropLng = TextEditingController();
   final _otp = TextEditingController();
   PrintOrder? _order;
   PrintDeliveryQuote? _preview;
@@ -45,7 +49,7 @@ class _PrintTrackingScreenState extends State<PrintTrackingScreen> {
   void initState() {
     super.initState();
     _load();
-    _poll = Timer.periodic(const Duration(seconds: 2), (_) => _load());
+    _poll = Timer.periodic(const Duration(seconds: 20), (_) => _load());
     _stopLive = PrintLive.instance.listen(_load);
   }
 
@@ -54,6 +58,8 @@ class _PrintTrackingScreenState extends State<PrintTrackingScreen> {
     _poll?.cancel();
     _stopLive?.call();
     _address.dispose();
+    _dropLat.dispose();
+    _dropLng.dispose();
     _otp.dispose();
     super.dispose();
   }
@@ -95,12 +101,22 @@ class _PrintTrackingScreenState extends State<PrintTrackingScreen> {
       showAppToast('lbl_print_address'.tr, type: ToastificationType.error);
       return;
     }
+    var lat = double.tryParse(_dropLat.text.trim());
+    var lng = double.tryParse(_dropLng.text.trim());
+    if (lat == null || lng == null) {
+      final fix = await printAcquireGps();
+      if (fix == null) return;
+      lat = fix.lat;
+      lng = fix.lng;
+      _dropLat.text = lat.toStringAsFixed(6);
+      _dropLng.text = lng.toStringAsFixed(6);
+    }
     setState(() => _busy = true);
     final result = await _repo.previewDelivery(
       orderId: widget.orderId,
       address: address,
-      lat: 21.57,
-      lng: 39.17,
+      lat: lat,
+      lng: lng,
     );
     if (!mounted) return;
     setState(() => _busy = false);
@@ -129,6 +145,76 @@ class _PrintTrackingScreenState extends State<PrintTrackingScreen> {
       showAppToast('msg_print_no_riders'.tr);
     }
     await _load();
+  }
+
+  Future<void> _acceptQuote(PrintQuote quote) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final next = await PrintOrderActions.acceptQuote(
+      context: context,
+      repo: _repo,
+      order: _order!,
+      quote: quote,
+    );
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (next == null) return;
+    setState(() => _order = next);
+    final paid = await PrintOrderActions.pay(
+      context: context,
+      repo: _repo,
+      order: next,
+    );
+    if (!mounted) return;
+    if (paid != null) setState(() => _order = paid);
+  }
+
+  Future<void> _declineQuote(PrintQuote quote) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final next = await PrintOrderActions.declineQuote(
+      context: context,
+      repo: _repo,
+      order: _order!,
+      quote: quote,
+    );
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      if (next != null) _order = next;
+    });
+  }
+
+  Future<void> _payNow() async {
+    final order = _order;
+    if (order == null || _busy) return;
+    setState(() => _busy = true);
+    final paid = await PrintOrderActions.pay(
+      context: context,
+      repo: _repo,
+      order: order,
+    );
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      if (paid != null) _order = paid;
+    });
+  }
+
+  Future<void> _cancelOrder() async {
+    final order = _order;
+    if (order == null || _busy) return;
+    setState(() => _busy = true);
+    final cancelled = await PrintOrderActions.cancelOrder(
+      context: context,
+      repo: _repo,
+      order: order,
+    );
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      if (cancelled != null) _order = cancelled;
+    });
   }
 
   Future<void> _submitOtp() async {
@@ -170,6 +256,14 @@ class _PrintTrackingScreenState extends State<PrintTrackingScreen> {
                     'lbl_print_status_${order.status}'.tr,
                     style: const TextStyle(color: Colors.white),
                   ),
+                  if (order.shop?.name != null)
+                    Padding(
+                      padding: EdgeInsets.only(top: 4.v),
+                      child: Text(
+                        order.shop!.name,
+                        style: const TextStyle(color: AppDs.textOnDarkSecondary),
+                      ),
+                    ),
                   if (order.dispute != null)
                     Padding(
                       padding: EdgeInsets.only(top: 8.v),
@@ -178,6 +272,63 @@ class _PrintTrackingScreenState extends State<PrintTrackingScreen> {
                         style: const TextStyle(color: AppDs.printGold),
                       ),
                     ),
+                  SizedBox(height: 12.v),
+                  PrintQuoteDecisionCard(
+                    order: order,
+                    busy: _busy,
+                    onAccept: () {
+                      final quote = order.offeredQuote;
+                      if (quote != null) _acceptQuote(quote);
+                    },
+                    onDecline: () {
+                      final quote = order.offeredQuote;
+                      if (quote != null) _declineQuote(quote);
+                    },
+                  ),
+                  if (order.status == 'awaiting_payment') ...[
+                    SizedBox(height: 12.v),
+                    PrintGoldButton(
+                      label: 'lbl_print_pay_now'.tr,
+                      loading: _busy,
+                      onPressed: _payNow,
+                    ),
+                  ],
+                  SizedBox(height: 12.v),
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      NavigatorService.pushNamed(
+                        AppRoutes.printChatScreen,
+                        arguments: {
+                          'orderId': order.id,
+                          'viewer': 'customer',
+                          'thread': 'customer_shop',
+                        },
+                      );
+                    },
+                    icon: const Icon(Icons.chat_bubble_outline, color: AppDs.printGold),
+                    label: Text('lbl_print_message_shop'.tr),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppDs.printGold,
+                      side: const BorderSide(color: AppDs.printGold),
+                      minimumSize: Size(double.infinity, 48.v),
+                    ),
+                  ),
+                  if (order.canCancel) ...[
+                    SizedBox(height: 8.v),
+                    SizedBox(
+                      height: 44.v,
+                      width: double.infinity,
+                      child: OutlinedButton(
+                        onPressed: _busy ? null : _cancelOrder,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white70,
+                          side: const BorderSide(color: Colors.white24),
+                          minimumSize: Size(double.infinity, 44.v),
+                        ),
+                        child: Text('lbl_print_cancel_order'.tr),
+                      ),
+                    ),
+                  ],
                   if (order.status == 'ready' && order.fulfillment == null) ...[
                     SizedBox(height: 16.v),
                     PrintGoldButton(
@@ -198,6 +349,12 @@ class _PrintTrackingScreenState extends State<PrintTrackingScreen> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
+                    ),
+                    SizedBox(height: 10.v),
+                    PrintLocationPicker(
+                      latController: _dropLat,
+                      lngController: _dropLng,
+                      onChanged: () => setState(() {}),
                     ),
                     SizedBox(height: 10.v),
                     PrintGoldButton(
@@ -484,6 +641,40 @@ class _MapCard extends StatelessWidget {
 
   final PrintOrder order;
 
+  Widget _pointRow({
+    required String label,
+    required double? lat,
+    required double? lng,
+    String? detail,
+  }) {
+    if (lat == null || lng == null) return const SizedBox.shrink();
+    return Padding(
+      padding: EdgeInsets.only(top: 8.v),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            detail == null || detail.isEmpty
+                ? '$label: $lat, $lng'
+                : '$label: $detail · $lat, $lng',
+            style: const TextStyle(color: Colors.white70),
+          ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => printOpenInMaps(lat, lng),
+              icon: const Icon(Icons.map_outlined, color: AppDs.printGold, size: 18),
+              label: Text(
+                'lbl_print_open_in_maps'.tr,
+                style: const TextStyle(color: AppDs.printGold),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final delivery = order.delivery;
@@ -504,21 +695,22 @@ class _MapCard extends StatelessWidget {
               fontWeight: FontWeight.w700,
             ),
           ),
-          if (shop?.lat != null)
-            Text(
-              '${'lbl_print_shop_mode'.tr}: ${shop!.lat}, ${shop.lng}',
-              style: const TextStyle(color: Colors.white70),
-            ),
-          if (delivery?.customerLat != null)
-            Text(
-              '${'lbl_print_customer'.tr}: ${delivery!.customerLat}, ${delivery.customerLng}',
-              style: const TextStyle(color: Colors.white70),
-            ),
-          if (delivery?.riderLat != null)
-            Text(
-              '${'lbl_print_rider'.tr}: ${delivery!.riderName ?? ''} · ${delivery.riderLat}, ${delivery.riderLng}',
-              style: const TextStyle(color: Colors.white70),
-            ),
+          _pointRow(
+            label: 'lbl_print_shop_mode'.tr,
+            lat: shop?.lat,
+            lng: shop?.lng,
+          ),
+          _pointRow(
+            label: 'lbl_print_customer'.tr,
+            lat: delivery?.customerLat,
+            lng: delivery?.customerLng,
+          ),
+          _pointRow(
+            label: 'lbl_print_rider'.tr,
+            lat: delivery?.riderLat,
+            lng: delivery?.riderLng,
+            detail: delivery?.riderName,
+          ),
           Text(
             'lbl_print_status_${delivery?.status ?? order.status}'.tr,
             style: const TextStyle(color: Colors.white),

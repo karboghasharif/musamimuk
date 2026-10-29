@@ -88,6 +88,7 @@ class PrintShopSummary {
     this.reviewNote,
     this.kycReviewRequired = false,
     this.documents = const [],
+    this.portfolio = const [],
     this.levelLabel,
     this.levelLabelAr,
     this.levelProgress,
@@ -122,6 +123,7 @@ class PrintShopSummary {
   final String? reviewNote;
   final bool kycReviewRequired;
   final List<PrintDocument> documents;
+  final List<PrintPortfolioItem> portfolio;
   final String? levelLabel;
   final String? levelLabelAr;
   final PrintLevelProgress? levelProgress;
@@ -135,6 +137,7 @@ class PrintShopSummary {
     final services = json['services'];
     final hours = json['hours'];
     final docs = json['documents'];
+    final portfolio = json['portfolio'];
     return PrintShopSummary(
       id: PrintSpec._asInt(json['id']) ?? 0,
       name: json['name']?.toString() ?? '',
@@ -172,6 +175,14 @@ class PrintShopSummary {
               .map((e) => PrintDocument.fromJson(e.cast<String, dynamic>()))
               .toList()
           : const [],
+      portfolio: portfolio is List
+          ? portfolio
+              .whereType<Map>()
+              .map(
+                (e) => PrintPortfolioItem.fromJson(e.cast<String, dynamic>()),
+              )
+              .toList()
+          : const [],
       levelLabel: json['level_label']?.toString(),
       levelLabelAr: json['level_label_ar']?.toString(),
       levelProgress: json['level_progress'] is Map
@@ -186,6 +197,26 @@ class PrintShopSummary {
     if (value is double) return value;
     if (value is num) return value.toDouble();
     return double.tryParse(value?.toString() ?? '');
+  }
+}
+
+class PrintPortfolioItem {
+  const PrintPortfolioItem({
+    required this.id,
+    required this.title,
+    this.imageUrl,
+  });
+
+  final int id;
+  final String title;
+  final String? imageUrl;
+
+  factory PrintPortfolioItem.fromJson(Map<String, dynamic> json) {
+    return PrintPortfolioItem(
+      id: PrintSpec._asInt(json['id']) ?? 0,
+      title: json['title']?.toString() ?? '',
+      imageUrl: json['image_url']?.toString(),
+    );
   }
 }
 
@@ -348,6 +379,7 @@ class PrintOrder {
     this.systemTotal,
     this.designName,
     this.designFile,
+    this.printFileUrl,
     this.customerName,
     this.dropoffAddress,
   });
@@ -378,6 +410,7 @@ class PrintOrder {
   final double? systemTotal;
   final String? designName;
   final String? designFile;
+  final String? printFileUrl;
   final String? customerName;
   final String? dropoffAddress;
 
@@ -385,7 +418,7 @@ class PrintOrder {
     for (final quote in quotes) {
       if (quote.status == 'offered') return quote;
     }
-    return quotes.isEmpty ? null : quotes.last;
+    return null;
   }
 
   factory PrintOrder.fromJson(Map<String, dynamic> json) {
@@ -468,7 +501,11 @@ class PrintOrder {
           ? PrintShopSummary._asDouble(systemQuote['total'])
           : null,
       designName: design is Map ? design['name']?.toString() : null,
-      designFile: design is Map ? design['file_path']?.toString() : null,
+      designFile: design is Map
+          ? (design['file_url'] ?? design['file_path'])?.toString()
+          : null,
+      printFileUrl: json['print_file_url']?.toString() ??
+          (design is Map ? design['file_url']?.toString() : null),
       customerName: customer is Map ? customer['name']?.toString() : null,
       dropoffAddress: dropoff is Map ? dropoff['address']?.toString() : null,
     );
@@ -840,6 +877,7 @@ class PrintDispute {
     required this.orderId,
     required this.issue,
     this.evidence,
+    this.evidenceImages = const [],
     this.shopReply,
     this.status = 'open',
     this.resolution,
@@ -851,6 +889,7 @@ class PrintDispute {
   final int orderId;
   final String issue;
   final String? evidence;
+  final List<String> evidenceImages;
   final String? shopReply;
   final String status;
   final String? resolution;
@@ -860,11 +899,21 @@ class PrintDispute {
   bool get isOpen => status == 'open' || status == 'shop_replied';
 
   factory PrintDispute.fromJson(Map<String, dynamic> json) {
+    final images = json['evidence_images'];
     return PrintDispute(
       id: PrintSpec._asInt(json['id']) ?? 0,
       orderId: PrintSpec._asInt(json['order_id']) ?? 0,
       issue: json['issue']?.toString() ?? '',
       evidence: json['evidence']?.toString(),
+      evidenceImages: images is List
+          ? images
+                .map((e) {
+                  if (e is Map) return e['url']?.toString() ?? '';
+                  return e.toString();
+                })
+                .where((e) => e.isNotEmpty)
+                .toList()
+          : const [],
       shopReply: json['shop_reply']?.toString(),
       status: json['status']?.toString() ?? 'open',
       resolution: json['resolution']?.toString(),
@@ -1035,6 +1084,37 @@ class PrintEarnings {
       stripe: stripe is Map
           ? PrintStripeConnect.fromJson(stripe.cast<String, dynamic>())
           : null,
+    );
+  }
+}
+
+class PrintDeliveryArea {
+  const PrintDeliveryArea({
+    required this.id,
+    required this.code,
+    required this.minKm,
+    required this.maxKm,
+    required this.fee,
+    this.currency = 'SAR',
+  });
+
+  final int id;
+  final String code;
+  final double minKm;
+  final double maxKm;
+  final double fee;
+  final String currency;
+
+  String get label => '$code · ${minKm.toStringAsFixed(0)}–${maxKm.toStringAsFixed(0)} km · $fee $currency';
+
+  factory PrintDeliveryArea.fromJson(Map<String, dynamic> json) {
+    return PrintDeliveryArea(
+      id: PrintSpec._asInt(json['id']) ?? 0,
+      code: json['code']?.toString() ?? '',
+      minKm: PrintShopSummary._asDouble(json['min_km']) ?? 0,
+      maxKm: PrintShopSummary._asDouble(json['max_km']) ?? 0,
+      fee: PrintShopSummary._asDouble(json['fee']) ?? 0,
+      currency: json['currency']?.toString() ?? 'SAR',
     );
   }
 }

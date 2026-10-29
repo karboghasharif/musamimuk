@@ -224,6 +224,32 @@ class PushNotificationService {
   }
 
   void _navigateFromData(Map<String, dynamic> data) {
+    final href = data['href']?.toString() ?? '';
+    final orderId = int.tryParse(data['order_id']?.toString() ?? '');
+    final orderMatch = RegExp(r'/print/orders/(\d+)').firstMatch(href);
+    final resolvedOrderId =
+        orderId ?? int.tryParse(orderMatch?.group(1) ?? '');
+    if (resolvedOrderId != null && resolvedOrderId > 0) {
+      try {
+        NavigatorService.pushNamed(
+          AppRoutes.printTrackingScreen,
+          arguments: {'orderId': resolvedOrderId},
+        );
+        return;
+      } catch (_) {}
+    }
+    if (href.contains('/print/rider')) {
+      try {
+        NavigatorService.pushNamed(AppRoutes.printRiderHomeScreen);
+        return;
+      } catch (_) {}
+    }
+    if (data['type']?.toString() == 'print') {
+      try {
+        NavigatorService.pushNamed(AppRoutes.printNoticesScreen);
+        return;
+      } catch (_) {}
+    }
     final route = data['route']?.toString();
     if (route != null && route.isNotEmpty) {
       try {

@@ -38,7 +38,8 @@ void main() {
       expect((data['spec'] as Map)['quantity'], 100);
     });
 
-    test('pay posts method and reads protected payment', () async {
+    test('pay posts method and returns PrintPaySession with stripe meta', () async {
+      RequestOptions? captured;
       final repository = PrintRepository(
         dio: _dioReturning({
           'success': true,
@@ -57,15 +58,98 @@ void main() {
             'messages': [],
             'timeline': [],
           },
-        }),
+          'meta': {
+            'stripe': {'mode': 'simulated', 'status': 'succeeded'},
+          },
+        }, onRequest: (request) => captured = request),
       );
 
       final result = await repository.pay(orderId: 11, method: 'mada');
-      expect(result, isA<PrintSuccess<PrintOrder>>());
-      final order = (result as PrintSuccess<PrintOrder>).data;
-      expect(order.status, 'protected');
-      expect(order.payment?.status, 'protected');
-      expect(order.payment?.spendable, isFalse);
+      expect(result, isA<PrintSuccess<PrintPaySession>>());
+      final session = (result as PrintSuccess<PrintPaySession>).data;
+      expect(captured?.path, 'print/orders/11/pay');
+      expect((captured?.data as Map)['method'], 'mada');
+      expect(session.order.status, 'protected');
+      expect(session.order.payment?.status, 'protected');
+      expect(session.order.payment?.spendable, isFalse);
+      expect(session.stripe?.mode, 'simulated');
+      expect(session.stripe?.needsClientPayment, isFalse);
+    });
+
+    test('acceptQuote and declineQuote hit quote action paths', () async {
+      RequestOptions? acceptReq;
+      final acceptRepo = PrintRepository(
+        dio: _dioReturning({
+          'success': true,
+          'data': {
+            'id': 11,
+            'number': 10480,
+            'pickup_code': 'M-10480',
+            'status': 'awaiting_payment',
+            'quotes': [
+              {'id': 9, 'total': 50, 'eta_hours': 24, 'status': 'accepted'},
+            ],
+            'messages': [],
+            'timeline': [],
+          },
+        }, onRequest: (request) => acceptReq = request),
+      );
+      final accepted = await acceptRepo.acceptQuote(orderId: 11, quoteId: 9);
+      expect(accepted, isA<PrintSuccess<PrintOrder>>());
+      expect(acceptReq?.path, 'print/orders/11/quotes/9/accept');
+      expect((accepted as PrintSuccess<PrintOrder>).data.status, 'awaiting_payment');
+
+      RequestOptions? declineReq;
+      final declineRepo = PrintRepository(
+        dio: _dioReturning({
+          'success': true,
+          'data': {
+            'id': 11,
+            'number': 10480,
+            'pickup_code': 'M-10480',
+            'status': 'quote',
+            'quotes': [
+              {'id': 9, 'total': 50, 'eta_hours': 24, 'status': 'declined'},
+            ],
+            'messages': [],
+            'timeline': [],
+          },
+        }, onRequest: (request) => declineReq = request),
+      );
+      final declined = await declineRepo.declineQuote(orderId: 11, quoteId: 9);
+      expect(declined, isA<PrintSuccess<PrintOrder>>());
+      expect(declineReq?.path, 'print/orders/11/quotes/9/decline');
+      expect((declined as PrintSuccess<PrintOrder>).data.offeredQuote, isNull);
+    });
+
+    test('PrintOrder.offeredQuote only returns offered quotes', () {
+      final order = PrintOrder.fromJson({
+        'id': 1,
+        'number': 100,
+        'pickup_code': 'M-100',
+        'status': 'quote',
+        'quotes': [
+          {'id': 1, 'total': 10, 'eta_hours': 12, 'status': 'declined'},
+          {'id': 2, 'total': 20, 'eta_hours': 24, 'status': 'offered'},
+        ],
+        'messages': [],
+        'timeline': [],
+      });
+      expect(order.offeredQuote?.id, 2);
+      expect(order.offeredQuote?.total, 20);
+
+      final none = PrintOrder.fromJson({
+        'id': 2,
+        'number': 101,
+        'pickup_code': 'M-101',
+        'status': 'awaiting_payment',
+        'quotes': [
+          {'id': 3, 'total': 30, 'eta_hours': 24, 'status': 'accepted'},
+        ],
+        'messages': [],
+        'timeline': [],
+      });
+      expect(none.offeredQuote, isNull);
     });
 
     test('confirmPickup posts ready order without coin fields', () async {
@@ -316,7 +400,7 @@ void main() {
       expect(data.containsKey('user_id'), isFalse);
     });
 
-    test('createDispute posts issue and evidence without user_id', () async {
+    test('createDispute posts multipart issue and evidence without user_id', () async {
       RequestOptions? captured;
       final repository = PrintRepository(
         dio: _dioReturning({
@@ -338,10 +422,13 @@ void main() {
       );
       expect(result, isA<PrintSuccess<PrintDispute>>());
       expect(captured?.path, 'print/orders/11/disputes');
-      final data = captured?.data as Map;
-      expect(data['issue'], 'damaged');
-      expect(data.containsKey('user_id'), isFalse);
-      expect(data.containsKey('coins'), isFalse);
+      final form = captured?.data;
+      expect(form, isA<FormData>());
+      final fields = Map<String, String>.fromEntries((form as FormData).fields);
+      expect(fields['issue'], 'damaged');
+      expect(fields['evidence'], 'photo');
+      expect(fields.containsKey('user_id'), isFalse);
+      expect(fields.containsKey('coins'), isFalse);
     });
   });
 }

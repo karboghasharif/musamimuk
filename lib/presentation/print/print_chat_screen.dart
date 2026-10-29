@@ -8,10 +8,11 @@ import '../../core/network/api_utils.dart';
 import '../../core/utils/app_toast.dart';
 import '../../data/models/print_models.dart';
 import '../../data/repositories/print_repository.dart';
-import '../../data/services/stripe/print_stripe_service.dart';
 import 'print_live.dart';
 import 'print_ui.dart';
 
+/// Individual print chat thread (customer↔shop or shop↔rider).
+/// Quote accept / decline / pay live on the order (tracking) screen — not here.
 class PrintChatScreen extends StatefulWidget {
   const PrintChatScreen({
     super.key,
@@ -52,7 +53,7 @@ class _PrintChatScreenState extends State<PrintChatScreen> {
   void initState() {
     super.initState();
     _reload();
-    _poll = Timer.periodic(const Duration(seconds: 2), (_) => _reload(scroll: false));
+    _poll = Timer.periodic(const Duration(seconds: 20), (_) => _reload(scroll: false));
     _stopLive = PrintLive.instance.listen(() => _reload(scroll: false));
   }
 
@@ -69,8 +70,10 @@ class _PrintChatScreenState extends State<PrintChatScreen> {
     final result = await _repo.order(widget.orderId);
     if (!mounted) return;
     if (result is PrintSuccess<PrintOrder>) {
-      final next = result.data.messages.where((m) => m.thread == widget.thread).length;
-      final prev = _order?.messages.where((m) => m.thread == widget.thread).length ?? 0;
+      final next =
+          result.data.messages.where((m) => m.thread == widget.thread).length;
+      final prev =
+          _order?.messages.where((m) => m.thread == widget.thread).length ?? 0;
       setState(() {
         _order = result.data;
         _loading = false;
@@ -95,7 +98,9 @@ class _PrintChatScreenState extends State<PrintChatScreen> {
 
   String _sender(PrintChatMessage message, PrintOrder order) {
     if (_isMine(message)) return 'lbl_print_you'.tr;
-    if (message.from == 'customer') return order.customerName ?? 'lbl_print_designer_chat'.tr;
+    if (message.from == 'customer') {
+      return order.customerName ?? 'lbl_print_designer_chat'.tr;
+    }
     if (message.from == 'rider') return 'lbl_print_rider_chat'.tr;
     if (message.from == 'printer') return 'lbl_print_shop_mode'.tr;
     return 'lbl_print_update'.tr;
@@ -120,189 +125,12 @@ class _PrintChatScreenState extends State<PrintChatScreen> {
     setState(() => _order = (result as PrintSuccess<PrintOrder>).data);
   }
 
-  Future<void> _accept(PrintQuote quote) async {
-    setState(() => _busy = true);
-    final result = await _repo.acceptQuote(
-      orderId: widget.orderId,
-      quoteId: quote.id,
-    );
-    if (!mounted) return;
-    setState(() => _busy = false);
-    if (result is PrintFailure<PrintOrder>) {
-      showAppToast(result.message, type: ToastificationType.error);
-      return;
-    }
-    setState(() => _order = (result as PrintSuccess<PrintOrder>).data);
-    await _showPaySheet();
-  }
-
-  Future<void> _decline(PrintQuote quote) async {
-    setState(() => _busy = true);
-    final result = await _repo.declineQuote(
-      orderId: widget.orderId,
-      quoteId: quote.id,
-    );
-    if (!mounted) return;
-    setState(() => _busy = false);
-    if (result is PrintFailure<PrintOrder>) {
-      showAppToast(result.message, type: ToastificationType.error);
-      return;
-    }
-    setState(() => _order = (result as PrintSuccess<PrintOrder>).data);
-  }
-
-  Future<void> _cancelOrder() async {
-    final order = _order;
-    if (order == null || !order.canCancel || _busy) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppDs.surfaceRaised,
-        title: Text(
-          'lbl_print_cancel_order'.tr,
-          style: const TextStyle(color: Colors.white),
-        ),
-        content: Text(
-          'msg_print_cancel_confirm'.tr,
-          style: const TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text('lbl_cancel'.tr),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(
-              'lbl_print_cancel_order'.tr,
-              style: const TextStyle(color: AppDs.printGold),
-            ),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-    setState(() => _busy = true);
-    final result = await _repo.cancelOrder(order.id);
-    if (!mounted) return;
-    setState(() => _busy = false);
-    if (result is PrintFailure<PrintOrder>) {
-      showAppToast(result.message, type: ToastificationType.error);
-      return;
-    }
-    final cancelled = (result as PrintSuccess<PrintOrder>).data;
-    setState(() => _order = cancelled);
-    final paymentStatus = cancelled.payment?.status;
-    showAppToast(
-      paymentStatus == 'refund_pending' || paymentStatus == 'refunded'
-          ? 'msg_print_refund_pending'.tr
-          : 'msg_print_cancel_ok'.tr,
-      type: ToastificationType.success,
-    );
-  }
-
-  Future<void> _showPaySheet() async {
-    final order = _order;
-    if (order == null) return;
-    final method = await showAppModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      builder: (ctx) {
-        return AppDarkSheetTheme(
-          child: AppSheetPagePadding(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'lbl_print_protected_pay'.tr,
-                  style: AppDs.sheetTitle(theme, color: Colors.white),
-                  textAlign: TextAlign.center,
-                ),
-                SizedBox(height: 8.v),
-                Text(
-                  'msg_print_payment_protected'.tr,
-                  style: const TextStyle(color: Colors.white70),
-                  textAlign: TextAlign.center,
-                ),
-                SizedBox(height: 16.v),
-                for (final method in ['mada', 'visa', 'applepay'])
-                  Padding(
-                    padding: EdgeInsets.only(bottom: 8.v),
-                    child: PrintGoldButton(
-                      label: 'lbl_print_pay_$method'.tr,
-                      onPressed: () => Navigator.pop(ctx, method),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-    if (method == null || !mounted) return;
-    setState(() => _busy = true);
-    final paid = await _repo.pay(orderId: order.id, method: method);
-    if (!mounted) return;
-    if (paid is PrintFailure<PrintPaySession>) {
-      setState(() => _busy = false);
-      showAppToast(paid.message, type: ToastificationType.error);
-      return;
-    }
-    final session = (paid as PrintSuccess<PrintPaySession>).data;
-    var orderPaid = session.order;
-    final stripe = session.stripe;
-    try {
-      if (stripe != null && stripe.needsClientPayment) {
-        final completed =
-            await PrintStripeService.instance.presentPaymentSheet(stripe);
-        if (!completed) {
-          if (mounted) setState(() => _busy = false);
-          return;
-        }
-        final intentId = stripe.paymentIntentId;
-        if (intentId == null || intentId.isEmpty) {
-          if (mounted) setState(() => _busy = false);
-          showAppToast('msg_print_pay_failed'.tr, type: ToastificationType.error);
-          return;
-        }
-        final confirmed = await _repo.confirmPay(
-          orderId: order.id,
-          paymentIntentId: intentId,
-        );
-        if (!mounted) return;
-        if (confirmed is PrintFailure<PrintOrder>) {
-          setState(() => _busy = false);
-          showAppToast(confirmed.message, type: ToastificationType.error);
-          return;
-        }
-        orderPaid = (confirmed as PrintSuccess<PrintOrder>).data;
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _busy = false);
-        showAppToast(
-          e.toString().replaceFirst('Exception: ', ''),
-          type: ToastificationType.error,
-        );
-      }
-      return;
-    }
-    if (!mounted) return;
-    setState(() {
-      _busy = false;
-      _order = orderPaid;
-    });
-    NavigatorService.pushNamed(
-      AppRoutes.printTrackingScreen,
-      arguments: {'orderId': order.id},
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final order = _order;
-    final quote = order?.offeredQuote;
+    final quoteReady = widget.viewer == 'customer' &&
+        widget.thread == 'customer_shop' &&
+        order?.offeredQuote != null;
     return PrintScaffold(
       title: order == null
           ? 'lbl_print_chat'.tr
@@ -311,6 +139,46 @@ class _PrintChatScreenState extends State<PrintChatScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
+                if (quoteReady)
+                  Material(
+                    color: AppDs.surfaceRaised,
+                    child: InkWell(
+                      onTap: () {
+                        NavigatorService.pushNamed(
+                          AppRoutes.printTrackingScreen,
+                          arguments: {'orderId': widget.orderId},
+                        );
+                      },
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 16.h,
+                          vertical: 12.v,
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.request_quote_outlined,
+                              color: AppDs.printGold,
+                            ),
+                            SizedBox(width: 10.h),
+                            Expanded(
+                              child: Text(
+                                'msg_print_quote_on_order'.tr,
+                                style: const TextStyle(color: Colors.white70),
+                              ),
+                            ),
+                            Text(
+                              'lbl_print_view_order'.tr,
+                              style: const TextStyle(
+                                color: AppDs.printGold,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 Expanded(
                   child: ListView.builder(
                     controller: _scroll,
@@ -329,20 +197,30 @@ class _PrintChatScreenState extends State<PrintChatScreen> {
                           child: Text(
                             msg.body,
                             textAlign: TextAlign.center,
-                            style: const TextStyle(color: Colors.white54, fontSize: 12),
+                            style: const TextStyle(
+                              color: Colors.white54,
+                              fontSize: 12,
+                            ),
                           ),
                         );
                       }
                       final mine = _isMine(msg);
                       return Align(
-                        alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+                        alignment:
+                            mine ? Alignment.centerRight : Alignment.centerLeft,
                         child: ConstrainedBox(
-                          constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.78),
+                          constraints: BoxConstraints(
+                            maxWidth: MediaQuery.sizeOf(context).width * 0.78,
+                          ),
                           child: Container(
                             margin: EdgeInsets.only(bottom: 8.v),
-                            padding: EdgeInsets.symmetric(horizontal: 14.h, vertical: 10.v),
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 14.h,
+                              vertical: 10.v,
+                            ),
                             decoration: BoxDecoration(
-                              color: mine ? AppDs.printGold : AppDs.surfaceRaised,
+                              color:
+                                  mine ? AppDs.printGold : AppDs.surfaceRaised,
                               borderRadius: BorderRadius.only(
                                 topLeft: const Radius.circular(16),
                                 topRight: const Radius.circular(16),
@@ -356,7 +234,9 @@ class _PrintChatScreenState extends State<PrintChatScreen> {
                                 Text(
                                   _sender(msg, order),
                                   style: TextStyle(
-                                    color: mine ? Colors.black54 : AppDs.printGold,
+                                    color: mine
+                                        ? Colors.black54
+                                        : AppDs.printGold,
                                     fontSize: 11,
                                     fontWeight: FontWeight.w700,
                                   ),
@@ -364,7 +244,9 @@ class _PrintChatScreenState extends State<PrintChatScreen> {
                                 SizedBox(height: 2.v),
                                 Text(
                                   msg.body,
-                                  style: TextStyle(color: mine ? Colors.black : Colors.white),
+                                  style: TextStyle(
+                                    color: mine ? Colors.black : Colors.white,
+                                  ),
                                 ),
                               ],
                             ),
@@ -374,79 +256,6 @@ class _PrintChatScreenState extends State<PrintChatScreen> {
                     },
                   ),
                 ),
-                if (quote != null &&
-                    quote.status == 'offered' &&
-                    widget.thread == 'customer_shop')
-                  Container(
-                    width: double.infinity,
-                    color: AppDs.surfaceRaised,
-                    padding: EdgeInsets.all(16.h),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(
-                          '${'lbl_print_system_price'.tr}: ${printSar(quote.total)}',
-                          style: const TextStyle(color: Colors.white70),
-                        ),
-                        Text(
-                          '${'lbl_print_shop_price'.tr}: ${printSar(quote.shopTotal ?? quote.total)} · ${quote.etaHours}h',
-                          style: const TextStyle(
-                            color: AppDs.printGold,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        if (widget.viewer == 'customer') ...[
-                          SizedBox(height: 8.v),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: OutlinedButton(
-                                  onPressed: _busy ? null : () => _decline(quote),
-                                  child: Text('lbl_print_decline'.tr),
-                                ),
-                              ),
-                              SizedBox(width: 8.h),
-                              Expanded(
-                                child: PrintGoldButton(
-                                  label: 'lbl_print_accept'.tr,
-                                  loading: _busy,
-                                  onPressed: () => _accept(quote),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                if (order?.status == 'awaiting_payment')
-                  Padding(
-                    padding: EdgeInsets.all(16.h),
-                    child: PrintGoldButton(
-                      label: 'lbl_print_pay_now'.tr,
-                      loading: _busy,
-                      onPressed: _showPaySheet,
-                    ),
-                  ),
-                if (widget.viewer == 'customer' &&
-                    order != null &&
-                    order.canCancel)
-                  Padding(
-                    padding: EdgeInsets.fromLTRB(16.h, 0, 16.h, 8.v),
-                    child: SizedBox(
-                      height: 44.v,
-                      width: double.infinity,
-                      child: OutlinedButton(
-                        onPressed: _busy ? null : _cancelOrder,
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white70,
-                          side: const BorderSide(color: Colors.white24),
-                          minimumSize: Size(double.infinity, 44.v),
-                        ),
-                        child: Text('lbl_print_cancel_order'.tr),
-                      ),
-                    ),
-                  ),
                 Padding(
                   padding: EdgeInsets.fromLTRB(16.h, 0, 16.h, 16.v),
                   child: Row(

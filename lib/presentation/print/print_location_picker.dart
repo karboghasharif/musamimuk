@@ -7,6 +7,69 @@ import '../../core/app_export.dart';
 import '../../core/utils/app_toast.dart';
 import 'print_kyc_wizard.dart';
 
+class PrintGpsFix {
+  const PrintGpsFix(this.lat, this.lng);
+
+  final double lat;
+  final double lng;
+}
+
+/// Live GPS for rider online / dropoff. Returns null after toast on failure.
+Future<PrintGpsFix?> printAcquireGps({bool toastOnSuccess = false}) async {
+  var permission = await Geolocator.checkPermission();
+  if (permission == LocationPermission.denied) {
+    permission = await Geolocator.requestPermission();
+  }
+  if (permission == LocationPermission.denied ||
+      permission == LocationPermission.deniedForever) {
+    showAppToast(
+      'msg_print_location_denied'.tr,
+      type: ToastificationType.error,
+    );
+    return null;
+  }
+  final service = await Geolocator.isLocationServiceEnabled();
+  if (!service) {
+    showAppToast(
+      'msg_print_location_disabled'.tr,
+      type: ToastificationType.error,
+    );
+    return null;
+  }
+  try {
+    final pos = await Geolocator.getCurrentPosition(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+      ),
+    );
+    if (toastOnSuccess) {
+      showAppToast(
+        'msg_print_location_set'.tr,
+        type: ToastificationType.success,
+      );
+    }
+    return PrintGpsFix(pos.latitude, pos.longitude);
+  } catch (_) {
+    showAppToast(
+      'msg_print_location_failed'.tr,
+      type: ToastificationType.error,
+    );
+    return null;
+  }
+}
+
+Future<void> printOpenInMaps(double lat, double lng) async {
+  final uri = Uri.parse(
+    'https://www.openstreetmap.org/?mlat=$lat&mlon=$lng#map=16/$lat/$lng',
+  );
+  if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+    showAppToast(
+      'msg_print_location_failed'.tr,
+      type: ToastificationType.error,
+    );
+  }
+}
+
 /// Lat/lng fields + GPS fill + open in maps. Avoids silent hardcoded pins.
 class PrintLocationPicker extends StatelessWidget {
   const PrintLocationPicker({
@@ -21,45 +84,11 @@ class PrintLocationPicker extends StatelessWidget {
   final VoidCallback? onChanged;
 
   Future<void> _useGps(BuildContext context) async {
-    var permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
-    if (permission == LocationPermission.denied ||
-        permission == LocationPermission.deniedForever) {
-      showAppToast(
-        'msg_print_location_denied'.tr,
-        type: ToastificationType.error,
-      );
-      return;
-    }
-    final service = await Geolocator.isLocationServiceEnabled();
-    if (!service) {
-      showAppToast(
-        'msg_print_location_disabled'.tr,
-        type: ToastificationType.error,
-      );
-      return;
-    }
-    try {
-      final pos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-        ),
-      );
-      latController.text = pos.latitude.toStringAsFixed(6);
-      lngController.text = pos.longitude.toStringAsFixed(6);
-      onChanged?.call();
-      showAppToast(
-        'msg_print_location_set'.tr,
-        type: ToastificationType.success,
-      );
-    } catch (_) {
-      showAppToast(
-        'msg_print_location_failed'.tr,
-        type: ToastificationType.error,
-      );
-    }
+    final fix = await printAcquireGps(toastOnSuccess: true);
+    if (fix == null) return;
+    latController.text = fix.lat.toStringAsFixed(6);
+    lngController.text = fix.lng.toStringAsFixed(6);
+    onChanged?.call();
   }
 
   Future<void> _openMaps() async {
@@ -72,15 +101,7 @@ class PrintLocationPicker extends StatelessWidget {
       );
       return;
     }
-    final uri = Uri.parse(
-      'https://www.openstreetmap.org/?mlat=$lat&mlon=$lng#map=16/$lat/$lng',
-    );
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      showAppToast(
-        'msg_print_location_failed'.tr,
-        type: ToastificationType.error,
-      );
-    }
+    await printOpenInMaps(lat, lng);
   }
 
   @override

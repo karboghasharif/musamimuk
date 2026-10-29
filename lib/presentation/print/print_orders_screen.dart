@@ -75,6 +75,14 @@ class _PrintOrdersScreenState extends State<PrintOrdersScreen> {
       length: 2,
       child: PrintScaffold(
         title: widget.shopMode ? 'lbl_print_shop_orders'.tr : 'lbl_print_my_orders'.tr,
+        actions: [
+          IconButton(
+            tooltip: 'lbl_print_notices'.tr,
+            onPressed: () =>
+                NavigatorService.pushNamed(AppRoutes.printNoticesScreen),
+            icon: const Icon(Icons.notifications_outlined, color: AppDs.printGold),
+          ),
+        ],
         body: Column(
           children: [
             TabBar(
@@ -134,6 +142,9 @@ class _PrintOrdersScreenState extends State<PrintOrdersScreen> {
             subtitle: Text(
               [
                 order.shop?.name ?? order.pickupCode,
+                if (!widget.shopMode && order.offeredQuote != null)
+                  'msg_print_quote_on_order'.tr,
+                if (order.status == 'awaiting_payment') 'lbl_print_pay_now'.tr,
                 if (review.isNotEmpty) review,
                 if (order.dispute != null)
                   'lbl_print_dispute_${order.dispute!.status}'.tr,

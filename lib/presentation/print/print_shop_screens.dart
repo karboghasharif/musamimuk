@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:toastification/toastification.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/app_export.dart';
 import '../../core/utils/app_toast.dart';
@@ -215,7 +217,7 @@ class _PrintShopRegisterScreenState extends State<PrintShopRegisterScreen> {
               PrintKycTextField(
                 controller: _iban,
                 label: 'lbl_print_iban'.tr,
-                validator: requiredText,
+                validator: saudiIbanText,
               ),
               PrintKycTextField(
                 controller: _starting,
@@ -325,7 +327,7 @@ class _PrintShopHomeScreenState extends State<PrintShopHomeScreen> {
   void initState() {
     super.initState();
     _load();
-    _poll = Timer.periodic(const Duration(seconds: 2), (_) => _refreshOrders());
+    _poll = Timer.periodic(const Duration(seconds: 20), (_) => _refreshOrders());
     _stopLive = PrintLive.instance.listen(_refreshOrders);
   }
 
@@ -605,6 +607,97 @@ class _PrintShopHomeScreenState extends State<PrintShopHomeScreen> {
                 ),
               ),
               PrintDocumentList(documents: shop.documents),
+              SizedBox(height: 16.v),
+              Text(
+                'lbl_print_portfolio'.tr,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              SizedBox(height: 8.v),
+              if (shop.portfolio.isEmpty)
+                Text(
+                  'msg_print_notices_empty'.tr,
+                  style: const TextStyle(color: Colors.white54),
+                )
+              else
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: shop.portfolio
+                      .map(
+                        (item) => Stack(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: item.imageUrl == null
+                                  ? Container(
+                                      width: 88,
+                                      height: 88,
+                                      color: Colors.white12,
+                                    )
+                                  : Image.network(
+                                      item.imageUrl!,
+                                      width: 88,
+                                      height: 88,
+                                      fit: BoxFit.cover,
+                                    ),
+                            ),
+                            Positioned(
+                              right: 0,
+                              top: 0,
+                              child: IconButton(
+                                iconSize: 18,
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(
+                                  minWidth: 28,
+                                  minHeight: 28,
+                                ),
+                                onPressed: () async {
+                                  final result =
+                                      await _repo.deleteShopPortfolio(item.id);
+                                  if (result is PrintFailure<PrintShopSummary>) {
+                                    showAppToast(
+                                      result.message,
+                                      type: ToastificationType.error,
+                                    );
+                                    return;
+                                  }
+                                  _load();
+                                },
+                                icon: const Icon(Icons.close, color: Colors.white),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                      .toList(),
+                ),
+              SizedBox(height: 10.v),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final picked = await ImagePicker().pickImage(
+                    source: ImageSource.gallery,
+                    imageQuality: 85,
+                  );
+                  if (picked == null) return;
+                  final result = await _repo.addShopPortfolio(
+                    imagePath: picked.path,
+                  );
+                  if (result is PrintFailure<PrintShopSummary>) {
+                    showAppToast(result.message, type: ToastificationType.error);
+                    return;
+                  }
+                  _load();
+                },
+                icon: const Icon(Icons.add_photo_alternate_outlined,
+                    color: AppDs.printGold),
+                label: Text(
+                  'lbl_print_add_portfolio'.tr,
+                  style: const TextStyle(color: AppDs.printGold),
+                ),
+              ),
               SizedBox(height: 16.v),
               PrintGoldButton(
                 label: 'lbl_print_edit_profile'.tr,
@@ -1109,6 +1202,23 @@ class _ShopOrderCardState extends State<_ShopOrderCard> {
                 style: const TextStyle(color: Colors.white70, fontStyle: FontStyle.italic),
               ),
             ),
+          if ((order.printFileUrl ?? '').isNotEmpty) ...[
+            SizedBox(height: 8.v),
+            OutlinedButton.icon(
+              onPressed: () async {
+                final uri = Uri.tryParse(order.printFileUrl!);
+                if (uri == null) return;
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              },
+              icon: const Icon(Icons.download_outlined, color: AppDs.printGold),
+              label: Text('lbl_print_download_file'.tr),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white,
+                side: const BorderSide(color: AppDs.printGold),
+                minimumSize: const Size.fromHeight(44),
+              ),
+            ),
+          ],
           SizedBox(height: 8.v),
           OutlinedButton.icon(
             onPressed: () => NavigatorService.pushNamed(
@@ -1211,6 +1321,36 @@ class _ShopOrderCardState extends State<_ShopOrderCard> {
               '${'lbl_print_dispute_status'.tr}: ${'lbl_print_dispute_${order.dispute!.status}'.tr}',
               style: const TextStyle(color: AppDs.printGold),
             ),
+            if (order.dispute!.evidenceImages.isNotEmpty)
+              Padding(
+                padding: EdgeInsets.only(top: 8.v),
+                child: SizedBox(
+                  height: 64,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: order.dispute!.evidenceImages.length,
+                    separatorBuilder: (_, __) => SizedBox(width: 8.h),
+                    itemBuilder: (context, index) {
+                      final url = order.dispute!.evidenceImages[index];
+                      return ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.network(
+                          url,
+                          width: 64,
+                          height: 64,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(
+                            width: 64,
+                            height: 64,
+                            color: Colors.white12,
+                            child: const Icon(Icons.broken_image, color: Colors.white54),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
             if (order.dispute!.isOpen)
               Padding(
                 padding: EdgeInsets.only(top: 8.v),
