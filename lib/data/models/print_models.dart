@@ -12,6 +12,7 @@ class PrintSpec {
     this.color = 'color',
     this.paper = '80gsm',
     this.finishing = const [],
+    this.notes,
   });
 
   final String sizeId;
@@ -23,6 +24,9 @@ class PrintSpec {
   final String paper;
   final List<String> finishing;
 
+  /// Free-text instructions from the designer to the shop (stored inside spec JSON).
+  final String? notes;
+
   Map<String, dynamic> toJson() => {
     'sizeId': sizeId,
     'customWmm': customWmm,
@@ -32,10 +36,12 @@ class PrintSpec {
     'color': color,
     'paper': paper,
     'finishing': finishing,
+    if (notes != null && notes!.trim().isNotEmpty) 'notes': notes!.trim(),
   };
 
   factory PrintSpec.fromJson(Map<String, dynamic> json) {
     final finishing = json['finishing'];
+    final notes = json['notes']?.toString() ?? json['note']?.toString();
     return PrintSpec(
       sizeId: json['sizeId']?.toString() ?? json['size_id']?.toString() ?? 'a4',
       customWmm: _asInt(json['customWmm'] ?? json['custom_wmm']),
@@ -47,6 +53,7 @@ class PrintSpec {
       finishing: finishing is List
           ? finishing.map((e) => e.toString()).toList()
           : const [],
+      notes: (notes != null && notes.trim().isNotEmpty) ? notes.trim() : null,
     );
   }
 
@@ -227,6 +234,9 @@ class PrintQuote {
     required this.finishingTotal,
     required this.total,
     required this.etaHours,
+    this.shopId,
+    this.shopName,
+    this.shopNameAr,
     this.shopTotal,
     this.note,
     this.status = 'offered',
@@ -234,6 +244,9 @@ class PrintQuote {
   });
 
   final int id;
+  final int? shopId;
+  final String? shopName;
+  final String? shopNameAr;
   final double subtotal;
   final double finishingTotal;
   final double total;
@@ -243,9 +256,18 @@ class PrintQuote {
   final String status;
   final String currency;
 
+  String get displayShopName {
+    final en = (shopName ?? '').trim();
+    final ar = (shopNameAr ?? '').trim();
+    return en.isNotEmpty ? en : ar;
+  }
+
   factory PrintQuote.fromJson(Map<String, dynamic> json) {
     return PrintQuote(
       id: PrintSpec._asInt(json['id']) ?? 0,
+      shopId: PrintSpec._asInt(json['shop_id']),
+      shopName: json['shop_name']?.toString(),
+      shopNameAr: json['shop_name_ar']?.toString(),
       subtotal: PrintShopSummary._asDouble(json['subtotal']) ?? 0,
       finishingTotal: PrintShopSummary._asDouble(json['finishing_total']) ?? 0,
       total: PrintShopSummary._asDouble(json['total']) ?? 0,
@@ -420,6 +442,9 @@ class PrintOrder {
     }
     return null;
   }
+
+  List<PrintQuote> get offeredQuotes =>
+      quotes.where((q) => q.status == 'offered').toList(growable: false);
 
   factory PrintOrder.fromJson(Map<String, dynamic> json) {
     final spec = json['spec'];
@@ -1105,7 +1130,17 @@ class PrintDeliveryArea {
   final double fee;
   final String currency;
 
-  String get label => '$code · ${minKm.toStringAsFixed(0)}–${maxKm.toStringAsFixed(0)} km · $fee $currency';
+  String get label =>
+      '$code · ${minKm.toStringAsFixed(0)}–${maxKm.toStringAsFixed(0)} km · $fee $currency';
+
+  /// Seeded defaults matching API migration `delivery_areas` (A–D).
+  /// Used when `GET print/delivery-areas` is unavailable (e.g. prod not deployed).
+  static const List<PrintDeliveryArea> seededDefaults = [
+    PrintDeliveryArea(id: 1, code: 'A', minKm: 0, maxKm: 5, fee: 10),
+    PrintDeliveryArea(id: 2, code: 'B', minKm: 5, maxKm: 10, fee: 15),
+    PrintDeliveryArea(id: 3, code: 'C', minKm: 10, maxKm: 20, fee: 20),
+    PrintDeliveryArea(id: 4, code: 'D', minKm: 20, maxKm: 30, fee: 25),
+  ];
 
   factory PrintDeliveryArea.fromJson(Map<String, dynamic> json) {
     return PrintDeliveryArea(

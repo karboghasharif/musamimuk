@@ -273,17 +273,11 @@ class _PrintTrackingScreenState extends State<PrintTrackingScreen> {
                       ),
                     ),
                   SizedBox(height: 12.v),
-                  PrintQuoteDecisionCard(
+                  PrintQuoteOffersBoard(
                     order: order,
                     busy: _busy,
-                    onAccept: () {
-                      final quote = order.offeredQuote;
-                      if (quote != null) _acceptQuote(quote);
-                    },
-                    onDecline: () {
-                      final quote = order.offeredQuote;
-                      if (quote != null) _declineQuote(quote);
-                    },
+                    onAccept: _acceptQuote,
+                    onDecline: _declineQuote,
                   ),
                   if (order.status == 'awaiting_payment') ...[
                     SizedBox(height: 12.v),
@@ -354,6 +348,7 @@ class _PrintTrackingScreenState extends State<PrintTrackingScreen> {
                     PrintLocationPicker(
                       latController: _dropLat,
                       lngController: _dropLng,
+                      addressController: _address,
                       onChanged: () => setState(() {}),
                     ),
                     SizedBox(height: 10.v),

@@ -3,6 +3,7 @@ import 'package:musamimuk/core/network/api_client.dart';
 import 'package:musamimuk/core/network/api_error_mapper.dart';
 import 'package:musamimuk/core/network/api_utils.dart';
 import 'package:musamimuk/core/session/session_manager.dart';
+import 'package:musamimuk/core/utils/pref_utils.dart';
 import 'package:musamimuk/data/models/login_request.dart';
 import 'package:musamimuk/data/models/login_response.dart';
 import 'package:musamimuk/data/models/register_response.dart';
@@ -106,11 +107,14 @@ class AuthRepository {
     String? accessToken,
   }) async {
     try {
+      final referralCode = PrefUtils().getPendingReferralCode();
       final payload = <String, dynamic>{
         if (idToken != null && idToken.trim().isNotEmpty)
           'id_token': idToken.trim(),
         if (accessToken != null && accessToken.trim().isNotEmpty)
           'access_token': accessToken.trim(),
+        if (referralCode != null && referralCode.isNotEmpty)
+          'referral_code': referralCode,
       };
       final response = await _api.dio.post<Map<String, dynamic>>(
         'user/google-login',
@@ -123,7 +127,10 @@ class AuthRepository {
       final status = response.statusCode ?? 0;
       if (status >= 200 && status < 300 && data != null) {
         final parsed = LoginResponse.fromJson(data);
-        if (parsed.token.trim().isNotEmpty) return LoginSuccess(parsed);
+        if (parsed.token.trim().isNotEmpty) {
+          await PrefUtils().clearPendingReferralCode();
+          return LoginSuccess(parsed);
+        }
         return LoginFailure(apiExtractMessage(data) ?? 'Google sign-in failed');
       }
       return LoginFailure(apiExtractMessage(data) ?? 'Google sign-in failed');
@@ -231,6 +238,7 @@ class AuthRepository {
     required String passwordConfirmation,
     String country = '',
     String? imagePath,
+    String? referralCode,
   }) async {
     try {
       final formData = FormData();
@@ -241,6 +249,10 @@ class AuthRepository {
         MapEntry('password_confirmation', passwordConfirmation),
         MapEntry('country', country),
       ]);
+      final code = (referralCode ?? PrefUtils().getPendingReferralCode())?.trim();
+      if (code != null && code.isNotEmpty) {
+        formData.fields.add(MapEntry('referral_code', code));
+      }
       if (imagePath != null && imagePath.isNotEmpty) {
         formData.files.add(MapEntry(
           'image',
@@ -252,9 +264,11 @@ class AuthRepository {
         data: formData,
       );
       final data = response.data;
-      if (response.statusCode == 200 && data != null) {
+      if ((response.statusCode == 200 || response.statusCode == 201) &&
+          data != null) {
         final reg = RegisterResponse.fromJson(data);
         if (reg.status == true && reg.data != null && reg.data!.token.isNotEmpty) {
+          await PrefUtils().clearPendingReferralCode();
           return RegisterSuccess(reg);
         }
         return RegisterFailure(

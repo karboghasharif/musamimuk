@@ -1090,3 +1090,31 @@ class AppQuickActionTile extends StatelessWidget {
     );
   }
 }
+
+/// Soft studio-lamp wash from top-start (RTL/LTR via [AlignmentDirectional]).
+class AppAtelierAtmosphere extends StatelessWidget {
+  const AppAtelierAtmosphere({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: AppDs.atelierInk,
+          gradient: RadialGradient(
+            center: AlignmentDirectional.topStart.resolve(
+              Directionality.of(context),
+            ),
+            radius: 1.15,
+            colors: const [
+              AppDs.atelierLamp,
+              Color(0x00252A30),
+            ],
+            stops: const [0.0, 0.72],
+          ),
+        ),
+        child: const SizedBox.expand(),
+      ),
+    );
+  }
+}

@@ -64,6 +64,19 @@ abstract final class AppDs {
   static const Color printGold = Color(0xFFE8C547);
   static const Color onAccent = Color(0xFF000000);
 
+  /// Deeper ink behind auth / studio atmospheres (sits under [surfaceBase]).
+  static const Color atelierInk = Color(0xFF1A1F24);
+
+  /// Warm lamp wash for craft-studio screens (amber, not purple/neon).
+  static const Color atelierLamp = Color(0x33E8C547);
+
+  /// Thin craft spine / divider accent (brass, quieter than primary yellow).
+  static const Color atelierBrass = Color(0xFFE8C547);
+
+  /// Hairline borders on atelier panels.
+  static Color atelierHairline([double a = 0.1]) =>
+      Colors.white.withValues(alpha: a);
+
   // —— Motion ——
   static const Duration motionFast = Duration(milliseconds: 200);
   static const Duration motionNormal = Duration(milliseconds: 280);

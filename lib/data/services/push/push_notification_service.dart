@@ -74,11 +74,23 @@ class PushNotificationService {
 
     // firebase_messaging 17: register() + onRegistered (FID). Keep getToken for
     // classic FCM device tokens used by Console / most backends.
-    await _messaging.register();
-    _tokenRefreshSub = _messaging.onRegistered.listen((fid) async {
-      if (kDebugMode) debugPrint('FCM registered FID: $fid');
-      await _refreshAndStoreToken();
-    });
+    // Manifest must include firebase_messaging_installation_id_enabled=true.
+    try {
+      await _messaging.register();
+      _tokenRefreshSub = _messaging.onRegistered.listen((fid) async {
+        if (kDebugMode) debugPrint('FCM registered FID: $fid');
+        await _refreshAndStoreToken();
+      });
+    } catch (e, st) {
+      if (kDebugMode) {
+        debugPrint('FCM register() failed (falling back to getToken): $e\n$st');
+      }
+      _tokenRefreshSub = _messaging.onTokenRefresh.listen((token) async {
+        _fcmToken = token;
+        await PrefUtils().setFcmToken(token);
+        await _registerTokenWithBackend(token);
+      });
+    }
 
     await _refreshAndStoreToken();
     _initialized = true;

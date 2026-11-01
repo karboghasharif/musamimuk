@@ -4,6 +4,7 @@ import '../../core/app_export.dart';
 import '../../data/models/notification_item.dart';
 import '../../data/repositories/notification_repository.dart';
 import '../../presentation/contest/contest_navigation.dart';
+import '../../presentation/print/print_live.dart';
 import '../../widgets/app_bar/appbar_leading_image.dart';
 import '../../widgets/app_bar/appbar_title.dart';
 import '../../widgets/app_bar/custom_app_bar.dart';
@@ -24,11 +25,26 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   List<NotificationItem> _items = const [];
   bool _loading = true;
   String? _error;
+  VoidCallback? _stopLive;
 
   @override
   void initState() {
     super.initState();
+    _stopLive = PrintLive.instance.listenNotifications(_loadQuiet);
     _load();
+  }
+
+  @override
+  void dispose() {
+    _stopLive?.call();
+    super.dispose();
+  }
+
+  Future<void> _loadQuiet() async {
+    if (!mounted || _loading) return;
+    final result = await _repo.list(perPage: 30);
+    if (!mounted || result is! NotificationsSuccess) return;
+    setState(() => _items = result.items);
   }
 
   Future<void> _load() async {
@@ -59,10 +75,32 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Future<void> _onTap(NotificationItem item) async {
-    if (!item.isRead) {
+    if (!item.isRead && item.id.isNotEmpty) {
       await _repo.markRead(item.id);
     }
     if (!mounted) return;
+    final href = item.href ?? '';
+    final orderMatch = RegExp(r'/print/orders/(\d+)').firstMatch(href);
+    final orderId = int.tryParse(orderMatch?.group(1) ?? '') ??
+        int.tryParse(item.data['order_id']?.toString() ?? '');
+    if (orderId != null && orderId > 0) {
+      NavigatorService.pushNamed(
+        AppRoutes.printTrackingScreen,
+        arguments: {'orderId': orderId},
+      );
+      _load();
+      return;
+    }
+    if (href.contains('/print/rider')) {
+      NavigatorService.pushNamed(AppRoutes.printRiderHomeScreen);
+      _load();
+      return;
+    }
+    if (href.contains('/print') || item.data['type']?.toString() == 'print') {
+      NavigatorService.pushNamed(AppRoutes.printNoticesScreen);
+      _load();
+      return;
+    }
     ContestNavigation.openFromNotificationData(item.data);
     _load();
   }
@@ -144,22 +182,12 @@ class _NotificationTile extends StatelessWidget {
   final NotificationItem item;
   final VoidCallback onTap;
 
-  String get _title {
-    final data = item.data;
-    return data['title']?.toString().trim().isNotEmpty == true
-        ? data['title'].toString()
-        : (item.type ?? 'lbl_notifications'.tr);
-  }
-
-  String get _body {
-    final data = item.data;
-    return data['message']?.toString().trim().isNotEmpty == true
-        ? data['message'].toString()
-        : (data['body']?.toString() ?? '');
-  }
-
   @override
   Widget build(BuildContext context) {
+    final title = item.title.isNotEmpty
+        ? item.title
+        : 'lbl_notifications'.tr;
+    final body = item.body;
     return Material(
       color: item.isRead
           ? appTheme.blueGray90001
@@ -173,10 +201,10 @@ class _NotificationTile extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(_title, style: AppTypography.title(theme)),
-              if (_body.isNotEmpty) ...[
+              Text(title, style: AppTypography.title(theme)),
+              if (body.isNotEmpty) ...[
                 SizedBox(height: AppDs.space1.v),
-                Text(_body, style: AppTypography.secondary(theme), maxLines: 3),
+                Text(body, style: AppTypography.secondary(theme), maxLines: 3),
               ],
             ],
           ),

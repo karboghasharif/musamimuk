@@ -1,4 +1,5 @@
 import Flutter
+import GoogleMaps
 import UIKit
 import UserNotifications
 
@@ -8,6 +9,11 @@ import UserNotifications
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    if let mapsKey = Bundle.main.object(forInfoDictionaryKey: "GMSApiKey") as? String,
+       !mapsKey.isEmpty,
+       !mapsKey.contains("$(") {
+      GMSServices.provideAPIKey(mapsKey)
+    }
     // Required so FCM can present / receive notifications on iOS.
     UNUserNotificationCenter.current().delegate = self
     application.registerForRemoteNotifications()

@@ -13,10 +13,14 @@ class PrintRepository {
   /// KYC / portfolio multipart can be several MB over mobile networks.
   /// Do not force Content-Type — Dio must set multipart boundary itself.
   static const _kycUploadTimeout = Duration(minutes: 3);
+  static const _kycConnectTimeout = Duration(seconds: 60);
 
   Options get _kycMultipartOptions => Options(
+        connectTimeout: _kycConnectTimeout,
         sendTimeout: _kycUploadTimeout,
         receiveTimeout: _kycUploadTimeout,
+        // Must override BaseOptions' application/json (null Content-Type header crashes Dio).
+        contentType: 'multipart/form-data',
       );
 
   Future<PrintResult<PrintOrder>> createJob({
@@ -39,6 +43,34 @@ class PrintRepository {
           if (dropoffAddress != null) 'dropoff_address': dropoffAddress,
           if (dropoffLat != null) 'dropoff_lat': dropoffLat,
           if (dropoffLng != null) 'dropoff_lng': dropoffLng,
+        },
+      ),
+    );
+  }
+
+  /// Open-pool broadcast to nearby shops (shop_id stays null until a quote is accepted).
+  Future<PrintResult<PrintOrder>> broadcastJob({
+    required int designId,
+    required PrintSpec spec,
+    required String fulfillment,
+    String? dropoffAddress,
+    double? dropoffLat,
+    double? dropoffLng,
+    double? pinLat,
+    double? pinLng,
+  }) {
+    return _sendOrder(
+      () => _dio.post<Map<String, dynamic>>(
+        'print/jobs/broadcast',
+        data: {
+          'design_id': designId,
+          'spec': spec.toJson(),
+          'fulfillment': fulfillment,
+          if (dropoffAddress != null) 'dropoff_address': dropoffAddress,
+          if (dropoffLat != null) 'dropoff_lat': dropoffLat,
+          if (dropoffLng != null) 'dropoff_lng': dropoffLng,
+          if (pinLat != null) 'pin_lat': pinLat,
+          if (pinLng != null) 'pin_lng': pinLng,
         },
       ),
     );
@@ -181,7 +213,9 @@ class PrintRepository {
     );
   }
 
-  Future<PrintResult<PrintStripeConnect>> startStripeConnect(String kind) async {
+  Future<PrintResult<PrintStripeConnect>> startStripeConnect(
+    String kind,
+  ) async {
     try {
       final path = kind == 'rider'
           ? 'print/rider/stripe/connect'
@@ -214,7 +248,8 @@ class PrintRepository {
           !apiResponseIsSuccess(response.data!) ||
           map == null) {
         return PrintFailure(
-          apiExtractMessage(response.data) ?? 'Unable to refresh Stripe status.',
+          apiExtractMessage(response.data) ??
+              'Unable to refresh Stripe status.',
         );
       }
       return PrintSuccess(PrintStripeConnect.fromJson(map));
@@ -365,10 +400,12 @@ class PrintRepository {
       ]);
       for (var i = 0; i < documents.length; i++) {
         final doc = documents[i];
-        form.files.add(MapEntry(
-          'documents[]',
-          await MultipartFile.fromFile(doc.path, filename: doc.name),
-        ));
+        form.files.add(
+          MapEntry(
+            'documents[]',
+            await MultipartFile.fromFile(doc.path, filename: doc.name),
+          ),
+        );
         form.fields.add(MapEntry('document_kinds[$i]', doc.kind));
       }
       final response = await _dio.post<Map<String, dynamic>>(
@@ -403,10 +440,12 @@ class PrintRepository {
       final form = FormData();
       for (var i = 0; i < documents.length; i++) {
         final doc = documents[i];
-        form.files.add(MapEntry(
-          'documents[]',
-          await MultipartFile.fromFile(doc.path, filename: doc.name),
-        ));
+        form.files.add(
+          MapEntry(
+            'documents[]',
+            await MultipartFile.fromFile(doc.path, filename: doc.name),
+          ),
+        );
         form.fields.add(MapEntry('document_kinds[$i]', doc.kind));
       }
       final response = await _dio.post<Map<String, dynamic>>(
@@ -456,19 +495,29 @@ class PrintRepository {
 
   Future<PrintResult<List<PrintDeliveryArea>>> deliveryAreas() async {
     try {
-      final response =
-          await _dio.get<Map<String, dynamic>>('print/delivery-areas');
+      final response = await _dio.get<Map<String, dynamic>>(
+        'print/delivery-areas',
+      );
       final data = response.data;
       if (data == null || !apiResponseIsSuccess(data)) {
-        return PrintFailure(
-          apiExtractMessage(data) ?? 'Unable to load delivery areas.',
+        // Keep registration usable when the route is missing on older deploys.
+        return PrintSuccess(
+          List<PrintDeliveryArea>.from(PrintDeliveryArea.seededDefaults),
         );
       }
+      final list = apiExtractDataList(
+        data,
+      ).map(PrintDeliveryArea.fromJson).toList();
+      if (list.isEmpty) {
+        return PrintSuccess(
+          List<PrintDeliveryArea>.from(PrintDeliveryArea.seededDefaults),
+        );
+      }
+      return PrintSuccess(list);
+    } on DioException catch (_) {
       return PrintSuccess(
-        apiExtractDataList(data).map(PrintDeliveryArea.fromJson).toList(),
+        List<PrintDeliveryArea>.from(PrintDeliveryArea.seededDefaults),
       );
-    } on DioException catch (e) {
-      return PrintFailure(apiMessageFromDioException(e));
     }
   }
 
@@ -579,10 +628,12 @@ class PrintRepository {
       ]);
       for (var i = 0; i < documents.length; i++) {
         final doc = documents[i];
-        form.files.add(MapEntry(
-          'documents[]',
-          await MultipartFile.fromFile(doc.path, filename: doc.name),
-        ));
+        form.files.add(
+          MapEntry(
+            'documents[]',
+            await MultipartFile.fromFile(doc.path, filename: doc.name),
+          ),
+        );
         form.fields.add(MapEntry('document_kinds[$i]', doc.kind));
       }
       final response = await _dio.post<Map<String, dynamic>>(
@@ -593,6 +644,8 @@ class PrintRepository {
       return _parseRider(response.data, 'Registration failed.');
     } on DioException catch (e) {
       return PrintFailure(apiMessageFromDioException(e));
+    } on ArgumentError catch (e) {
+      return PrintFailure(e.message?.toString() ?? 'Registration failed.');
     }
   }
 
@@ -617,10 +670,12 @@ class PrintRepository {
       final form = FormData();
       for (var i = 0; i < documents.length; i++) {
         final doc = documents[i];
-        form.files.add(MapEntry(
-          'documents[]',
-          await MultipartFile.fromFile(doc.path, filename: doc.name),
-        ));
+        form.files.add(
+          MapEntry(
+            'documents[]',
+            await MultipartFile.fromFile(doc.path, filename: doc.name),
+          ),
+        );
         form.fields.add(MapEntry('document_kinds[$i]', doc.kind));
       }
       final response = await _dio.post<Map<String, dynamic>>(
@@ -724,7 +779,8 @@ class PrintRepository {
         data: {
           'target': target,
           'scores': scores,
-          if (comment != null && comment.trim().isNotEmpty) 'comment': comment.trim(),
+          if (comment != null && comment.trim().isNotEmpty)
+            'comment': comment.trim(),
         },
       );
       final map = apiExtractPayloadMap(response.data);
@@ -818,10 +874,7 @@ class PrintRepository {
         form.files.add(
           MapEntry(
             'evidence_images[]',
-            await MultipartFile.fromFile(
-              path,
-              filename: path.split('/').last,
-            ),
+            await MultipartFile.fromFile(path, filename: path.split('/').last),
           ),
         );
       }
@@ -883,7 +936,8 @@ class PrintRepository {
           !apiResponseIsSuccess(response.data!) ||
           map == null) {
         return PrintFailure(
-          apiExtractMessage(response.data) ?? 'Unable to remove portfolio item.',
+          apiExtractMessage(response.data) ??
+              'Unable to remove portfolio item.',
         );
       }
       return PrintSuccess(PrintShopSummary.fromJson(map));
@@ -1054,7 +1108,9 @@ class PrintRepository {
   ) {
     final map = apiExtractPayloadMap(data);
     if (data == null || map == null) {
-      return PrintFailure(apiExtractMessage(data) ?? 'Delivery request failed.');
+      return PrintFailure(
+        apiExtractMessage(data) ?? 'Delivery request failed.',
+      );
     }
     return PrintSuccess(PrintDeliveryQuote.fromJson(map));
   }

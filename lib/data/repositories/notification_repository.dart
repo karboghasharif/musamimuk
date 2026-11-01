@@ -57,15 +57,21 @@ class NotificationRepository {
       final data = response.data;
       if (data == null) return NotificationsFailure('Empty response');
 
-      // Notifications may come as { success, data: { data: [...] } } (paginated),
-      // or legacy list shapes. We handle both.
+      // Shapes:
+      // - { status, data: { notifications: [...], data: [...], unread_count } }
+      // - { success, data: [...] }
       final db = apiExtractDbData(data);
-      dynamic listRaw = db;
-      if (db is Map && db.containsKey('data')) listRaw = db['data'];
+      dynamic listRaw;
+      if (db is List) {
+        listRaw = db;
+      } else if (db is Map) {
+        listRaw = db['notifications'] ?? db['data'] ?? db['items'];
+      }
       final list = (listRaw is List)
           ? listRaw
               .whereType<Map>()
               .map((e) => NotificationItem.fromJson(e.cast<String, dynamic>()))
+              .where((item) => item.id.isNotEmpty)
               .toList()
           : <NotificationItem>[];
 

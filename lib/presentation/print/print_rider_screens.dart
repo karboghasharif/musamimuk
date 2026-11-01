@@ -67,15 +67,18 @@ class _PrintRiderHomeScreenState extends State<PrintRiderHomeScreen> {
     final riderResult = await _repo.myRider();
     if (!mounted) return;
     if (riderResult is PrintFailure<PrintRiderProfile?>) {
+      // Keep any cached rider UI; do not send the user to register on a blip.
       setState(() => _loading = false);
       return;
     }
     final rider = (riderResult as PrintSuccess<PrintRiderProfile?>).data;
     if (rider == null) {
+      await PrefUtils().setHasPrintRiderProfile(false);
       if (!mounted) return;
       NavigatorService.pushReplacementNamed(AppRoutes.printRiderRegisterScreen);
       return;
     }
+    await PrefUtils().setHasPrintRiderProfile(true);
     var jobs = const <PrintDeliveryInfo>[];
     if (rider.isApproved) {
       final jobsResult = await _repo.riderJobs();
@@ -145,24 +148,50 @@ class _PrintRiderHomeScreenState extends State<PrintRiderHomeScreen> {
         title: 'lbl_print_rider_mode'.tr,
         showBack: false,
         actions: const [PrintModeButton()],
-        body: ListView(
-          padding: EdgeInsets.all(24.h),
+        body: Stack(
+          fit: StackFit.expand,
           children: [
-            if (rider == null)
-              Text(
-                'msg_print_register_rider'.tr,
-                style: const TextStyle(color: Colors.white70),
-                textAlign: TextAlign.center,
-              )
-            else ...[
-              PrintKycStatusBanner(
-                status: rider.status,
-                reviewNote: rider.reviewNote,
-                onFixDocs: () => _uploadDocsSheet(rider),
-                onEdit: () => _editProfileSheet(rider),
+            const AppAtelierAtmosphere(),
+            ListView(
+              padding: EdgeInsets.fromLTRB(
+                AppDs.space5.h,
+                AppDs.space4.v,
+                AppDs.space5.h,
+                AppDs.space8.v,
               ),
-              PrintDocumentList(documents: rider.documents),
-            ],
+              children: [
+                if (rider == null) ...[
+                  Padding(
+                    padding: EdgeInsets.only(top: AppDs.space8.v),
+                    child: AppText(
+                      PrefUtils().hasPrintRiderProfile() ||
+                              PrefUtils().getWorkMode() ==
+                                  PrefUtils.workModeRider
+                          ? 'msg_error_network'.tr
+                          : 'msg_print_register_rider'.tr,
+                      variant: AppTextVariant.secondary,
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  if (PrefUtils().hasPrintRiderProfile() ||
+                      PrefUtils().getWorkMode() == PrefUtils.workModeRider) ...[
+                    SizedBox(height: AppDs.space4.v),
+                    AppPrimaryButton(
+                      label: 'lbl_retry'.tr,
+                      onPressed: _load,
+                    ),
+                  ],
+                ] else ...[
+                  PrintKycStatusBanner(
+                    status: rider.status,
+                    reviewNote: rider.reviewNote,
+                    onFixDocs: () => _uploadDocsSheet(rider),
+                    onEdit: () => _editProfileSheet(rider),
+                  ),
+                  PrintDocumentList(documents: rider.documents),
+                ],
+              ],
+            ),
           ],
         ),
       );
@@ -205,41 +234,56 @@ class _PrintRiderHomeScreenState extends State<PrintRiderHomeScreen> {
           padding: EdgeInsets.all(16.h),
           children: [
             if (_section == 0) ...[
-              PrintLevelBadge(label: rider.levelLabel, labelAr: rider.levelLabelAr),
-              if (rider.levelProgress?.hint != null)
-                Padding(
-                  padding: EdgeInsets.only(top: 6.v, bottom: 12.v),
-                  child: Text(
-                    rider.levelProgress!.hint!,
-                    style: const TextStyle(color: Colors.white70),
+              PrintDeskHero(
+                name: rider.name,
+                statusLabel: rider.online
+                    ? 'lbl_print_online_active'.tr
+                    : 'lbl_print_online_idle'.tr,
+                statusActive: rider.online,
+                subtitle: [
+                  if (rider.district != null && rider.district!.trim().isNotEmpty)
+                    rider.district!,
+                  if (rider.areas.isNotEmpty)
+                    rider.areas.take(3).join(', '),
+                ].join(' · '),
+                levelLabel: rider.levelLabel,
+                levelLabelAr: rider.levelLabelAr,
+                levelProgress: rider.levelProgress,
+                leadingIcon: Icons.two_wheeler_outlined,
+                metrics: [
+                  ('${_jobs.length}', 'lbl_print_jobs'.tr),
+                  (rider.rating.toStringAsFixed(1), 'lbl_print_desk_rating'.tr),
+                  (
+                    '${rider.completedDeliveries}',
+                    'lbl_print_desk_done'.tr,
                   ),
-                ),
-              Text(
-                'lbl_print_verified_reviews'.tr,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                ),
+                ],
               ),
-              SizedBox(height: 8.v),
+              SizedBox(height: AppDs.space5.v),
+              PrintSectionTitle('lbl_print_verified_reviews'.tr),
+              SizedBox(height: AppDs.space3.v),
               PrintVerifiedReviewList(reviews: _reviews),
             ],
-            if (_section == 1)
-              ..._jobs.map(
-                (job) => Padding(
-                  padding: EdgeInsets.only(bottom: 10.v),
-                  child: _RiderJobCard(job: job, onChanged: _load),
+            if (_section == 1) ...[
+              if (_jobs.isEmpty)
+                PrintEmptyWork(
+                  icon: Icons.local_shipping_outlined,
+                  title: 'msg_print_no_jobs'.tr,
+                  body: 'msg_print_rider_jobs_empty'.tr,
+                )
+              else
+                ..._jobs.map(
+                  (job) => Padding(
+                    padding: EdgeInsets.only(bottom: AppDs.space2.v),
+                    child: _RiderJobCard(job: job, onChanged: _load),
+                  ),
                 ),
-              ),
+            ],
             if (_section == 2)
-              SwitchListTile(
-                value: rider.online,
-                activeThumbColor: AppDs.printGold,
-                title: Text(
-                  'lbl_print_online'.tr,
-                  style: const TextStyle(color: Colors.white),
-                ),
-                onChanged: _toggleOnline,
+              PrintOnlineStatusTile(
+                online: rider.online,
+                busy: _togglingOnline,
+                onChanged: _togglingOnline ? null : _toggleOnline,
               ),
             if (_section == 3) const PrintEarningsCard(kind: 'rider'),
             if (_section == 4) ...[
@@ -380,53 +424,51 @@ class _PrintRiderHomeScreenState extends State<PrintRiderHomeScreen> {
   }
 
   Future<void> _uploadDocsSheet(PrintRiderProfile rider) async {
-    final kinds = [
-      ...PrintKyc.riderRequiredKinds,
-      ...PrintKyc.riderOptionalKinds,
-    ];
-    final picked = <String, PrintPickedDoc?>{for (final k in kinds) k: null};
+    final picked = <String, PrintPickedDoc?>{
+      for (final k in [
+        ...PrintKyc.riderRequiredKinds,
+        ...PrintKyc.riderOptionalKinds,
+      ])
+        k: null,
+    };
     var saving = false;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppDs.surfaceRaised,
+      backgroundColor: AppDs.atelierInk,
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setModal) {
             return Padding(
               padding: EdgeInsets.only(
-                left: 16.h,
-                right: 16.h,
-                top: 16.v,
-                bottom: MediaQuery.viewInsetsOf(ctx).bottom + 16.v,
+                left: AppDs.space4.h,
+                right: AppDs.space4.h,
+                top: AppDs.space4.v,
+                bottom: MediaQuery.viewInsetsOf(ctx).bottom + AppDs.space4.v,
               ),
               child: SingleChildScrollView(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(
+                    AppText(
                       'lbl_print_upload_docs'.tr,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 18,
-                      ),
+                      variant: AppTextVariant.heading,
                     ),
-                    ...kinds.map(
-                      (kind) => PrintKycDocSlot(
-                        kind: kind,
-                        required: false,
-                        picked: picked[kind],
-                        onPick: () async {
-                          final doc = await pickPrintKycFile(kind);
-                          if (doc != null) setModal(() => picked[kind] = doc);
-                        },
-                        onClear: () => setModal(() => picked[kind] = null),
-                      ),
+                    SizedBox(height: AppDs.space3.v),
+                    PrintKycDocSection(
+                      requiredKinds: PrintKyc.riderRequiredKinds,
+                      optionalKinds: PrintKyc.riderOptionalKinds,
+                      docs: picked,
+                      onPick: (kind) async {
+                        final doc = await pickPrintKycFile(kind);
+                        if (doc != null) setModal(() => picked[kind] = doc);
+                      },
+                      onClear: (kind) => setModal(() => picked[kind] = null),
                     ),
-                    PrintGoldButton(
+                    SizedBox(height: AppDs.space3.v),
+                    AppPrimaryButton(
                       label: 'lbl_print_submit'.tr,
-                      loading: saving,
+                      isLoading: saving,
                       onPressed: () async {
                         final docs =
                             picked.values.whereType<PrintPickedDoc>().toList();
@@ -442,10 +484,16 @@ class _PrintRiderHomeScreenState extends State<PrintRiderHomeScreen> {
                         if (!mounted) return;
                         setModal(() => saving = false);
                         if (result is PrintFailure<PrintRiderProfile>) {
-                          showAppToast(result.message, type: ToastificationType.error);
+                          showAppToast(
+                            result.message,
+                            type: ToastificationType.error,
+                          );
                           return;
                         }
-                        showAppToast('msg_print_docs_uploaded'.tr, type: ToastificationType.success);
+                        showAppToast(
+                          'msg_print_docs_uploaded'.tr,
+                          type: ToastificationType.success,
+                        );
                         Navigator.pop(ctx);
                         _load();
                       },
@@ -461,31 +509,7 @@ class _PrintRiderHomeScreenState extends State<PrintRiderHomeScreen> {
   }
 }
 
-class _RiderFact extends StatelessWidget {
-  const _RiderFact(this.label, this.value);
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: 8.v),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 120.h,
-            child: Text(label, style: const TextStyle(color: Colors.white54)),
-          ),
-          Expanded(
-            child: Text(value, style: const TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-  }
-}
+typedef _RiderFact = PrintKycFactRow;
 
 class PrintRiderRegisterScreen extends StatefulWidget {
   const PrintRiderRegisterScreen({super.key});
@@ -514,6 +538,7 @@ class _PrintRiderRegisterScreenState extends State<PrintRiderRegisterScreen> {
   final _lng = TextEditingController();
   final Set<String> _areas = {};
   List<PrintDeliveryArea> _areaChoices = const [];
+  bool _areasLoading = true;
   final Map<String, PrintPickedDoc?> _docs = {
     for (final k in [
       ...PrintKyc.riderRequiredKinds,
@@ -531,11 +556,17 @@ class _PrintRiderRegisterScreenState extends State<PrintRiderRegisterScreen> {
   }
 
   Future<void> _loadAreas() async {
+    setState(() => _areasLoading = true);
     final result = await _repo.deliveryAreas();
     if (!mounted) return;
-    if (result is PrintSuccess<List<PrintDeliveryArea>>) {
-      setState(() => _areaChoices = result.data);
-    }
+    final list = result is PrintSuccess<List<PrintDeliveryArea>>
+        ? result.data
+        : PrintDeliveryArea.seededDefaults;
+    setState(() {
+      _areaChoices =
+          list.isNotEmpty ? list : PrintDeliveryArea.seededDefaults;
+      _areasLoading = false;
+    });
   }
 
   @override
@@ -617,7 +648,7 @@ class _PrintRiderRegisterScreenState extends State<PrintRiderRegisterScreen> {
       return;
     }
     showAppToast('msg_print_kyc_submitted'.tr, type: ToastificationType.success);
-    NavigatorService.pushReplacementNamed(AppRoutes.printRiderHomeScreen);
+    await applyWorkMode(PrefUtils.workModeRider);
   }
 
   @override
@@ -633,31 +664,53 @@ class _PrintRiderRegisterScreenState extends State<PrintRiderRegisterScreen> {
       title: 'lbl_print_register_rider'.tr,
       showBack: false,
       actions: const [PrintModeButton()],
+      bottom: PrintKycNavBar(
+        canGoBack: _step > 1,
+        primaryLabel: _step == _totalSteps
+            ? 'lbl_print_submit'.tr
+            : 'lbl_print_next'.tr,
+        loading: _saving,
+        onBack: () => setState(() => _step--),
+        onPrimary: _next,
+      ),
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: EdgeInsets.all(16.h),
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: EdgeInsets.fromLTRB(
+            AppDs.space5.h,
+            AppDs.space4.v,
+            AppDs.space5.h,
+            AppDs.space4.v,
+          ),
           children: [
             PrintKycStepHeader(
               step: _step,
               total: _totalSteps,
               title: titles[_step - 1],
+              subtitle: _step == _totalSteps
+                  ? 'msg_print_review_header'.tr
+                  : 'msg_print_kyc_step_hint'.tr,
+              stepLabels: const ['1', '2', '3', '4', '5'],
             ),
             if (_step == 1) ...[
               PrintKycTextField(
                 controller: _name,
                 label: 'lbl_print_owner_name'.tr,
+                prefixIcon: Icons.person_outline_rounded,
                 validator: requiredText,
               ),
               PrintKycTextField(
                 controller: _phone,
                 label: 'lbl_print_phone'.tr,
+                prefixIcon: Icons.phone_outlined,
                 keyboardType: TextInputType.phone,
                 validator: requiredText,
               ),
               PrintKycTextField(
                 controller: _nationalId,
                 label: 'lbl_print_national_id'.tr,
+                prefixIcon: Icons.badge_outlined,
                 validator: requiredText,
               ),
             ],
@@ -665,31 +718,54 @@ class _PrintRiderRegisterScreenState extends State<PrintRiderRegisterScreen> {
               PrintKycTextField(
                 controller: _vehicle,
                 label: 'lbl_print_vehicle'.tr,
+                prefixIcon: Icons.two_wheeler_outlined,
                 validator: requiredText,
               ),
               PrintKycTextField(
                 controller: _plate,
                 label: 'lbl_print_plate'.tr,
+                prefixIcon: Icons.pin_outlined,
                 validator: requiredText,
               ),
               PrintKycTextField(
                 controller: _district,
                 label: 'lbl_print_district'.tr,
+                prefixIcon: Icons.map_outlined,
                 validator: requiredText,
               ),
-              Text(
+              SizedBox(height: AppDs.space2.v),
+              AppText(
                 'lbl_print_service_areas'.tr,
-                style: const TextStyle(color: Colors.white70),
+                variant: AppTextVariant.caption,
               ),
-              if (_areaChoices.isEmpty)
-                Text(
-                  'msg_print_areas_loading'.tr,
-                  style: const TextStyle(color: Colors.white54),
+              SizedBox(height: AppDs.space2.v),
+              if (_areasLoading)
+                Padding(
+                  padding: EdgeInsets.symmetric(vertical: AppDs.space3.v),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 18.adaptSize,
+                        height: 18.adaptSize,
+                        child: const CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppDs.accentYellow,
+                        ),
+                      ),
+                      SizedBox(width: AppDs.space2.h),
+                      Expanded(
+                        child: AppText(
+                          'msg_print_areas_loading'.tr,
+                          variant: AppTextVariant.secondary,
+                        ),
+                      ),
+                    ],
+                  ),
                 )
               else
                 Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
+                  spacing: AppDs.space2.h,
+                  runSpacing: AppDs.space2.v,
                   children: _areaChoices
                       .map(
                         (area) => FilterChip(
@@ -704,13 +780,20 @@ class _PrintRiderRegisterScreenState extends State<PrintRiderRegisterScreen> {
                               }
                             });
                           },
-                          selectedColor: AppDs.printGold,
+                          selectedColor: AppDs.accentYellow,
+                          checkmarkColor: AppDs.onAccent,
                           labelStyle: TextStyle(
                             color: _areas.contains(area.code)
-                                ? Colors.black
-                                : Colors.white,
+                                ? AppDs.onAccent
+                                : AppDs.textOnDarkPrimary,
+                            fontWeight: FontWeight.w600,
                           ),
                           backgroundColor: AppDs.surfaceRaised,
+                          side: BorderSide(
+                            color: _areas.contains(area.code)
+                                ? AppDs.accentYellow
+                                : AppDs.atelierHairline(0.16),
+                          ),
                         ),
                       )
                       .toList(),
@@ -720,70 +803,118 @@ class _PrintRiderRegisterScreenState extends State<PrintRiderRegisterScreen> {
               PrintKycTextField(
                 controller: _iban,
                 label: 'lbl_print_iban'.tr,
+                prefixIcon: Icons.account_balance_outlined,
                 validator: saudiIbanText,
               ),
               PrintLocationPicker(
                 latController: _lat,
                 lngController: _lng,
+                districtController: _district,
                 onChanged: () => setState(() {}),
               ),
             ],
             if (_step == 4)
-              ..._docs.keys.map(
-                (kind) => PrintKycDocSlot(
-                  kind: kind,
-                  required: PrintKyc.riderRequiredKinds.contains(kind),
-                  picked: _docs[kind],
-                  onPick: () async {
-                    final doc = await pickPrintKycFile(kind);
-                    if (doc != null) setState(() => _docs[kind] = doc);
-                  },
-                  onClear: () => setState(() => _docs[kind] = null),
-                ),
+              PrintKycDocSection(
+                requiredKinds: PrintKyc.riderRequiredKinds,
+                optionalKinds: PrintKyc.riderOptionalKinds,
+                docs: _docs,
+                onPick: (kind) async {
+                  final doc = await pickPrintKycFile(kind);
+                  if (doc != null) setState(() => _docs[kind] = doc);
+                },
+                onClear: (kind) => setState(() => _docs[kind] = null),
               ),
-            if (_step == 5) ...[
-              _RiderFact('lbl_print_owner_name'.tr, _name.text),
-              _RiderFact('lbl_print_phone'.tr, _phone.text),
-              _RiderFact('lbl_print_vehicle'.tr, _vehicle.text),
-              _RiderFact('lbl_print_iban'.tr, _iban.text),
-              _RiderFact(
-                'lbl_print_documents'.tr,
-                '${_docs.values.whereType<PrintPickedDoc>().length}',
-              ),
-            ],
-            SizedBox(height: 16.v),
-            Row(
-              children: [
-                if (_step > 1)
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: _saving ? null : () => setState(() => _step--),
-                      style: OutlinedButton.styleFrom(
-                        minimumSize: const Size(44, 48),
-                        side: const BorderSide(color: Colors.white24),
-                      ),
-                      child: Text(
-                        'lbl_print_back'.tr,
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                    ),
-                  ),
-                if (_step > 1) SizedBox(width: 12.h),
-                Expanded(
-                  flex: 2,
-                  child: PrintGoldButton(
-                    label: _step == _totalSteps
-                        ? 'lbl_print_submit'.tr
-                        : 'lbl_print_next'.tr,
-                    loading: _saving,
-                    onPressed: _next,
-                  ),
-                ),
-              ],
-            ),
+            if (_step == 5) _buildReview(),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildReview() {
+    final attachedDocs =
+        _docs.values.whereType<PrintPickedDoc>().toList(growable: false);
+    final missingRequired = PrintKyc.riderRequiredKinds
+        .where((k) => _docs[k] == null)
+        .map((k) => PrintKyc.labelKey(k).tr)
+        .toList();
+    final areaLabels = _areaChoices
+        .where((a) => _areas.contains(a.code))
+        .map((a) => a.label)
+        .toList();
+    final coords = [
+      if (_lat.text.trim().isNotEmpty) _lat.text.trim(),
+      if (_lng.text.trim().isNotEmpty) _lng.text.trim(),
+    ].join(', ');
+
+    return PrintKycReviewCard(
+      children: [
+        PrintKycReviewSection(
+          title: 'lbl_print_step_identity'.tr,
+          icon: Icons.person_outline_rounded,
+          onEdit: () => setState(() => _step = 1),
+          children: [
+            PrintKycFactRow('lbl_print_owner_name'.tr, _name.text),
+            PrintKycFactRow('lbl_print_phone'.tr, _phone.text),
+            PrintKycFactRow('lbl_print_national_id'.tr, _nationalId.text),
+          ],
+        ),
+        PrintKycReviewSection(
+          title: 'lbl_print_step_vehicle'.tr,
+          icon: Icons.two_wheeler_outlined,
+          onEdit: () => setState(() => _step = 2),
+          children: [
+            PrintKycFactRow('lbl_print_vehicle'.tr, _vehicle.text),
+            PrintKycFactRow('lbl_print_plate'.tr, _plate.text),
+            PrintKycFactRow('lbl_print_district'.tr, _district.text),
+            AppText(
+              'lbl_print_service_areas'.tr,
+              variant: AppTextVariant.caption,
+            ),
+            SizedBox(height: AppDs.space1.v),
+            PrintKycReviewChips(
+              items: areaLabels,
+              emptyLabel: 'msg_print_areas_required'.tr,
+            ),
+          ],
+        ),
+        PrintKycReviewSection(
+          title: 'lbl_print_step_payout'.tr,
+          icon: Icons.account_balance_outlined,
+          onEdit: () => setState(() => _step = 3),
+          children: [
+            PrintKycFactRow('lbl_print_iban'.tr, _iban.text, stacked: true),
+            PrintKycFactRow('lbl_print_map_pin'.tr, coords, stacked: true),
+          ],
+        ),
+        PrintKycReviewSection(
+          title: 'lbl_print_step_documents'.tr,
+          icon: Icons.folder_outlined,
+          onEdit: () => setState(() => _step = 4),
+          children: [
+            PrintKycFactRow('lbl_print_documents'.tr, '${attachedDocs.length}'),
+            AppText(
+              'lbl_print_docs_attached_list'.tr,
+              variant: AppTextVariant.caption,
+            ),
+            SizedBox(height: AppDs.space2.v),
+            PrintKycDocPreviewGrid(
+              docs: attachedDocs,
+              emptyLabel: 'msg_print_no_documents'.tr,
+            ),
+            if (missingRequired.isNotEmpty) ...[
+              SizedBox(height: AppDs.space2.v),
+              AppText(
+                'msg_print_docs_missing_review'.tr,
+                variant: AppTextVariant.caption,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              SizedBox(height: AppDs.space1.v),
+              PrintKycReviewChips(items: missingRequired),
+            ],
+          ],
+        ),
+      ],
     );
   }
 }

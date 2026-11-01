@@ -54,9 +54,10 @@ import '../presentation/print/print_shops_screen.dart';
 import '../presentation/print/print_shop_profile_screen.dart';
 import '../presentation/print/print_chat_screen.dart';
 import '../presentation/print/print_tracking_screen.dart';
-import '../presentation/print/print_notices_screen.dart';
+import '../presentation/print/print_chats_screen.dart';
 import '../presentation/print/print_notices_screen.dart';
 import '../presentation/print/print_orders_screen.dart';
+import '../presentation/referral/referral_screen.dart';
 import '../presentation/print/print_shop_screens.dart';
 import '../presentation/print/print_rider_screens.dart';
 
@@ -140,8 +141,12 @@ class AppRoutes {
   static const String printChatScreen = '/print_chat_screen';
   static const String printTrackingScreen = '/print_tracking_screen';
   static const String printOrdersScreen = '/print_orders_screen';
+  static const String printChatsScreen = '/print_chats_screen';
+  static const String referralScreen = '/referral_screen';
   static const String printShopRegisterScreen = '/print_shop_register_screen';
   static const String printShopHomeScreen = '/print_shop_home_screen';
+  static const String printShopOrderDetailScreen =
+      '/print_shop_order_detail_screen';
   static const String printShopDashboardScreen = '/print_shop_dashboard_screen';
   static const String printRiderHomeScreen = '/print_rider_home_screen';
   static const String printRiderRegisterScreen = '/print_rider_register_screen';
@@ -208,8 +213,11 @@ class AppRoutes {
     printChatScreen: PrintChatScreen.builder,
     printTrackingScreen: PrintTrackingScreen.builder,
     printOrdersScreen: PrintOrdersScreen.builder,
+    printChatsScreen: PrintChatsScreen.builder,
+    referralScreen: ReferralScreen.builder,
     printShopRegisterScreen: PrintShopRegisterScreen.builder,
     printShopHomeScreen: PrintShopHomeScreen.builder,
+    printShopOrderDetailScreen: PrintShopOrderDetailScreen.builder,
     printShopDashboardScreen: PrintShopDashboardScreen.builder,
     printRiderHomeScreen: PrintRiderHomeScreen.builder,
     printRiderRegisterScreen: PrintRiderRegisterScreen.builder,

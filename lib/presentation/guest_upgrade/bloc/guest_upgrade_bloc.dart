@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/app_export.dart';
 import '../../../data/repositories/auth_repository.dart';
+import '../../print/print_open_orders_sync.dart';
 import '../../subscription/push_auth_sync.dart';
 import '../../subscription/revenue_cat_auth_sync.dart';
 import '../../wallet/wallet_auth_sync.dart';
@@ -97,6 +98,7 @@ class GuestUpgradeBloc extends Bloc<GuestUpgradeEvent, GuestUpgradeState> {
           await prefs.setUserSession(data.user!.toJson());
         }
         syncWalletAfterAuth(walletFromAuth: data.wallet);
+        syncPrintOpenOrdersAfterAuth();
         // ignore: unawaited_futures
         syncRevenueCatAfterAuth();
         // ignore: unawaited_futures

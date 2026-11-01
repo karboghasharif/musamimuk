@@ -17,6 +17,13 @@ class ChangePasswordVisibilityEvent extends Screen0RegisterEvent {
   List<Object?> get props => [value];
 }
 
+class ChangeRegisterAccountTypeEvent extends Screen0RegisterEvent {
+  ChangeRegisterAccountTypeEvent({required this.accountType});
+  final String accountType;
+  @override
+  List<Object?> get props => [accountType];
+}
+
 class RegisterSubmitEvent extends Screen0RegisterEvent {
   RegisterSubmitEvent({
     required this.name,

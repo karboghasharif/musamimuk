@@ -170,11 +170,36 @@ class AppNavigationDrawer extends StatelessWidget {
                     ),
                   if (!isGuest)
                     _DrawerNavTile(
+                      icon: Icons.chat_bubble_outline,
+                      label: 'lbl_print_chats'.tr,
+                      onTap: () {
+                        Navigator.pop(context);
+                        NavigatorService.pushNamed(AppRoutes.printChatsScreen);
+                      },
+                    ),
+                  if (!isGuest)
+                    _DrawerNavTile(
+                      icon: Icons.card_giftcard_outlined,
+                      label: 'lbl_referral_program'.tr,
+                      onTap: () {
+                        Navigator.pop(context);
+                        NavigatorService.pushNamed(AppRoutes.referralScreen);
+                      },
+                    ),
+                  if (!isGuest)
+                    _DrawerNavTile(
                       icon: Icons.swap_horiz,
                       label: 'lbl_switch_mode'.tr,
                       onTap: () {
                         Navigator.pop(context);
-                        showPrintModeSheet(context);
+                        // Drawer context is disposed after pop — use root nav.
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          final host =
+                              NavigatorService.navigatorKey.currentContext;
+                          if (host != null && host.mounted) {
+                            showPrintModeSheet(host);
+                          }
+                        });
                       },
                     ),
                   _DrawerNavTile(

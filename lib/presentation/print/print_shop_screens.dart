@@ -17,6 +17,7 @@ import 'print_live.dart';
 import 'print_hours_services.dart';
 import 'print_kyc_wizard.dart';
 import 'print_location_picker.dart';
+import 'print_shop_drawer.dart';
 import 'print_ui.dart';
 
 class PrintShopRegisterScreen extends StatefulWidget {
@@ -54,8 +55,9 @@ class _PrintShopRegisterScreenState extends State<PrintShopRegisterScreen> {
     ])
       k: null,
   };
-  String _open = '09:00';
-  String _close = '22:00';
+  List<PrintHourShift> _shifts = const [
+    PrintHourShift(open: '09:00', close: '22:00'),
+  ];
   Set<int> _days = {0, 1, 2, 3, 4, 5, 6};
   Set<String> _services = {'digital'};
   int _step = 1;
@@ -127,11 +129,7 @@ class _PrintShopRegisterScreenState extends State<PrintShopRegisterScreen> {
       district: _district.text.trim().isEmpty ? null : _district.text.trim(),
       startingPrice: double.tryParse(_starting.text.trim()),
       services: _services.toList(),
-      hours: {
-        'open': _open,
-        'close': _close,
-        'days': _days.toList()..sort(),
-      },
+      hours: printHoursPayload(shifts: _shifts, days: _days),
       documents: docs,
     );
     if (!mounted) return;
@@ -141,7 +139,7 @@ class _PrintShopRegisterScreenState extends State<PrintShopRegisterScreen> {
       return;
     }
     showAppToast('msg_print_kyc_submitted'.tr, type: ToastificationType.success);
-    NavigatorService.pushReplacementNamed(AppRoutes.printShopHomeScreen);
+    await applyWorkMode(PrefUtils.workModeShop);
   }
 
   @override
@@ -153,38 +151,68 @@ class _PrintShopRegisterScreenState extends State<PrintShopRegisterScreen> {
       'lbl_print_step_documents'.tr,
       'lbl_print_step_review'.tr,
     ];
+    final shortLabels = [
+      '1',
+      '2',
+      '3',
+      '4',
+      '5',
+    ];
     return PrintScaffold(
       title: 'lbl_print_register_shop'.tr,
       showBack: false,
       actions: const [PrintModeButton()],
+      bottom: PrintKycNavBar(
+        canGoBack: _step > 1,
+        primaryLabel: _step == _totalSteps
+            ? 'lbl_print_submit'.tr
+            : 'lbl_print_next'.tr,
+        loading: _saving,
+        onBack: () => setState(() => _step--),
+        onPrimary: _next,
+      ),
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: EdgeInsets.all(16.h),
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: EdgeInsets.fromLTRB(
+            AppDs.space5.h,
+            AppDs.space4.v,
+            AppDs.space5.h,
+            AppDs.space4.v,
+          ),
           children: [
             PrintKycStepHeader(
               step: _step,
               total: _totalSteps,
               title: titles[_step - 1],
+              subtitle: _step == _totalSteps
+                  ? 'msg_print_review_header'.tr
+                  : 'msg_print_kyc_step_hint'.tr,
+              stepLabels: shortLabels,
             ),
             if (_step == 1) ...[
               PrintKycTextField(
                 controller: _name,
                 label: 'lbl_print_shop_name'.tr,
+                prefixIcon: Icons.storefront_outlined,
                 validator: requiredText,
               ),
               PrintKycTextField(
                 controller: _nameAr,
                 label: 'lbl_print_shop_name_ar'.tr,
+                prefixIcon: Icons.translate_rounded,
               ),
               PrintKycTextField(
                 controller: _owner,
                 label: 'lbl_print_owner_name'.tr,
+                prefixIcon: Icons.person_outline_rounded,
                 validator: requiredText,
               ),
               PrintKycTextField(
                 controller: _phone,
                 label: 'lbl_print_phone'.tr,
+                prefixIcon: Icons.phone_outlined,
                 keyboardType: TextInputType.phone,
                 validator: requiredText,
               ),
@@ -195,109 +223,196 @@ class _PrintShopRegisterScreenState extends State<PrintShopRegisterScreen> {
               ),
             ],
             if (_step == 2) ...[
+              PrintLocationPicker(
+                latController: _lat,
+                lngController: _lng,
+                addressController: _address,
+                districtController: _district,
+                onChanged: () => setState(() {}),
+              ),
+              SizedBox(height: AppDs.space3.v),
               PrintKycTextField(
                 controller: _address,
                 label: 'lbl_print_address'.tr,
+                prefixIcon: Icons.place_outlined,
                 validator: requiredText,
               ),
               PrintKycTextField(
                 controller: _district,
                 label: 'lbl_print_district'.tr,
+                prefixIcon: Icons.map_outlined,
                 validator: requiredText,
-              ),
-              PrintLocationPicker(
-                latController: _lat,
-                lngController: _lng,
-                onChanged: () => setState(() {}),
               ),
             ],
             if (_step == 3) ...[
-              PrintKycTextField(controller: _cr, label: 'lbl_print_cr'.tr),
-              PrintKycTextField(controller: _vat, label: 'lbl_print_vat'.tr),
+              PrintKycTextField(
+                controller: _cr,
+                label: 'lbl_print_cr'.tr,
+                prefixIcon: Icons.badge_outlined,
+              ),
+              PrintKycTextField(
+                controller: _vat,
+                label: 'lbl_print_vat'.tr,
+                prefixIcon: Icons.receipt_long_outlined,
+              ),
               PrintKycTextField(
                 controller: _iban,
                 label: 'lbl_print_iban'.tr,
+                prefixIcon: Icons.account_balance_outlined,
                 validator: saudiIbanText,
               ),
               PrintKycTextField(
                 controller: _starting,
                 label: 'lbl_print_starting_price'.tr,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                prefixIcon: Icons.payments_outlined,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
               ),
-              SizedBox(height: 8.v),
+              SizedBox(height: AppDs.space2.v),
               PrintHoursEditor(
-                open: _open,
-                close: _close,
+                shifts: _shifts,
                 days: _days,
-                onOpenChanged: (v) => setState(() => _open = v),
-                onCloseChanged: (v) => setState(() => _close = v),
+                onShiftsChanged: (v) => setState(() => _shifts = v),
                 onDaysChanged: (v) => setState(() => _days = v),
               ),
-              SizedBox(height: 12.v),
+              SizedBox(height: AppDs.space3.v),
               PrintServicesChips(
                 selected: _services,
                 onChanged: (v) => setState(() => _services = v),
               ),
             ],
             if (_step == 4)
-              ..._docs.keys.map(
-                (kind) => PrintKycDocSlot(
-                  kind: kind,
-                  required: PrintKyc.shopRequiredKinds.contains(kind),
-                  picked: _docs[kind],
-                  onPick: () async {
-                    final doc = await pickPrintKycFile(kind);
-                    if (doc != null) setState(() => _docs[kind] = doc);
-                  },
-                  onClear: () => setState(() => _docs[kind] = null),
-                ),
+              PrintKycDocSection(
+                requiredKinds: PrintKyc.shopRequiredKinds,
+                optionalKinds: PrintKyc.shopOptionalKinds,
+                docs: _docs,
+                onPick: (kind) async {
+                  final doc = await pickPrintKycFile(kind);
+                  if (doc != null) setState(() => _docs[kind] = doc);
+                },
+                onClear: (kind) => setState(() => _docs[kind] = null),
               ),
-            if (_step == 5) ...[
-              _ShopFact('lbl_print_shop_name'.tr, _name.text),
-              _ShopFact('lbl_print_owner_name'.tr, _owner.text),
-              _ShopFact('lbl_print_phone'.tr, _phone.text),
-              _ShopFact('lbl_print_address'.tr, _address.text),
-              _ShopFact('lbl_print_iban'.tr, _iban.text),
-              _ShopFact(
-                'lbl_print_documents'.tr,
-                '${_docs.values.whereType<PrintPickedDoc>().length}',
-              ),
-            ],
-            SizedBox(height: 16.v),
-            Row(
-              children: [
-                if (_step > 1)
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: _saving
-                          ? null
-                          : () => setState(() => _step--),
-                      style: OutlinedButton.styleFrom(
-                        minimumSize: const Size(44, 48),
-                        side: const BorderSide(color: Colors.white24),
-                      ),
-                      child: Text(
-                        'lbl_print_back'.tr,
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                    ),
-                  ),
-                if (_step > 1) SizedBox(width: 12.h),
-                Expanded(
-                  flex: 2,
-                  child: PrintGoldButton(
-                    label: _step == _totalSteps
-                        ? 'lbl_print_submit'.tr
-                        : 'lbl_print_next'.tr,
-                    loading: _saving,
-                    onPressed: _next,
-                  ),
-                ),
-              ],
-            ),
+            if (_step == 5) _buildReview(),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildReview() {
+    final attachedDocs =
+        _docs.values.whereType<PrintPickedDoc>().toList(growable: false);
+    final missingRequired = PrintKyc.shopRequiredKinds
+        .where((k) => _docs[k] == null)
+        .map((k) => PrintKyc.labelKey(k).tr)
+        .toList();
+    final dayLabels = (_days.toList()..sort())
+        .map((d) => printDayLabels[d.clamp(0, 6)])
+        .toList();
+    final shiftLabels = _shifts
+        .map((s) => '${s.open} – ${s.close}')
+        .toList();
+    final serviceLabels =
+        _services.map((s) => s.replaceAll('_', ' ')).toList()..sort();
+    final coords = [
+      if (_lat.text.trim().isNotEmpty) _lat.text.trim(),
+      if (_lng.text.trim().isNotEmpty) _lng.text.trim(),
+    ].join(', ');
+
+    return PrintKycReviewCard(
+      children: [
+        PrintKycReviewSection(
+          title: 'lbl_print_step_business'.tr,
+          icon: Icons.storefront_outlined,
+          onEdit: () => setState(() => _step = 1),
+          children: [
+            PrintKycFactRow('lbl_print_shop_name'.tr, _name.text),
+            if (_nameAr.text.trim().isNotEmpty)
+              PrintKycFactRow('lbl_print_shop_name_ar'.tr, _nameAr.text),
+            PrintKycFactRow('lbl_print_owner_name'.tr, _owner.text),
+            PrintKycFactRow('lbl_print_phone'.tr, _phone.text),
+            if (_about.text.trim().isNotEmpty)
+              PrintKycFactRow(
+                'lbl_print_about'.tr,
+                _about.text,
+                stacked: true,
+              ),
+          ],
+        ),
+        PrintKycReviewSection(
+          title: 'lbl_print_step_location'.tr,
+          icon: Icons.place_outlined,
+          onEdit: () => setState(() => _step = 2),
+          children: [
+            PrintKycFactRow(
+              'lbl_print_address'.tr,
+              _address.text,
+              stacked: true,
+            ),
+            PrintKycFactRow('lbl_print_district'.tr, _district.text),
+            PrintKycFactRow('lbl_print_map_pin'.tr, coords, stacked: true),
+          ],
+        ),
+        PrintKycReviewSection(
+          title: 'lbl_print_step_commerce'.tr,
+          icon: Icons.payments_outlined,
+          onEdit: () => setState(() => _step = 3),
+          children: [
+            if (_cr.text.trim().isNotEmpty)
+              PrintKycFactRow('lbl_print_cr'.tr, _cr.text),
+            if (_vat.text.trim().isNotEmpty)
+              PrintKycFactRow('lbl_print_vat'.tr, _vat.text),
+            PrintKycFactRow('lbl_print_iban'.tr, _iban.text, stacked: true),
+            if (_starting.text.trim().isNotEmpty)
+              PrintKycFactRow(
+                'lbl_print_starting_price'.tr,
+                '${_starting.text.trim()} SAR',
+              ),
+            AppText('lbl_print_hours'.tr, variant: AppTextVariant.caption),
+            SizedBox(height: AppDs.space1.v),
+            PrintKycReviewChips(items: shiftLabels),
+            AppText('lbl_print_open_days'.tr, variant: AppTextVariant.caption),
+            SizedBox(height: AppDs.space1.v),
+            PrintKycReviewChips(items: dayLabels),
+            AppText('lbl_print_services'.tr, variant: AppTextVariant.caption),
+            SizedBox(height: AppDs.space1.v),
+            PrintKycReviewChips(
+              items: serviceLabels,
+              emptyLabel: 'msg_print_no_services_selected'.tr,
+            ),
+          ],
+        ),
+        PrintKycReviewSection(
+          title: 'lbl_print_step_documents'.tr,
+          icon: Icons.folder_outlined,
+          onEdit: () => setState(() => _step = 4),
+          children: [
+            PrintKycFactRow(
+              'lbl_print_documents'.tr,
+              '${attachedDocs.length}',
+            ),
+            AppText(
+              'lbl_print_docs_attached_list'.tr,
+              variant: AppTextVariant.caption,
+            ),
+            SizedBox(height: AppDs.space2.v),
+            PrintKycDocPreviewGrid(
+              docs: attachedDocs,
+              emptyLabel: 'msg_print_no_documents'.tr,
+            ),
+            if (missingRequired.isNotEmpty) ...[
+              SizedBox(height: AppDs.space2.v),
+              AppText(
+                'msg_print_docs_missing_review'.tr,
+                variant: AppTextVariant.caption,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              SizedBox(height: AppDs.space1.v),
+              PrintKycReviewChips(items: missingRequired),
+            ],
+          ],
+        ),
+      ],
     );
   }
 }
@@ -354,10 +469,12 @@ class _PrintShopHomeScreenState extends State<PrintShopHomeScreen> {
     }
     final shop = (shopResult as PrintSuccess<PrintShopSummary?>).data;
     if (shop == null) {
+      await PrefUtils().setHasPrintShopProfile(false);
       if (!mounted) return;
       NavigatorService.pushReplacementNamed(AppRoutes.printShopRegisterScreen);
       return;
     }
+    await PrefUtils().setHasPrintShopProfile(true);
     final ordersResult = await _repo.shopOrders();
     if (!mounted) return;
     final rows = ordersResult is PrintSuccess<List<PrintOrder>>
@@ -399,6 +516,65 @@ class _PrintShopHomeScreenState extends State<PrintShopHomeScreen> {
     }
   }
 
+  int get _quoteCount =>
+      _orders.where((order) => order.status == 'quote').length;
+
+  Future<void> _openOrderDetail(PrintOrder order) async {
+    await NavigatorService.pushNamed(
+      AppRoutes.printShopOrderDetailScreen,
+      arguments: {'orderId': order.id},
+    );
+    if (mounted) await _refreshOrders();
+  }
+
+  void _openConversation(PrintOrder order) {
+    NavigatorService.pushNamed(
+      AppRoutes.printChatScreen,
+      arguments: {
+        'orderId': order.id,
+        'thread': 'customer_shop',
+        'viewer': 'shop',
+      },
+    );
+  }
+
+  String? _lastChatPreview(PrintOrder order) {
+    final chats = order.messages
+        .where(
+          (m) => m.thread == 'customer_shop' && m.from != 'system',
+        )
+        .toList();
+    if (chats.isEmpty) return null;
+    return chats.last.body;
+  }
+
+  List<PrintOrder> get _conversationOrders {
+    final active = _orders
+        .where((o) => o.status != 'cancelled')
+        .toList(growable: false);
+    active.sort((a, b) {
+      final aMs = a.messages.isEmpty ? 0 : a.messages.last.id;
+      final bMs = b.messages.isEmpty ? 0 : b.messages.last.id;
+      return bMs.compareTo(aMs);
+    });
+    return active;
+  }
+
+  String get _sectionTitle {
+    switch (_section) {
+      case 1:
+        return 'lbl_print_shop_orders'.tr;
+      case 2:
+        return 'lbl_print_conversations'.tr;
+      case 3:
+        return 'lbl_print_earnings'.tr;
+      case 4:
+        return 'lbl_print_profile'.tr;
+      default:
+        return _shop?.name ?? 'lbl_print_shop_mode'.tr;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -415,57 +591,81 @@ class _PrintShopHomeScreenState extends State<PrintShopHomeScreen> {
         title: 'lbl_print_shop_mode'.tr,
         showBack: false,
         actions: const [PrintModeButton()],
-        body: ListView(
-          padding: EdgeInsets.all(24.h),
+        body: Stack(
+          fit: StackFit.expand,
           children: [
-            if (shop == null)
-              Text(
-                'msg_print_register_prompt'.tr,
-                style: const TextStyle(color: Colors.white70),
-                textAlign: TextAlign.center,
-              )
-            else ...[
-              PrintKycStatusBanner(
-                status: shop.status,
-                reviewNote: shop.reviewNote,
-                onFixDocs: () => _uploadDocsSheet(shop),
-                onEdit: () => _editProfileSheet(shop),
+            const AppAtelierAtmosphere(),
+            ListView(
+              padding: EdgeInsets.fromLTRB(
+                AppDs.space5.h,
+                AppDs.space4.v,
+                AppDs.space5.h,
+                AppDs.space8.v,
               ),
-              Text(
-                'lbl_print_documents'.tr,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              SizedBox(height: 8.v),
-              PrintDocumentList(documents: shop.documents),
-            ],
-            if (_orders.isNotEmpty) ...[
-              SizedBox(height: 16.v),
-              ..._orders.map(
-                (order) => Padding(
-                  padding: EdgeInsets.only(bottom: 8.v),
-                  child: Text(
-                    '#${order.number} · ${order.customerName ?? ''} · ${'lbl_print_status_${order.status}'.tr}',
-                    style: const TextStyle(color: Colors.white),
-                    textAlign: TextAlign.center,
+              children: [
+                if (shop == null)
+                  Padding(
+                    padding: EdgeInsets.only(top: AppDs.space8.v),
+                    child: AppText(
+                      'msg_print_register_prompt'.tr,
+                      variant: AppTextVariant.secondary,
+                      textAlign: TextAlign.center,
+                    ),
+                  )
+                else ...[
+                  PrintKycStatusBanner(
+                    status: shop.status,
+                    reviewNote: shop.reviewNote,
+                    onFixDocs: () => _uploadDocsSheet(shop),
+                    onEdit: () => _editProfileSheet(shop),
                   ),
-                ),
-              ),
-            ],
+                  PrintDocumentList(documents: shop.documents),
+                ],
+                if (_orders.isNotEmpty) ...[
+                  SizedBox(height: AppDs.space5.v),
+                  ..._orders.map(
+                    (order) => Padding(
+                      padding: EdgeInsets.only(bottom: AppDs.space2.v),
+                      child: Text(
+                        '#${order.number} · ${order.customerName ?? ''} · ${'lbl_print_status_${order.status}'.tr}',
+                        style: AppTypography.caption(Theme.of(context))
+                            .copyWith(color: AppDs.textOnDarkSecondary),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ],
         ),
       );
     }
     return PrintScaffold(
-      title: shop.name,
+      title: _sectionTitle,
       showBack: false,
-      actions: const [PrintModeButton()],
+      drawer: PrintShopDrawer(
+        shopName: shop.name,
+        section: _section,
+        quoteCount: _quoteCount,
+        onSelectSection: (index) => setState(() => _section = index),
+      ),
+      actions: [
+        IconButton(
+          tooltip: 'lbl_print_conversations'.tr,
+          onPressed: () => setState(() => _section = 2),
+          icon: Icon(
+            Icons.forum_outlined,
+            color: AppDs.atelierBrass,
+            size: 22.adaptSize,
+          ),
+        ),
+        const PrintModeButton(),
+      ],
       bottom: NavigationBar(
         backgroundColor: AppDs.surfaceRaised,
         indicatorColor: AppDs.printGold.withValues(alpha: 0.25),
-        selectedIndex: _section,
+        selectedIndex: _section.clamp(0, 4),
         onDestinationSelected: (index) => setState(() => _section = index),
         destinations: [
           NavigationDestination(
@@ -474,11 +674,15 @@ class _PrintShopHomeScreenState extends State<PrintShopHomeScreen> {
           ),
           NavigationDestination(
             icon: Badge(
-              isLabelVisible: _orders.where((order) => order.status == 'quote').isNotEmpty,
-              label: Text('${_orders.where((order) => order.status == 'quote').length}'),
+              isLabelVisible: _quoteCount > 0,
+              label: Text('$_quoteCount'),
               child: const Icon(Icons.receipt_long_outlined),
             ),
-            label: 'lbl_print_shop_orders'.tr,
+            label: 'lbl_print_nav_orders'.tr,
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.forum_outlined),
+            label: 'lbl_print_nav_chat'.tr,
           ),
           NavigationDestination(
             icon: const Icon(Icons.payments_outlined),
@@ -499,88 +703,102 @@ class _PrintShopHomeScreenState extends State<PrintShopHomeScreen> {
               Text(_error!, style: const TextStyle(color: Colors.redAccent)),
             if (_banner != null)
               Padding(
-                padding: EdgeInsets.only(bottom: 12.v),
-                child: Material(
-                  color: AppDs.printGold,
-                  borderRadius: BorderRadius.circular(16),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(16),
-                    onTap: () => setState(() {
-                      _section = 1;
-                      _banner = null;
-                    }),
-                    child: Padding(
-                      padding: EdgeInsets.all(14.h),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.notifications_active, color: Colors.black),
-                          SizedBox(width: 12.h),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '${'lbl_print_new_request'.tr} #${_banner!.number}',
-                                  style: const TextStyle(
-                                    color: Colors.black,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                                Text(
-                                  _banner!.customerName ?? 'msg_print_new_request'.tr,
-                                  style: const TextStyle(color: Colors.black87),
-                                ),
-                              ],
-                            ),
-                          ),
-                          IconButton(
-                            onPressed: () => setState(() => _banner = null),
-                            icon: const Icon(Icons.close, color: Colors.black),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+                padding: EdgeInsets.only(bottom: AppDs.space4.v),
+                child: PrintNewJobBanner(
+                  jobNumber: _banner!.number,
+                  customerName: _banner!.customerName ??
+                      _banner!.designName ??
+                      'msg_print_new_request'.tr,
+                  onOpen: () {
+                    final order = _banner!;
+                    setState(() => _banner = null);
+                    _openOrderDetail(order);
+                  },
+                  onDismiss: () => setState(() => _banner = null),
                 ),
               ),
             if (_section == 0) ...[
               _ShopDesk(shop: shop, orders: _orders),
-              SizedBox(height: 16.v),
-              Text(
-                'lbl_print_incoming'.tr,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16.fSize,
-                ),
-              ),
-              SizedBox(height: 8.v),
+              SizedBox(height: AppDs.space5.v),
+              PrintSectionTitle('lbl_print_incoming'.tr),
+              SizedBox(height: AppDs.space3.v),
               if (_orders.where((order) => order.status == 'quote').isEmpty)
-                Text(
-                  'msg_print_no_orders'.tr,
-                  style: const TextStyle(color: Colors.white70),
+                PrintEmptyWork(
+                  icon: Icons.inbox_outlined,
+                  title: 'msg_print_no_orders'.tr,
+                  body: 'msg_print_shop_queue_empty'.tr,
+                )
+              else
+                ..._orders.where((order) => order.status == 'quote').map(
+                  (order) => Padding(
+                    padding: EdgeInsets.only(bottom: AppDs.space2.v),
+                    child: PrintOrderSlip(
+                      order: order,
+                      preview: _lastChatPreview(order),
+                      onTap: () => _openOrderDetail(order),
+                    ),
+                  ),
                 ),
-              ..._orders.where((order) => order.status == 'quote').map(
-                (order) => Padding(
-                  padding: EdgeInsets.only(bottom: 10.v),
-                  child: _ShopOrderCard(order: order, onChanged: _load),
-                ),
-              ),
             ],
-            if (_section == 1)
-              ..._orders.map(
-                (order) => Padding(
-                  padding: EdgeInsets.only(bottom: 10.v),
-                  child: _ShopOrderCard(order: order, onChanged: _load),
+            if (_section == 1) ...[
+              PrintSectionTitle('lbl_print_shop_orders'.tr),
+              SizedBox(height: AppDs.space1.v),
+              Text(
+                'msg_print_tap_order_detail'.tr,
+                style: AppTypography.caption(Theme.of(context)).copyWith(
+                  color: AppDs.textOnDarkSecondary,
                 ),
               ),
-            if (_section == 1 && _orders.isEmpty)
+              SizedBox(height: AppDs.space3.v),
+              if (_orders.isEmpty)
+                PrintEmptyWork(
+                  icon: Icons.receipt_long_outlined,
+                  title: 'msg_print_no_orders'.tr,
+                  body: 'msg_print_shop_queue_empty'.tr,
+                )
+              else
+                ..._orders.map(
+                  (order) => Padding(
+                    padding: EdgeInsets.only(bottom: AppDs.space2.v),
+                    child: PrintOrderSlip(
+                      order: order,
+                      preview: _lastChatPreview(order),
+                      onTap: () => _openOrderDetail(order),
+                    ),
+                  ),
+                ),
+            ],
+            if (_section == 2) ...[
+              PrintSectionTitle('lbl_print_conversations'.tr),
+              SizedBox(height: AppDs.space1.v),
               Text(
-                'msg_print_no_orders'.tr,
-                style: const TextStyle(color: Colors.white70),
+                'msg_print_tap_conversation'.tr,
+                style: AppTypography.caption(Theme.of(context)).copyWith(
+                  color: AppDs.textOnDarkSecondary,
+                ),
               ),
-            if (_section == 2) const PrintEarningsCard(kind: 'shop'),
-            if (_section == 3) ...[
+              SizedBox(height: AppDs.space3.v),
+              if (_conversationOrders.isEmpty)
+                PrintEmptyWork(
+                  icon: Icons.forum_outlined,
+                  title: 'msg_print_no_chats'.tr,
+                  body: 'msg_print_shop_chats_empty'.tr,
+                )
+              else
+                ..._conversationOrders.map(
+                  (order) => Padding(
+                    padding: EdgeInsets.only(bottom: AppDs.space2.v),
+                    child: PrintConversationSlip(
+                      order: order,
+                      peerName: order.customerName,
+                      threadLabel: 'lbl_print_designer_chat'.tr,
+                      onTap: () => _openConversation(order),
+                    ),
+                  ),
+                ),
+            ],
+            if (_section == 3) const PrintEarningsCard(kind: 'shop'),
+            if (_section == 4) ...[
               if (shop.needsKycAction)
                 PrintKycStatusBanner(
                   status: shop.status,
@@ -598,16 +816,9 @@ class _PrintShopHomeScreenState extends State<PrintShopHomeScreen> {
                 _ShopFact('lbl_print_district'.tr, shop.district!),
               if (shop.iban != null) _ShopFact('lbl_print_iban'.tr, shop.iban!),
               if (shop.crNumber != null) _ShopFact('lbl_print_cr'.tr, shop.crNumber!),
-              SizedBox(height: 12.v),
-              Text(
-                'lbl_print_documents'.tr,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
+              SizedBox(height: AppDs.space4.v),
               PrintDocumentList(documents: shop.documents),
-              SizedBox(height: 16.v),
+              SizedBox(height: AppDs.space5.v),
               Text(
                 'lbl_print_portfolio'.tr,
                 style: const TextStyle(
@@ -821,61 +1032,63 @@ class _PrintShopHomeScreenState extends State<PrintShopHomeScreen> {
   }
 
   Future<void> _uploadDocsSheet(PrintShopSummary shop) async {
-    final kinds = [
-      ...PrintKyc.shopRequiredKinds,
-      ...PrintKyc.shopOptionalKinds,
-    ];
-    final picked = <String, PrintPickedDoc?>{for (final k in kinds) k: null};
+    final picked = <String, PrintPickedDoc?>{
+      for (final k in [
+        ...PrintKyc.shopRequiredKinds,
+        ...PrintKyc.shopOptionalKinds,
+      ])
+        k: null,
+    };
     var saving = false;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppDs.surfaceRaised,
+      backgroundColor: AppDs.atelierInk,
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setModal) {
             return Padding(
               padding: EdgeInsets.only(
-                left: 16.h,
-                right: 16.h,
-                top: 16.v,
-                bottom: MediaQuery.viewInsetsOf(ctx).bottom + 16.v,
+                left: AppDs.space4.h,
+                right: AppDs.space4.h,
+                top: AppDs.space4.v,
+                bottom: MediaQuery.viewInsetsOf(ctx).bottom + AppDs.space4.v,
               ),
               child: SingleChildScrollView(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(
+                    AppText(
                       'lbl_print_upload_docs'.tr,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 18,
-                      ),
+                      variant: AppTextVariant.heading,
                     ),
                     if (shop.reviewNote != null && shop.reviewNote!.isNotEmpty)
                       Padding(
-                        padding: EdgeInsets.only(top: 8.v, bottom: 8.v),
-                        child: Text(
+                        padding: EdgeInsets.only(
+                          top: AppDs.space2.v,
+                          bottom: AppDs.space2.v,
+                        ),
+                        child: AppText(
                           shop.reviewNote!,
-                          style: const TextStyle(color: Colors.orangeAccent),
+                          variant: AppTextVariant.secondary,
+                          color: const Color(0xFFE8A54B),
                         ),
                       ),
-                    ...kinds.map(
-                      (kind) => PrintKycDocSlot(
-                        kind: kind,
-                        required: false,
-                        picked: picked[kind],
-                        onPick: () async {
-                          final doc = await pickPrintKycFile(kind);
-                          if (doc != null) setModal(() => picked[kind] = doc);
-                        },
-                        onClear: () => setModal(() => picked[kind] = null),
-                      ),
+                    SizedBox(height: AppDs.space3.v),
+                    PrintKycDocSection(
+                      requiredKinds: PrintKyc.shopRequiredKinds,
+                      optionalKinds: PrintKyc.shopOptionalKinds,
+                      docs: picked,
+                      onPick: (kind) async {
+                        final doc = await pickPrintKycFile(kind);
+                        if (doc != null) setModal(() => picked[kind] = doc);
+                      },
+                      onClear: (kind) => setModal(() => picked[kind] = null),
                     ),
-                    PrintGoldButton(
+                    SizedBox(height: AppDs.space3.v),
+                    AppPrimaryButton(
                       label: 'lbl_print_submit'.tr,
-                      loading: saving,
+                      isLoading: saving,
                       onPressed: () async {
                         final docs =
                             picked.values.whereType<PrintPickedDoc>().toList();
@@ -925,119 +1138,32 @@ class _ShopDesk extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final waiting = orders.where((order) => order.status == 'quote').length;
-    return Container(
-      padding: EdgeInsets.all(16.h),
-      decoration: BoxDecoration(
-        color: AppDs.surfaceRaised,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppDs.printGold.withValues(alpha: 0.45)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              CircleAvatar(
-                backgroundColor: AppDs.printGold,
-                child: Text(
-                  shop.name.isEmpty ? 'S' : shop.name.characters.first.toUpperCase(),
-                  style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w800),
-                ),
-              ),
-              SizedBox(width: 12.h),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      shop.name,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 18,
-                      ),
-                    ),
-                    Text(
-                      shop.verified
-                          ? 'lbl_print_verified'.tr
-                          : 'lbl_print_status_${shop.status}'.tr,
-                      style: const TextStyle(color: AppDs.printGold),
-                    ),
-                  ],
-                ),
-              ),
-              PrintLevelBadge(label: shop.levelLabel, labelAr: shop.levelLabelAr),
-            ],
-          ),
-          if (shop.address != null) ...[
-            SizedBox(height: 10.v),
-            Text(shop.address!, style: const TextStyle(color: Colors.white70)),
-          ],
-          SizedBox(height: 14.v),
-          Row(
-            children: [
-              _DeskStat('$waiting', 'lbl_print_incoming'.tr),
-              _DeskStat(shop.rating.toStringAsFixed(1), 'lbl_print_verified_reviews'.tr),
-              _DeskStat('${shop.completedOrders}', 'lbl_print_shop_orders'.tr),
-            ],
-          ),
-        ],
-      ),
+    final place = [
+      if (shop.address != null && shop.address!.trim().isNotEmpty) shop.address!,
+      if (shop.district != null && shop.district!.trim().isNotEmpty)
+        shop.district!,
+    ].join(' · ');
+    return PrintDeskHero(
+      name: shop.name,
+      statusLabel: shop.verified
+          ? 'lbl_print_verified'.tr
+          : 'lbl_print_status_${shop.status}'.tr,
+      statusActive: shop.verified || shop.openNow,
+      subtitle: place.isEmpty ? null : place,
+      levelLabel: shop.levelLabel,
+      levelLabelAr: shop.levelLabelAr,
+      levelProgress: shop.levelProgress,
+      leadingIcon: Icons.print_outlined,
+      metrics: [
+        ('$waiting', 'lbl_print_desk_waiting'.tr),
+        (shop.rating.toStringAsFixed(1), 'lbl_print_desk_rating'.tr),
+        ('${shop.completedOrders}', 'lbl_print_desk_done'.tr),
+      ],
     );
   }
 }
 
-class _DeskStat extends StatelessWidget {
-  const _DeskStat(this.value, this.label);
-
-  final String value;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Column(
-        children: [
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w800,
-              fontSize: 20,
-            ),
-          ),
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white54, fontSize: 11),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ShopFact extends StatelessWidget {
-  const _ShopFact(this.label, this.value);
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: 12.v),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: const TextStyle(color: AppDs.printGold)),
-          if (value.isNotEmpty)
-            Text(value, style: const TextStyle(color: Colors.white)),
-        ],
-      ),
-    );
-  }
-}
+typedef _ShopFact = PrintKycFactRow;
 
 class PrintShopDashboardScreen extends StatelessWidget {
   const PrintShopDashboardScreen({super.key});
@@ -1048,17 +1174,21 @@ class PrintShopDashboardScreen extends StatelessWidget {
   Widget build(BuildContext context) => const PrintShopHomeScreen();
 }
 
-class _ShopOrderCard extends StatefulWidget {
-  const _ShopOrderCard({required this.order, required this.onChanged});
+class PrintShopOrderPanel extends StatefulWidget {
+  const PrintShopOrderPanel({
+    super.key,
+    required this.order,
+    required this.onChanged,
+  });
 
   final PrintOrder order;
   final VoidCallback onChanged;
 
   @override
-  State<_ShopOrderCard> createState() => _ShopOrderCardState();
+  State<PrintShopOrderPanel> createState() => _PrintShopOrderPanelState();
 }
 
-class _ShopOrderCardState extends State<_ShopOrderCard> {
+class _PrintShopOrderPanelState extends State<PrintShopOrderPanel> {
   final _repo = PrintRepository();
   final _pickupCode = TextEditingController();
   final _shopPrice = TextEditingController();
@@ -1097,6 +1227,18 @@ class _ShopOrderCardState extends State<_ShopOrderCard> {
     widget.onChanged();
   }
 
+  Future<void> _decline() async {
+    setState(() => _busy = true);
+    final result = await _repo.declineRequest(widget.order.id);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (result is PrintFailure<PrintOrder>) {
+      showAppToast(result.message, type: ToastificationType.error);
+      return;
+    }
+    widget.onChanged();
+  }
+
   Future<void> _advance(String action) async {
     setState(() => _busy = true);
     final result = await _repo.advance(orderId: widget.order.id, action: action);
@@ -1124,103 +1266,204 @@ class _ShopOrderCardState extends State<_ShopOrderCard> {
     widget.onChanged();
   }
 
+  String get _subtitle {
+    final order = widget.order;
+    final parts = <String>[
+      if (order.shopId == null && order.status == 'quote')
+        'lbl_print_open_booking'.tr,
+      if ((order.customerName ?? '').trim().isNotEmpty) order.customerName!.trim(),
+      if ((order.fulfillment ?? '').isNotEmpty)
+        order.fulfillment == 'delivery'
+            ? 'lbl_print_deliver_to_me'.tr
+            : 'lbl_print_pick_up'.tr,
+    ];
+    return parts.join(' · ');
+  }
+
   @override
   Widget build(BuildContext context) {
     final order = widget.order;
-    return Container(
-      padding: EdgeInsets.all(14.h),
-      decoration: BoxDecoration(
-        color: AppDs.surfaceRaised,
-        borderRadius: BorderRadius.circular(14),
-      ),
+    final theme = Theme.of(context);
+    final isQuote = order.status == 'quote';
+    final lastChat = order.messages
+        .where(
+          (message) =>
+              message.thread == 'customer_shop' && message.from != 'system',
+        )
+        .toList();
+
+    return PrintJobTicket(
+      jobNumber: order.number,
+      statusLabel: 'lbl_print_status_${order.status}'.tr,
+      title: order.designName,
+      subtitle: _subtitle.isEmpty ? null : _subtitle,
+      urgent: isQuote,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            '#${order.number} · ${'lbl_print_status_${order.status}'.tr}',
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          if (order.designName != null)
-            Text(order.designName!, style: const TextStyle(color: Colors.white70)),
-          if (order.customerName != null)
-            Text(order.customerName!, style: const TextStyle(color: Colors.white70)),
-          if (order.systemTotal != null)
-            Text(
-              '${'lbl_print_system_price'.tr}: SAR ${order.systemTotal!.toStringAsFixed(2)}',
-              style: const TextStyle(color: AppDs.printGold),
-            ),
-          if (order.status == 'quote') ...[
-            TextField(
-              controller: _shopPrice,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(labelText: 'lbl_print_shop_price'.tr),
-            ),
-            TextField(
-              controller: _eta,
-              keyboardType: TextInputType.number,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(labelText: 'lbl_print_eta_hours'.tr),
-            ),
-            TextField(
-              controller: _note,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(labelText: 'lbl_print_note'.tr),
-            ),
-            PrintGoldButton(
-              label: 'lbl_print_send_quote'.tr,
-              loading: _busy,
-              onPressed: _quote,
-            ),
-            TextButton(
-              onPressed: _busy
-                  ? null
-                  : () async {
-                      setState(() => _busy = true);
-                      final result = await _repo.declineRequest(order.id);
-                      if (!mounted) return;
-                      setState(() => _busy = false);
-                      if (result is PrintFailure<PrintOrder>) {
-                        showAppToast(result.message, type: ToastificationType.error);
-                        return;
-                      }
-                      widget.onChanged();
-                    },
-              child: Text('lbl_print_decline'.tr),
-            ),
+          if (order.spec != null) ...[
+            PrintSpecPills(spec: order.spec!),
+            SizedBox(height: AppDs.space3.v),
           ],
-          if (order.messages.any((message) => message.thread == 'customer_shop' && message.from != 'system'))
-            Padding(
-              padding: EdgeInsets.only(top: 8.v),
-              child: Text(
-                order.messages.lastWhere((message) => message.thread == 'customer_shop' && message.from != 'system').body,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white70, fontStyle: FontStyle.italic),
+          if ((order.spec?.notes ?? '').trim().isNotEmpty) ...[
+            Container(
+              width: double.infinity,
+              padding: EdgeInsets.all(AppDs.space3.h),
+              decoration: BoxDecoration(
+                color: AppDs.atelierBrass.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(AppDs.radiusMd),
+                border: Border.all(
+                  color: AppDs.atelierBrass.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'lbl_print_designer_notes'.tr,
+                    style: AppTypography.caption(theme).copyWith(
+                      color: AppDs.atelierBrass,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  SizedBox(height: AppDs.space1.v),
+                  Text(
+                    order.spec!.notes!.trim(),
+                    style: AppTypography.secondary(theme).copyWith(
+                      color: AppDs.textOnDarkPrimary,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
               ),
             ),
+            SizedBox(height: AppDs.space3.v),
+          ],
+          if (order.systemTotal != null) ...[
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'lbl_print_system_guide_price'.tr,
+                    style: AppTypography.caption(theme).copyWith(
+                      color: AppDs.textOnDarkSecondary,
+                    ),
+                  ),
+                ),
+                Text(
+                  printSar(order.systemTotal!),
+                  style: AppTypography.body(theme).copyWith(
+                    color: AppDs.atelierBrass,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 18.fSize,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: AppDs.space3.v),
+          ],
+          if (isQuote) ...[
+            Container(
+              padding: EdgeInsets.all(AppDs.space3.h),
+              decoration: BoxDecoration(
+                color: AppDs.atelierInk.withValues(alpha: 0.45),
+                borderRadius: BorderRadius.circular(AppDs.radiusMd),
+                border: Border.all(color: AppDs.atelierHairline(0.12)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'lbl_print_quote_workbench'.tr,
+                    style: AppTypography.body(theme).copyWith(
+                      color: AppDs.textOnDarkPrimary,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  SizedBox(height: AppDs.space1.v),
+                  Text(
+                    'msg_print_quote_hint'.tr,
+                    style: AppTypography.caption(theme).copyWith(
+                      color: AppDs.textOnDarkSecondary,
+                      height: 1.35,
+                    ),
+                  ),
+                  SizedBox(height: AppDs.space3.v),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _shopPrice,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          style: const TextStyle(color: AppDs.textOnDarkPrimary),
+                          decoration: printTicketField('lbl_print_shop_price'.tr),
+                        ),
+                      ),
+                      SizedBox(width: AppDs.space2.h),
+                      Expanded(
+                        child: TextField(
+                          controller: _eta,
+                          keyboardType: TextInputType.number,
+                          style: const TextStyle(color: AppDs.textOnDarkPrimary),
+                          decoration: printTicketField('lbl_print_eta_hours'.tr),
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: AppDs.space2.v),
+                  TextField(
+                    controller: _note,
+                    minLines: 2,
+                    maxLines: 3,
+                    style: const TextStyle(color: AppDs.textOnDarkPrimary),
+                    decoration: printTicketField('lbl_print_note'.tr),
+                  ),
+                  SizedBox(height: AppDs.space3.v),
+                  PrintGoldButton(
+                    label: 'lbl_print_send_quote'.tr,
+                    loading: _busy,
+                    onPressed: _quote,
+                  ),
+                  SizedBox(height: AppDs.space2.v),
+                  PrintGhostButton(
+                    label: 'lbl_print_decline'.tr,
+                    onPressed: _busy ? null : _decline,
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: AppDs.space3.v),
+          ],
+          if (lastChat.isNotEmpty) ...[
+            Text(
+              lastChat.last.body,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.caption(theme).copyWith(
+                color: AppDs.textOnDarkSecondary,
+                fontStyle: FontStyle.italic,
+                height: 1.35,
+              ),
+            ),
+            SizedBox(height: AppDs.space3.v),
+          ],
           if ((order.printFileUrl ?? '').isNotEmpty) ...[
-            SizedBox(height: 8.v),
-            OutlinedButton.icon(
+            PrintGhostButton(
+              label: 'lbl_print_download_file'.tr,
+              icon: Icons.download_outlined,
               onPressed: () async {
                 final uri = Uri.tryParse(order.printFileUrl!);
                 if (uri == null) return;
                 await launchUrl(uri, mode: LaunchMode.externalApplication);
               },
-              icon: const Icon(Icons.download_outlined, color: AppDs.printGold),
-              label: Text('lbl_print_download_file'.tr),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.white,
-                side: const BorderSide(color: AppDs.printGold),
-                minimumSize: const Size.fromHeight(44),
-              ),
             ),
+            SizedBox(height: AppDs.space2.v),
           ],
-          SizedBox(height: 8.v),
-          OutlinedButton.icon(
+          PrintGhostButton(
+            label: 'lbl_print_designer_chat'.tr,
+            icon: Icons.chat_bubble_outline,
             onPressed: () => NavigatorService.pushNamed(
               AppRoutes.printChatScreen,
               arguments: {
@@ -1229,16 +1472,12 @@ class _ShopOrderCardState extends State<_ShopOrderCard> {
                 'viewer': 'shop',
               },
             ),
-            icon: const Icon(Icons.chat_bubble_outline, color: AppDs.printGold),
-            label: Text('lbl_print_designer_chat'.tr),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.white,
-              side: const BorderSide(color: AppDs.printGold),
-              minimumSize: const Size.fromHeight(44),
-            ),
           ),
-          if (order.delivery?.riderId != null)
-            TextButton(
+          if (order.delivery?.riderId != null) ...[
+            SizedBox(height: AppDs.space2.v),
+            PrintGhostButton(
+              label: 'lbl_print_rider_chat'.tr,
+              icon: Icons.two_wheeler_outlined,
               onPressed: () => NavigatorService.pushNamed(
                 AppRoutes.printChatScreen,
                 arguments: {
@@ -1247,9 +1486,12 @@ class _ShopOrderCardState extends State<_ShopOrderCard> {
                   'viewer': 'shop',
                 },
               ),
-              child: Text('lbl_print_rider_chat'.tr),
             ),
-          if (order.status == 'ready' && order.fulfillment == 'delivery' && order.delivery?.riderId == null)
+          ],
+          if (order.status == 'ready' &&
+              order.fulfillment == 'delivery' &&
+              order.delivery?.riderId == null) ...[
+            SizedBox(height: AppDs.space3.v),
             PrintGoldButton(
               label: 'lbl_print_request_rider'.tr,
               loading: _busy,
@@ -1265,31 +1507,23 @@ class _ShopOrderCardState extends State<_ShopOrderCard> {
                 widget.onChanged();
               },
             ),
-          if (order.nextAction != null && order.status != 'quote')
-            Padding(
-              padding: EdgeInsets.only(top: 8.v),
-              child: PrintGoldButton(
-                label: 'lbl_print_action_${order.nextAction}'.tr,
-                loading: _busy,
-                onPressed: () => _advance(order.nextAction!),
-              ),
+          ],
+          if (order.nextAction != null && !isQuote) ...[
+            SizedBox(height: AppDs.space3.v),
+            PrintGoldButton(
+              label: 'lbl_print_action_${order.nextAction}'.tr,
+              loading: _busy,
+              onPressed: () => _advance(order.nextAction!),
             ),
+          ],
           if (order.status == 'ready') ...[
-            SizedBox(height: 10.v),
+            SizedBox(height: AppDs.space3.v),
             TextField(
               controller: _pickupCode,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                labelText: 'lbl_print_pickup_code'.tr,
-                labelStyle: const TextStyle(color: AppDs.textOnDarkSecondary),
-                filled: true,
-                fillColor: AppDs.surfaceBase,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
+              style: const TextStyle(color: AppDs.textOnDarkPrimary),
+              decoration: printTicketField('lbl_print_pickup_code'.tr),
             ),
-            SizedBox(height: 8.v),
+            SizedBox(height: AppDs.space2.v),
             PrintGoldButton(
               label: 'lbl_print_verify_pickup'.tr,
               loading: _busy,
@@ -1297,10 +1531,9 @@ class _ShopOrderCardState extends State<_ShopOrderCard> {
             ),
           ],
           if (order.status == 'completed') ...[
-            SizedBox(height: 8.v),
             ...order.pendingReviews.where((e) => !e.submitted).map(
               (pending) => Padding(
-                padding: EdgeInsets.only(top: 8.v),
+                padding: EdgeInsets.only(top: AppDs.space2.v),
                 child: PrintGoldButton(
                   label: 'lbl_print_review_${pending.target}'.tr,
                   onPressed: () async {
@@ -1316,34 +1549,40 @@ class _ShopOrderCardState extends State<_ShopOrderCard> {
             ),
           ],
           if (order.dispute != null) ...[
-            SizedBox(height: 8.v),
+            SizedBox(height: AppDs.space3.v),
             Text(
               '${'lbl_print_dispute_status'.tr}: ${'lbl_print_dispute_${order.dispute!.status}'.tr}',
-              style: const TextStyle(color: AppDs.printGold),
+              style: AppTypography.caption(theme).copyWith(
+                color: AppDs.atelierBrass,
+                fontWeight: FontWeight.w700,
+              ),
             ),
             if (order.dispute!.evidenceImages.isNotEmpty)
               Padding(
-                padding: EdgeInsets.only(top: 8.v),
+                padding: EdgeInsets.only(top: AppDs.space2.v),
                 child: SizedBox(
-                  height: 64,
+                  height: 64.adaptSize,
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
                     itemCount: order.dispute!.evidenceImages.length,
-                    separatorBuilder: (_, __) => SizedBox(width: 8.h),
+                    separatorBuilder: (_, _) => SizedBox(width: AppDs.space2.h),
                     itemBuilder: (context, index) {
                       final url = order.dispute!.evidenceImages[index];
                       return ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(AppDs.radiusSm),
                         child: Image.network(
                           url,
-                          width: 64,
-                          height: 64,
+                          width: 64.adaptSize,
+                          height: 64.adaptSize,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
-                            width: 64,
-                            height: 64,
-                            color: Colors.white12,
-                            child: const Icon(Icons.broken_image, color: Colors.white54),
+                          errorBuilder: (_, _, _) => Container(
+                            width: 64.adaptSize,
+                            height: 64.adaptSize,
+                            color: AppDs.atelierHairline(0.08),
+                            child: const Icon(
+                              Icons.broken_image,
+                              color: AppDs.textOnDarkSecondary,
+                            ),
                           ),
                         ),
                       );
@@ -1353,7 +1592,7 @@ class _ShopOrderCardState extends State<_ShopOrderCard> {
               ),
             if (order.dispute!.isOpen)
               Padding(
-                padding: EdgeInsets.only(top: 8.v),
+                padding: EdgeInsets.only(top: AppDs.space2.v),
                 child: PrintGoldButton(
                   label: 'lbl_print_dispute_reply'.tr,
                   onPressed: () async {
@@ -1368,6 +1607,99 @@ class _ShopOrderCardState extends State<_ShopOrderCard> {
           ],
         ],
       ),
+    );
+  }
+}
+
+class PrintShopOrderDetailScreen extends StatefulWidget {
+  const PrintShopOrderDetailScreen({super.key, required this.orderId});
+
+  final int orderId;
+
+  static Widget builder(BuildContext context) {
+    final args = ModalRoute.of(context)?.settings.arguments;
+    final raw = args is Map ? args['orderId'] : null;
+    final orderId = raw is int
+        ? raw
+        : raw is num
+            ? raw.toInt()
+            : int.tryParse('$raw') ?? 0;
+    return PrintShopOrderDetailScreen(orderId: orderId);
+  }
+
+  @override
+  State<PrintShopOrderDetailScreen> createState() =>
+      _PrintShopOrderDetailScreenState();
+}
+
+class _PrintShopOrderDetailScreenState
+    extends State<PrintShopOrderDetailScreen> {
+  final _repo = PrintRepository();
+  PrintOrder? _order;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    if (widget.orderId <= 0) {
+      setState(() {
+        _loading = false;
+        _error = 'msg_print_order_missing'.tr;
+      });
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    final result = await _repo.order(widget.orderId);
+    if (!mounted) return;
+    if (result is PrintFailure<PrintOrder>) {
+      setState(() {
+        _loading = false;
+        _error = result.message;
+      });
+      return;
+    }
+    setState(() {
+      _order = (result as PrintSuccess<PrintOrder>).data;
+      _loading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final order = _order;
+    return PrintScaffold(
+      title: order == null
+          ? 'lbl_print_order_detail'.tr
+          : '#${order.number}',
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: ListView(
+                padding: EdgeInsets.all(16.h),
+                children: [
+                  if (_error != null)
+                    Padding(
+                      padding: EdgeInsets.only(top: AppDs.space8.v),
+                      child: Text(
+                        _error!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.redAccent),
+                      ),
+                    )
+                  else if (order != null)
+                    PrintShopOrderPanel(order: order, onChanged: _load),
+                ],
+              ),
+            ),
     );
   }
 }

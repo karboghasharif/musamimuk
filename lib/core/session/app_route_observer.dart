@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
 /// Tracks the active named route for session redirects and auth guards.
-class AppRouteObserver extends RouteObserver<PageRoute<dynamic>> {
+class AppRouteObserver extends RouteObserver<PageRoute<dynamic>>
+    with ChangeNotifier {
   AppRouteObserver._();
 
   static final AppRouteObserver instance = AppRouteObserver._();
@@ -12,8 +13,11 @@ class AppRouteObserver extends RouteObserver<PageRoute<dynamic>> {
   void _capture(Route<dynamic> route) {
     final name = route.settings.name;
     if (name != null && name.isNotEmpty) {
+      final changed = currentRouteName != name ||
+          !identical(currentArguments, route.settings.arguments);
       currentRouteName = name;
       currentArguments = route.settings.arguments;
+      if (changed) notifyListeners();
     }
   }
 

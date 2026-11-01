@@ -8,6 +8,7 @@ import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import '../../../core/app_export.dart';
 import '../../../data/models/login_request.dart';
 import '../../../data/repositories/auth_repository.dart';
+import '../../print/print_open_orders_sync.dart';
 import '../../subscription/push_auth_sync.dart';
 import '../../subscription/revenue_cat_auth_sync.dart';
 import '../../wallet/wallet_auth_sync.dart';
@@ -72,6 +73,7 @@ class Screen0LoginBloc extends Bloc<Screen0LoginEvent, Screen0LoginState> {
       await prefs.setUserSession(result.data.user!.toJson());
     }
     syncWalletAfterAuth(walletFromAuth: result.data.wallet);
+    syncPrintOpenOrdersAfterAuth();
     // ignore: unawaited_futures
     syncRevenueCatAfterAuth();
     // ignore: unawaited_futures

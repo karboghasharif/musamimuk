@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:equatable/equatable.dart';
 import '../../../core/app_export.dart';
 import '../../../data/repositories/auth_repository.dart';
+import '../../print/print_open_orders_sync.dart';
 import '../../subscription/push_auth_sync.dart';
 import '../../subscription/revenue_cat_auth_sync.dart';
 import '../../wallet/wallet_auth_sync.dart';
@@ -14,8 +15,13 @@ class Screen0RegisterBloc
   Screen0RegisterBloc(super.initialState) : _authRepository = AuthRepository() {
     on<Screen0RegisterInitialEvent>(_onInitialize);
     on<ChangePasswordVisibilityEvent>(_changePasswordVisibility);
+    on<ChangeRegisterAccountTypeEvent>(_changeAccountType);
     on<RegisterSubmitEvent>(_onRegisterSubmit);
   }
+
+  static const String accountTypeDesigner = 'designer';
+  static const String accountTypeShop = 'shop';
+  static const String accountTypeRider = 'rider';
 
   final AuthRepository _authRepository;
 
@@ -37,6 +43,19 @@ class Screen0RegisterBloc
     ));
   }
 
+  void _changeAccountType(
+    ChangeRegisterAccountTypeEvent event,
+    Emitter<Screen0RegisterState> emit,
+  ) {
+    final type = event.accountType;
+    if (type != accountTypeDesigner &&
+        type != accountTypeShop &&
+        type != accountTypeRider) {
+      return;
+    }
+    emit(state.copyWith(accountType: type));
+  }
+
   _onInitialize(
     Screen0RegisterInitialEvent event,
     Emitter<Screen0RegisterState> emit,
@@ -47,6 +66,7 @@ class Screen0RegisterBloc
       passwordFieldController: TextEditingController(),
       passwordConfirmationController: TextEditingController(),
       isShowPassword: true,
+      accountType: accountTypeDesigner,
       registerError: null,
     ));
   }
@@ -86,6 +106,15 @@ class Screen0RegisterBloc
         syncRevenueCatAfterAuth();
         // ignore: unawaited_futures
         syncPushTokenAfterAuth();
+        // Prefetch work mode for shop/rider so post-KYC home matches intent.
+        if (state.accountType == accountTypeShop) {
+          await prefs.setWorkMode(PrefUtils.workModeShop);
+        } else if (state.accountType == accountTypeRider) {
+          await prefs.setWorkMode(PrefUtils.workModeRider);
+        } else {
+          await prefs.setWorkMode(PrefUtils.workModeNormal);
+        }
+        syncPrintOpenOrdersAfterAuth();
         emit(state.copyWith(
           isLoading: false,
           registerError: null,

@@ -9,6 +9,8 @@ import '../../core/utils/validation_functions.dart';
 import '../../widgets/google_brand_logo.dart';
 import 'bloc/screen_0_login_bloc.dart';
 
+/// Login — atelier visual direction (craft studio, calm ink + brass).
+/// Bloc / auth flows unchanged; UI-only redesign for a later full-app pass.
 class Screen0LoginScreen extends StatelessWidget {
   Screen0LoginScreen({super.key});
 
@@ -36,98 +38,144 @@ class Screen0LoginScreen extends StatelessWidget {
           );
         }
       },
-      child: SafeArea(
-        child: Scaffold(
-          backgroundColor: AppDs.surfaceBase,
-          resizeToAvoidBottomInset: true,
-          body: BlocBuilder<Screen0LoginBloc, Screen0LoginState>(
-            buildWhen: (prev, curr) =>
-                prev.isLoading != curr.isLoading ||
-                prev.isLoadingGoogle != curr.isLoadingGoogle ||
-                prev.isLoadingApple != curr.isLoadingApple ||
-                prev.isLoadingGuest != curr.isLoadingGuest,
-            builder: (context, state) {
-              final authBusy = state.isLoading ||
-                  state.isLoadingGoogle ||
-                  state.isLoadingApple ||
-                  state.isLoadingGuest;
-              return AppLoadingOverlay(
-                isLoading: authBusy,
-                message: 'msg_signing_in'.tr,
-                child: Form(
-                  key: _formKey,
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      return SingleChildScrollView(
-                        keyboardDismissBehavior:
-                            ScrollViewKeyboardDismissBehavior.onDrag,
-                        padding: EdgeInsets.fromLTRB(
-                          AppDs.space4.h,
-                          AppDs.space4.v,
-                          AppDs.space4.h,
-                          AppDs.space8.v,
-                        ),
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(
-                            minHeight: constraints.maxHeight -
-                                AppDs.space4.v -
-                                AppDs.space8.v,
-                          ),
-                          child: IntrinsicHeight(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                _buildHero(context),
-                                SizedBox(height: AppDs.space6.v),
-                                _buildHeader(context),
-                                SizedBox(height: AppDs.space6.v),
-                                _buildEmailField(context),
-                                SizedBox(height: AppDs.space3.v),
-                                _buildPasswordField(context),
-                                _buildForgotPassword(context),
-                                _buildRememberMe(context),
-                                SizedBox(height: AppDs.space4.v),
-                                _buildLoginButton(context),
-                                _buildSocialSection(context),
-                                SizedBox(height: AppDs.space6.v),
-                                _buildSignUpPrompt(context),
-                              ],
+      child: Scaffold(
+        backgroundColor: AppDs.atelierInk,
+        resizeToAvoidBottomInset: true,
+        body: BlocBuilder<Screen0LoginBloc, Screen0LoginState>(
+          buildWhen: (prev, curr) =>
+              prev.isLoading != curr.isLoading ||
+              prev.isLoadingGoogle != curr.isLoadingGoogle ||
+              prev.isLoadingApple != curr.isLoadingApple ||
+              prev.isLoadingGuest != curr.isLoadingGuest,
+          builder: (context, state) {
+            final authBusy = state.isLoading ||
+                state.isLoadingGoogle ||
+                state.isLoadingApple ||
+                state.isLoadingGuest;
+            return AppLoadingOverlay(
+              isLoading: authBusy,
+              message: 'msg_signing_in'.tr,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  const AppAtelierAtmosphere(),
+                  SafeArea(
+                    child: Form(
+                      key: _formKey,
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          return SingleChildScrollView(
+                            keyboardDismissBehavior:
+                                ScrollViewKeyboardDismissBehavior.onDrag,
+                            padding: EdgeInsets.fromLTRB(
+                              AppDs.space5.h,
+                              AppDs.space6.v,
+                              AppDs.space5.h,
+                              AppDs.space8.v,
                             ),
-                          ),
-                        ),
-                      );
-                    },
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                minHeight: constraints.maxHeight -
+                                    AppDs.space6.v -
+                                    AppDs.space8.v,
+                              ),
+                              child: IntrinsicHeight(
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    _buildBrandBlock(context),
+                                    SizedBox(height: AppDs.space8.v),
+                                    _buildEmailField(context),
+                                    SizedBox(height: AppDs.space3.v),
+                                    _buildPasswordField(context),
+                                    SizedBox(height: AppDs.space1.v),
+                                    _buildForgotAndRemember(context),
+                                    SizedBox(height: AppDs.space5.v),
+                                    _buildLoginButton(context),
+                                    SizedBox(height: AppDs.space6.v),
+                                    _buildSocialSection(context),
+                                    SizedBox(height: AppDs.space5.v),
+                                    _buildGuestLink(context),
+                                    const Spacer(),
+                                    SizedBox(height: AppDs.space4.v),
+                                    _buildSignUpPrompt(context),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  /// Brand → value. Memorable: start-edge brass spine (RTL-aware).
+  Widget _buildBrandBlock(BuildContext context) {
+    final theme = Theme.of(context);
+    return AppFadeIn(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 3.h,
+            height: 88.v,
+            margin: EdgeInsetsDirectional.only(end: AppDs.space4.h),
+            decoration: BoxDecoration(
+              color: AppDs.atelierBrass,
+              borderRadius: BorderRadius.circular(AppDs.radiusFull),
+            ),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CustomImageView(
+                  imagePath: ImageConstant.imgMusammimuk02,
+                  height: 56.adaptSize,
+                  width: 56.adaptSize,
+                  fit: BoxFit.contain,
+                ),
+                SizedBox(height: AppDs.space3.v),
+                Text(
+                  'lbl_musamimuk_brand'.tr,
+                  style: AppDs.screenTitle(theme).copyWith(
+                    fontSize: AppDs.fontDisplay.clamp(28.0, 36.0),
+                    letterSpacing: -0.4,
+                    height: 1.1,
                   ),
                 ),
-              );
-            },
+                SizedBox(height: AppDs.space2.v),
+                Text(
+                  'msg_login_welcome'.tr,
+                  style: AppTypography.secondary(theme).copyWith(
+                    color: AppDs.atelierBrass,
+                    fontWeight: FontWeight.w600,
+                    fontSize: AppDs.fontSecondary.clamp(13.0, 15.0),
+                  ),
+                ),
+                SizedBox(height: AppDs.space1.v),
+                Text(
+                  'msg_login_to_musamimuk'.tr,
+                  style: AppTypography.secondary(theme).copyWith(
+                    color: AppDs.textOnDarkSecondary,
+                    height: 1.45,
+                    fontSize: AppDs.fontSecondary.clamp(13.0, 15.0),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
+        ],
       ),
-    );
-  }
-
-  Widget _buildHero(BuildContext context) {
-    return AppFadeIn(
-      child: Center(
-        child: Container(
-          padding: EdgeInsets.all(AppDs.space4.h),
-          decoration: AppDs.cardDecoration(),
-          child: CustomImageView(
-            imagePath: ImageConstant.imgMusammimuk02,
-            height: 120.adaptSize,
-            width: 120.adaptSize,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeader(BuildContext context) {
-    return AppPageHeader(
-      title: 'lbl_login'.tr,
-      subtitle: 'msg_login_to_musamimuk'.tr,
-      align: TextAlign.start,
     );
   }
 
@@ -194,25 +242,31 @@ class Screen0LoginScreen extends StatelessWidget {
     );
   }
 
+  Widget _buildForgotAndRemember(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(child: _buildRememberMe(context)),
+        _buildForgotPassword(context),
+      ],
+    );
+  }
+
   Widget _buildForgotPassword(BuildContext context) {
-    return Align(
-      alignment: AlignmentDirectional.centerEnd,
-      child: TextButton(
-        onPressed: () {
-          NavigatorService.pushNamed(AppRoutes.forgotPasswordScreen);
-        },
-        style: TextButton.styleFrom(
-          padding: EdgeInsets.symmetric(
-            horizontal: AppDs.space2.h,
-            vertical: AppDs.space1.v,
-          ),
-          minimumSize: Size(AppDs.minTap, AppDs.minTap),
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    return TextButton(
+      onPressed: () {
+        NavigatorService.pushNamed(AppRoutes.forgotPasswordScreen);
+      },
+      style: TextButton.styleFrom(
+        padding: EdgeInsets.symmetric(
+          horizontal: AppDs.space2.h,
+          vertical: AppDs.space1.v,
         ),
-        child: AppText(
-          'lbl_forgot_password'.tr,
-          variant: AppTextVariant.accent,
-        ),
+        minimumSize: Size(AppDs.minTap, AppDs.minTap),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      child: AppText(
+        'lbl_forgot_password'.tr,
+        variant: AppTextVariant.accent,
       ),
     );
   }
@@ -237,9 +291,10 @@ class Screen0LoginScreen extends StatelessWidget {
                   width: AppDs.minTap.h,
                   child: Checkbox(
                     value: state.rememberMe,
-                    activeColor: theme.colorScheme.primary,
+                    activeColor: AppDs.accentYellow,
+                    checkColor: AppDs.onAccent,
                     side: BorderSide(
-                      color: Colors.white.withValues(alpha: 0.22),
+                      color: AppDs.atelierHairline(0.28),
                     ),
                     onChanged: (v) {
                       if (v == null) return;
@@ -272,6 +327,7 @@ class Screen0LoginScreen extends StatelessWidget {
           prev.isLoadingApple != curr.isLoadingApple ||
           prev.isLoadingGuest != curr.isLoadingGuest,
       builder: (context, state) {
+        final cs = Theme.of(context).colorScheme;
         final socialBusy = state.isLoadingGoogle ||
             state.isLoadingApple ||
             state.isLoadingGuest;
@@ -284,31 +340,40 @@ class Screen0LoginScreen extends StatelessWidget {
                 padding: EdgeInsets.only(bottom: AppDs.space3.v),
                 child: Semantics(
                   liveRegion: true,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        Icons.error_outline_rounded,
-                        size: AppDs.iconSm.adaptSize,
-                        color: theme.colorScheme.error,
+                  child: Container(
+                    padding: EdgeInsets.all(AppDs.space3.h),
+                    decoration: BoxDecoration(
+                      color: cs.error.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(AppDs.radiusMd),
+                      border: Border.all(
+                        color: cs.error.withValues(alpha: 0.35),
                       ),
-                      SizedBox(width: AppDs.space2.h),
-                      Expanded(
-                        child: AppText(
-                          state.loginError!,
-                          variant: AppTextVariant.caption,
-                          color: theme.colorScheme.error,
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.error_outline_rounded,
+                          size: AppDs.iconSm.adaptSize,
+                          color: cs.error,
                         ),
-                      ),
-                    ],
+                        SizedBox(width: AppDs.space2.h),
+                        Expanded(
+                          child: AppText(
+                            state.loginError!,
+                            variant: AppTextVariant.caption,
+                            color: cs.error,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
             AppPrimaryButton(
               label: 'lbl_login'.tr,
               isLoading: state.isLoading,
-              onPressed:
-                  socialBusy ? null : () => onTapLogin(context),
+              onPressed: socialBusy ? null : () => onTapLogin(context),
             ),
           ],
         );
@@ -321,90 +386,126 @@ class Screen0LoginScreen extends StatelessWidget {
         (defaultTargetPlatform == TargetPlatform.iOS ||
             defaultTargetPlatform == TargetPlatform.macOS);
 
-    return Padding(
-      padding: EdgeInsets.only(top: AppDs.space6.v),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          AppLabeledDivider(label: 'msg_or_continue_with'.tr),
-          SizedBox(height: AppDs.space4.v),
-          BlocBuilder<Screen0LoginBloc, Screen0LoginState>(
-            buildWhen: (prev, curr) =>
-                prev.isLoading != curr.isLoading ||
-                prev.isLoadingGoogle != curr.isLoadingGoogle ||
-                prev.isLoadingApple != curr.isLoadingApple ||
-                prev.isLoadingGuest != curr.isLoadingGuest,
-            builder: (context, state) {
-              final authBusy = state.isLoading ||
-                  state.isLoadingGoogle ||
-                  state.isLoadingApple ||
-                  state.isLoadingGuest;
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      AppSocialIconButton(
-                        semanticsLabel: 'lbl_continue_with_google'.tr,
-                        isLoading: state.isLoadingGoogle,
-                        onPressed: authBusy
-                            ? null
-                            : () {
-                                context.read<Screen0LoginBloc>().add(
-                                      LoginWithGoogleEvent(),
-                                    );
-                              },
-                        child: GoogleBrandLogo(size: AppDs.iconMd.adaptSize),
-                      ),
-                      SizedBox(width: AppDs.space4.h),
-                      AppSocialIconButton(
-                        semanticsLabel: 'lbl_continue_as_guest'.tr,
-                        icon: Icons.person_outline_rounded,
-                        isLoading: state.isLoadingGuest,
-                        onPressed: authBusy
-                            ? null
-                            : () {
-                                context.read<Screen0LoginBloc>().add(
-                                      ContinueAsGuestEvent(),
-                                    );
-                              },
-                      ),
-                      if (showApple) ...[
-                        SizedBox(width: AppDs.space4.h),
-                        AppSocialIconButton(
-                          semanticsLabel: 'lbl_continue_with_apple'.tr,
-                          icon: Icons.apple,
-                          isLoading: state.isLoadingApple,
-                          onPressed: authBusy
-                              ? null
-                              : () {
-                                  context.read<Screen0LoginBloc>().add(
-                                        LoginWithAppleEvent(),
-                                      );
-                                },
-                        ),
-                      ],
-                    ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AppLabeledDivider(label: 'msg_or_continue_with'.tr),
+        SizedBox(height: AppDs.space4.v),
+        BlocBuilder<Screen0LoginBloc, Screen0LoginState>(
+          buildWhen: (prev, curr) =>
+              prev.isLoading != curr.isLoading ||
+              prev.isLoadingGoogle != curr.isLoadingGoogle ||
+              prev.isLoadingApple != curr.isLoadingApple ||
+              prev.isLoadingGuest != curr.isLoadingGuest,
+          builder: (context, state) {
+            final authBusy = state.isLoading ||
+                state.isLoadingGoogle ||
+                state.isLoadingApple ||
+                state.isLoadingGuest;
+            return Row(
+              children: [
+                Expanded(
+                  child: _SocialLabelButton(
+                    semanticsLabel: 'lbl_continue_with_google'.tr,
+                    label: 'Google',
+                    isLoading: state.isLoadingGoogle,
+                    onPressed: authBusy
+                        ? null
+                        : () {
+                            context.read<Screen0LoginBloc>().add(
+                                  LoginWithGoogleEvent(),
+                                );
+                          },
+                    leading: GoogleBrandLogo(size: AppDs.iconMd.adaptSize),
                   ),
-                  Padding(
-                    padding: EdgeInsets.only(top: AppDs.space3.v),
-                    child: AppText(
-                      'msg_guest_feature_locked'.tr,
-                      variant: AppTextVariant.caption,
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                ),
+                if (showApple) ...[
+                  SizedBox(width: AppDs.space3.h),
+                  Expanded(
+                    child: _SocialLabelButton(
+                      semanticsLabel: 'lbl_continue_with_apple'.tr,
+                      label: 'Apple',
+                      isLoading: state.isLoadingApple,
+                      onPressed: authBusy
+                          ? null
+                          : () {
+                              context.read<Screen0LoginBloc>().add(
+                                    LoginWithAppleEvent(),
+                                  );
+                            },
+                      leading: Icon(
+                        Icons.apple,
+                        size: AppDs.iconMd.adaptSize,
+                        color: AppDs.textOnDarkPrimary,
+                      ),
                     ),
                   ),
                 ],
-              );
-            },
-          ),
-        ],
-      ),
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGuestLink(BuildContext context) {
+    return BlocBuilder<Screen0LoginBloc, Screen0LoginState>(
+      buildWhen: (prev, curr) =>
+          prev.isLoading != curr.isLoading ||
+          prev.isLoadingGoogle != curr.isLoadingGoogle ||
+          prev.isLoadingApple != curr.isLoadingApple ||
+          prev.isLoadingGuest != curr.isLoadingGuest,
+      builder: (context, state) {
+        final authBusy = state.isLoading ||
+            state.isLoadingGoogle ||
+            state.isLoadingApple ||
+            state.isLoadingGuest;
+        return Column(
+          children: [
+            TextButton(
+              onPressed: authBusy || state.isLoadingGuest
+                  ? null
+                  : () {
+                      context.read<Screen0LoginBloc>().add(
+                            ContinueAsGuestEvent(),
+                          );
+                    },
+              style: TextButton.styleFrom(
+                minimumSize: Size(AppDs.minTap, AppDs.minTap),
+                padding: EdgeInsets.symmetric(
+                  horizontal: AppDs.space3.h,
+                  vertical: AppDs.space2.v,
+                ),
+              ),
+              child: state.isLoadingGuest
+                  ? SizedBox(
+                      width: AppDs.iconSm.adaptSize,
+                      height: AppDs.iconSm.adaptSize,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppDs.accentYellow,
+                      ),
+                    )
+                  : AppText(
+                      'lbl_continue_as_guest'.tr,
+                      variant: AppTextVariant.secondary,
+                    ),
+            ),
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: AppDs.space4.h),
+              child: AppText(
+                'msg_guest_feature_locked'.tr,
+                variant: AppTextVariant.caption,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -432,7 +533,7 @@ class Screen0LoginScreen extends StatelessWidget {
               TextSpan(
                 text: 'lbl_sign_up_now'.tr,
                 style: AppTypography.secondary(theme).copyWith(
-                  color: theme.colorScheme.primary,
+                  color: AppDs.accentYellow,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -469,6 +570,71 @@ class Screen0LoginScreen extends StatelessWidget {
         email: email,
         password: password,
         rememberMe: bloc.state.rememberMe,
+      ),
+    );
+  }
+}
+
+/// Full-width social action with brand logo + label (Google logo unchanged).
+class _SocialLabelButton extends StatelessWidget {
+  const _SocialLabelButton({
+    required this.semanticsLabel,
+    required this.label,
+    required this.onPressed,
+    required this.leading,
+    this.isLoading = false,
+  });
+
+  final String semanticsLabel;
+  final String label;
+  final VoidCallback? onPressed;
+  final Widget leading;
+  final bool isLoading;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final enabled = !isLoading && onPressed != null;
+
+    return Semantics(
+      button: true,
+      label: semanticsLabel,
+      enabled: enabled,
+      child: AppScaleTap(
+        enabled: enabled,
+        onTap: onPressed,
+        child: Container(
+          height: AppDs.buttonHeight.v,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: AppDs.surfaceRaised,
+            borderRadius: BorderRadius.circular(AppDs.radiusMd),
+            border: Border.all(color: AppDs.atelierHairline(0.12)),
+          ),
+          child: isLoading
+              ? SizedBox(
+                  width: AppDs.iconMd.adaptSize,
+                  height: AppDs.iconMd.adaptSize,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppDs.accentYellow,
+                  ),
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    leading,
+                    SizedBox(width: AppDs.space2.h),
+                    Text(
+                      label,
+                      style: AppTypography.secondary(theme).copyWith(
+                        color: AppDs.textOnDarkPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+        ),
       ),
     );
   }

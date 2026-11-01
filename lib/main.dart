@@ -14,6 +14,8 @@ import 'data/services/revenue_cat/revenue_cat_service.dart';
 import 'data/services/user_font_library.dart';
 import 'firebase_options.dart';
 import 'presentation/guest_upgrade/guest_upgrade_prompt.dart';
+import 'presentation/print/print_open_order_dock.dart';
+import 'presentation/print/print_open_orders_sync.dart';
 import 'presentation/subscription/push_auth_sync.dart';
 import 'presentation/subscription/revenue_cat_auth_sync.dart';
 import 'presentation/wallet/bloc/wallet_bloc.dart';
@@ -83,6 +85,7 @@ Future<void> main() async {
     // ignore: unawaited_futures
     syncPushTokenAfterAuth();
   }
+  syncPrintOpenOrdersAfterAuth();
 
   appLocaleNotifier.syncFromPrefs();
   // Warm custom font catalog in the background (text editor uses it as primary).
@@ -100,6 +103,7 @@ Future<void> main() async {
       showInsufficientCoinsSheet(info);
   SessionManager.instance.authClearedHandler = () {
     syncWalletAfterAuth(forceReset: true);
+    syncPrintOpenOrdersAfterAuth(forceStop: true);
     // ignore: unawaited_futures
     syncRevenueCatAfterAuth(forceAnonymous: true);
   };
@@ -174,7 +178,9 @@ class MyApp extends StatelessWidget {
                                 isLoading: loading,
                                 message:
                                     GlobalLoadingController.instance.message,
-                                child: child ?? const SizedBox.shrink(),
+                                child: PrintOpenOrderHost(
+                                  child: child ?? const SizedBox.shrink(),
+                                ),
                               );
                             },
                           );

@@ -363,6 +363,8 @@ class PrefUtils {
     await clearUserSession();
     await clearOfflineHomeSession();
     await setWorkMode(workModeNormal);
+    await setHasPrintShopProfile(false);
+    await setHasPrintRiderProfile(false);
   }
 
   static const String _keyEditorFabDx = 'editor_fab_dx';
@@ -388,6 +390,9 @@ class PrefUtils {
   }
 
   static const String _keyPrintRoleMode = 'print_role_mode';
+  static const String _keyHasPrintShopProfile = 'has_print_shop_profile';
+  static const String _keyHasPrintRiderProfile = 'has_print_rider_profile';
+  static const String _keyPendingReferralCode = 'pending_referral_code';
   static const String workModeNormal = 'normal';
   static const String workModeShop = 'shop';
   static const String workModeRider = 'rider';
@@ -412,6 +417,61 @@ class PrefUtils {
             ? workModeRider
             : workModeNormal;
     await prefs.setString(_keyPrintRoleMode, stored);
+  }
+
+  /// Local cache: this account already registered a print shop (survives API blips).
+  bool hasPrintShopProfile() {
+    try {
+      return _sharedPreferences?.getBool(_keyHasPrintShopProfile) ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> setHasPrintShopProfile(bool value) async {
+    final prefs = _sharedPreferences ?? await SharedPreferences.getInstance();
+    _sharedPreferences ??= prefs;
+    await prefs.setBool(_keyHasPrintShopProfile, value);
+  }
+
+  /// Local cache: this account already registered a print rider (survives API blips).
+  bool hasPrintRiderProfile() {
+    try {
+      return _sharedPreferences?.getBool(_keyHasPrintRiderProfile) ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> setHasPrintRiderProfile(bool value) async {
+    final prefs = _sharedPreferences ?? await SharedPreferences.getInstance();
+    _sharedPreferences ??= prefs;
+    await prefs.setBool(_keyHasPrintRiderProfile, value);
+  }
+
+  String? getPendingReferralCode() {
+    try {
+      final value = _sharedPreferences?.getString(_keyPendingReferralCode)?.trim();
+      if (value == null || value.isEmpty) return null;
+      return value;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> setPendingReferralCode(String? code) async {
+    final prefs = _sharedPreferences ?? await SharedPreferences.getInstance();
+    _sharedPreferences ??= prefs;
+    final cleaned = code?.trim().toUpperCase() ?? '';
+    if (cleaned.isEmpty) {
+      await prefs.remove(_keyPendingReferralCode);
+      return;
+    }
+    await prefs.setString(_keyPendingReferralCode, cleaned);
+  }
+
+  Future<void> clearPendingReferralCode() async {
+    await setPendingReferralCode(null);
   }
 
   static String? _encodeSession(Map<String, dynamic> json) {

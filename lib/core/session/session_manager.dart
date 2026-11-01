@@ -6,10 +6,9 @@ import 'package:toastification/toastification.dart';
 import '../utils/app_toast.dart';
 import '../utils/navigator_service.dart';
 import '../utils/pref_utils.dart';
-import '../../data/models/print_models.dart';
 import '../../data/models/wallet_models.dart';
-import '../../data/repositories/print_repository.dart';
 import '../../localization/app_localization.dart';
+import '../../presentation/print/print_mode_switch.dart';
 import '../../routes/app_routes.dart';
 import 'app_route_observer.dart';
 
@@ -95,8 +94,11 @@ class SessionManager {
     AppRoutes.printChatScreen,
     AppRoutes.printTrackingScreen,
     AppRoutes.printOrdersScreen,
+    AppRoutes.printChatsScreen,
+    AppRoutes.referralScreen,
     AppRoutes.printShopRegisterScreen,
     AppRoutes.printShopHomeScreen,
+    AppRoutes.printShopOrderDetailScreen,
     AppRoutes.printShopDashboardScreen,
     AppRoutes.printRiderHomeScreen,
     AppRoutes.printRiderRegisterScreen,
@@ -298,29 +300,46 @@ class SessionManager {
     });
   }
 
-  /// A shop account opens shop mode. A rider account opens rider mode.
-  /// Designers stay in the normal app. A shop profile wins when both exist.
+  /// After login: if the user has Design + Shop and/or Rider, ask which mode.
+  /// Otherwise keep / enter the only available mode.
   Future<void> _enterWorkModeForPrintProfile() async {
     if (PrefUtils().isGuestAccount() || !PrefUtils().isLoggedIn()) return;
-    final repo = PrintRepository();
-    final shop = await repo.myShop();
-    if (shop is PrintSuccess<PrintShopSummary?> &&
-        shop.data != null &&
-        shop.data!.id > 0) {
-      await PrefUtils().setWorkMode(PrefUtils.workModeShop);
+
+    final available = await resolveAvailableWorkModes();
+    if (available.length <= 1) {
+      await PrefUtils().setWorkMode(PrefUtils.workModeNormal);
       return;
     }
-    final rider = await repo.myRider();
-    if (rider is PrintSuccess<PrintRiderProfile?> &&
-        rider.data != null &&
-        rider.data!.id > 0) {
-      await PrefUtils().setWorkMode(PrefUtils.workModeRider);
+
+    final context = NavigatorService.navigatorKey.currentContext;
+    if (context == null || !context.mounted) {
+      // Fall back to last saved mode if it is still allowed.
+      final current = PrefUtils().getWorkMode();
+      if (!available.contains(current)) {
+        await PrefUtils().setWorkMode(PrefUtils.workModeNormal);
+      }
+      return;
     }
+
+    final selected = await showWorkModePicker(
+      context,
+      available: available,
+      current: available.contains(PrefUtils().getWorkMode())
+          ? PrefUtils().getWorkMode()
+          : null,
+      title: 'lbl_choose_work_mode'.tr,
+      subtitle: 'msg_choose_work_mode'.tr,
+    );
+
+    final mode = selected ??
+        (available.contains(PrefUtils().getWorkMode())
+            ? PrefUtils().getWorkMode()
+            : PrefUtils.workModeNormal);
+    await PrefUtils().setWorkMode(mode);
   }
 
   /// Navigate to the intended page after login, or Home by default.
   Future<void> navigateAfterLogin() async {
-    await _enterWorkModeForPrintProfile();
     final pending = takePendingNavigation();
     final route = pending?.route;
     if (route != null &&
@@ -328,6 +347,7 @@ class SessionManager {
         route != AppRoutes.screen1HomeScreen &&
         !_nonRestorableRoutes.contains(route) &&
         canAccessRoute(route)) {
+      // Deep-link restore: don't interrupt with the mode dialog.
       await NavigatorService.pushNamedAndRemoveUntil(
         route,
         routePredicate: false,
@@ -335,6 +355,8 @@ class SessionManager {
       );
       return;
     }
+
+    await _enterWorkModeForPrintProfile();
     final home = switch (PrefUtils().getWorkMode()) {
       PrefUtils.workModeShop => AppRoutes.printShopHomeScreen,
       PrefUtils.workModeRider => AppRoutes.printRiderHomeScreen,

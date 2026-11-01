@@ -6,6 +6,7 @@ import '../../core/network/api_utils.dart';
 import '../../core/utils/app_toast.dart';
 import '../../data/models/print_models.dart';
 import '../../data/repositories/print_repository.dart';
+import 'print_open_orders_controller.dart';
 import 'print_ui.dart';
 
 class PrintShopProfileScreen extends StatefulWidget {
@@ -102,6 +103,8 @@ class _PrintShopProfileScreenState extends State<PrintShopProfileScreen> {
       return;
     }
     final order = (result as PrintSuccess<PrintOrder>).data;
+    // ignore: unawaited_futures
+    PrintOpenOrdersController.instance.refresh();
     NavigatorService.pushNamed(
       AppRoutes.printChatScreen,
       arguments: {'orderId': order.id, 'shopId': widget.shopId},

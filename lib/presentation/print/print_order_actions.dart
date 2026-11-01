@@ -105,6 +105,7 @@ class PrintOrderActions {
     required PrintRepository repo,
     required PrintOrder order,
   }) async {
+    final allowCod = order.fulfillment == 'delivery';
     final method = await showAppModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
@@ -135,6 +136,20 @@ class PrintOrderActions {
                       onPressed: () => Navigator.pop(ctx, payMethod),
                     ),
                   ),
+                if (allowCod) ...[
+                  SizedBox(height: 4.v),
+                  Text(
+                    'msg_print_pay_cod_hint'.tr,
+                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                    textAlign: TextAlign.center,
+                  ),
+                  SizedBox(height: 8.v),
+                  PrintGhostButton(
+                    label: 'lbl_print_pay_cod'.tr,
+                    icon: Icons.payments_outlined,
+                    onPressed: () => Navigator.pop(ctx, 'cod'),
+                  ),
+                ],
               ],
             ),
           ),
@@ -186,9 +201,9 @@ class PrintOrderActions {
   }
 }
 
-/// Quote accept / decline + pay controls for the designer order screen.
-class PrintQuoteDecisionCard extends StatelessWidget {
-  const PrintQuoteDecisionCard({
+/// Live competing offers while the order is still open for quotes.
+class PrintQuoteOffersBoard extends StatelessWidget {
+  const PrintQuoteOffersBoard({
     super.key,
     required this.order,
     required this.busy,
@@ -198,18 +213,83 @@ class PrintQuoteDecisionCard extends StatelessWidget {
 
   final PrintOrder order;
   final bool busy;
+  final ValueChanged<PrintQuote> onAccept;
+  final ValueChanged<PrintQuote> onDecline;
+
+  @override
+  Widget build(BuildContext context) {
+    if (order.status != 'quote') return const SizedBox.shrink();
+    final offers = order.offeredQuotes;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'lbl_print_shop_offers'.tr,
+          style: const TextStyle(
+            color: AppDs.printGold,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        SizedBox(height: 4.v),
+        Text(
+          offers.isEmpty
+              ? 'msg_print_waiting_for_quotes'.tr
+              : 'msg_print_offers_count'.tr.replaceAll(
+                  '{count}',
+                  '${offers.length}',
+                ),
+          style: const TextStyle(color: Colors.white70),
+        ),
+        SizedBox(height: 12.v),
+        if (offers.isEmpty)
+          Container(
+            padding: EdgeInsets.all(16.h),
+            decoration: BoxDecoration(
+              color: AppDs.surfaceRaised,
+              borderRadius: BorderRadius.circular(AppDs.radiusMd),
+              border: Border.all(color: AppDs.atelierHairline(0.14)),
+            ),
+            child: Text(
+              'msg_print_waiting_for_quotes_body'.tr,
+              style: const TextStyle(color: AppDs.textOnDarkSecondary),
+            ),
+          )
+        else
+          ...offers.map(
+            (quote) => Padding(
+              padding: EdgeInsets.only(bottom: 8.v),
+              child: _OfferCard(
+                quote: quote,
+                busy: busy,
+                onAccept: () => onAccept(quote),
+                onDecline: () => onDecline(quote),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _OfferCard extends StatelessWidget {
+  const _OfferCard({
+    required this.quote,
+    required this.busy,
+    required this.onAccept,
+    required this.onDecline,
+  });
+
+  final PrintQuote quote;
+  final bool busy;
   final VoidCallback onAccept;
   final VoidCallback onDecline;
 
   @override
   Widget build(BuildContext context) {
-    final quote = order.offeredQuote;
-    if (quote == null || quote.status != 'offered') {
-      return const SizedBox.shrink();
-    }
+    final shop = quote.displayShopName;
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.all(16.h),
+      padding: EdgeInsets.all(14.h),
       decoration: BoxDecoration(
         color: AppDs.surfaceRaised,
         borderRadius: BorderRadius.circular(14),
@@ -219,30 +299,27 @@ class PrintQuoteDecisionCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'lbl_print_send_quote'.tr,
+            shop.isEmpty ? 'lbl_print_shop_profile'.tr : shop,
             style: const TextStyle(
-              color: AppDs.printGold,
+              color: Colors.white,
               fontWeight: FontWeight.w700,
             ),
           ),
-          SizedBox(height: 8.v),
-          Text(
-            '${'lbl_print_system_price'.tr}: ${printSar(quote.total)}',
-            style: const TextStyle(color: Colors.white70),
-          ),
+          SizedBox(height: 6.v),
           Text(
             '${'lbl_print_shop_price'.tr}: ${printSar(quote.shopTotal ?? quote.total)} · ${quote.etaHours}h',
             style: const TextStyle(
               color: AppDs.printGold,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w800,
             ),
+          ),
+          Text(
+            '${'lbl_print_system_price'.tr}: ${printSar(quote.total)}',
+            style: const TextStyle(color: Colors.white70),
           ),
           if (quote.note != null && quote.note!.trim().isNotEmpty) ...[
             SizedBox(height: 6.v),
-            Text(
-              quote.note!,
-              style: const TextStyle(color: Colors.white70),
-            ),
+            Text(quote.note!, style: const TextStyle(color: Colors.white70)),
           ],
           SizedBox(height: 12.v),
           Row(
@@ -265,6 +342,32 @@ class PrintQuoteDecisionCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Legacy single-offer card (kept for any remaining call sites).
+class PrintQuoteDecisionCard extends StatelessWidget {
+  const PrintQuoteDecisionCard({
+    super.key,
+    required this.order,
+    required this.busy,
+    required this.onAccept,
+    required this.onDecline,
+  });
+
+  final PrintOrder order;
+  final bool busy;
+  final VoidCallback onAccept;
+  final VoidCallback onDecline;
+
+  @override
+  Widget build(BuildContext context) {
+    return PrintQuoteOffersBoard(
+      order: order,
+      busy: busy,
+      onAccept: (_) => onAccept(),
+      onDecline: (_) => onDecline(),
     );
   }
 }

@@ -7,7 +7,7 @@ Repo: [karboghasharif/musamimuk](https://github.com/karboghasharif/musamimuk)
 | Workflow | When it runs | What it does |
 |----------|----------------|--------------|
 | **CI** (`.github/workflows/ci.yml`) | Push / PR to `main` | `flutter analyze` (errors only) + `flutter test` |
-| **Android Release** (`.github/workflows/android-release.yml`) | Tag `v*` or manual | Signed **AAB** + upload to **Google Play** |
+| **Android Release** (`.github/workflows/android-release.yml`) | Tag `v`* or manual | Signed **AAB** + upload to **Google Play** |
 
 iOS TestFlight / App Store needs a macOS runner + Apple certs (later).
 
@@ -46,15 +46,15 @@ Repo → **Settings** → **Secrets and variables** → **Actions** → add:
 
 ### 3. Play API service account (required for auto-upload)
 
-1. [Google Cloud Console](https://console.cloud.google.com/) → create or pick a project  
-2. Enable **Google Play Android Developer API**  
-3. **IAM** → create a **Service account** → create a JSON key → download the `.json`  
-4. Play Console → **Users and permissions** → **Invite user** → paste the service account email  
-5. Grant **Admin** or at least **Release to production, exclude devices, and use Play App Signing**  
-6. Wait a few minutes for access to propagate  
-7. GitHub secret `PLAY_SERVICE_ACCOUNT_JSON` = **full contents** of that JSON file  
+1. [Google Cloud Console](https://console.cloud.google.com/) → create or pick a project
+2. Enable **Google Play Android Developer API**
+3. **IAM** → create a **Service account** → create a JSON key → download the `.json`
+4. Play Console → **Users and permissions** → **Invite user** → paste the service account email
+5. Grant **Admin** or at least **Release to production, exclude devices, and use Play App Signing**
+6. Wait a few minutes for access to propagate
+7. GitHub secret `PLAY_SERVICE_ACCOUNT_JSON` = **full contents** of that JSON file
 
-You already have the 4 `ANDROID_*` secrets. **Production upload will not work until `PLAY_SERVICE_ACCOUNT_JSON` is added.**
+You already have the 4 `ANDROID_*` secrets. **Production upload will not work until** `PLAY_SERVICE_ACCOUNT_JSON` **is added.**
 
 ### 4. Ship to production
 
@@ -75,7 +75,7 @@ git push origin v1.0.8
 
 **B — Manual**
 
-Actions → **Android Release** → **Run workflow** → track **`production`** → Run.
+Actions → **Android Release** → **Run workflow** → track `production` → Run.
 
 Workflow builds the signed AAB and uploads it to the **production** track. Google may still hold it for review before users see it.
 

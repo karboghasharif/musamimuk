@@ -56,6 +56,21 @@ class PrintPickedDoc {
   final int bytes;
 
   bool get withinLimit => bytes <= PrintKyc.maxBytes;
+
+  String get extension {
+    final dot = name.lastIndexOf('.');
+    if (dot < 0 || dot >= name.length - 1) {
+      final p = path.lastIndexOf('.');
+      if (p < 0 || p >= path.length - 1) return '';
+      return path.substring(p + 1).toLowerCase();
+    }
+    return name.substring(dot + 1).toLowerCase();
+  }
+
+  bool get isImage =>
+      const {'jpg', 'jpeg', 'png', 'webp'}.contains(extension);
+
+  bool get isPdf => extension == 'pdf';
 }
 
 class PrintDocument {
@@ -74,6 +89,23 @@ class PrintDocument {
   final String? fileUrl;
   final String status;
   final String? uploadedAt;
+
+  String get extension {
+    for (final raw in [filePath, fileUrl, kind]) {
+      if (raw == null || raw.isEmpty) continue;
+      final cleaned = raw.split('?').first;
+      final dot = cleaned.lastIndexOf('.');
+      if (dot >= 0 && dot < cleaned.length - 1) {
+        return cleaned.substring(dot + 1).toLowerCase();
+      }
+    }
+    return '';
+  }
+
+  bool get isImage =>
+      const {'jpg', 'jpeg', 'png', 'webp'}.contains(extension);
+
+  bool get isPdf => extension == 'pdf';
 
   factory PrintDocument.fromJson(Map<String, dynamic> json) {
     return PrintDocument(

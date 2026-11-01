@@ -96,8 +96,8 @@ dependencies:
   firebase_messaging: ^17.0.1
   flutter_local_notifications: ^22.3.3
   geolocator: ^14.0.2
+  google_maps_flutter: ^2.14.0
   flutter_stripe: ^14.2.0
-
 dependency_overrides:
   # Fix screenshot package compatibility with Flutter SDK
   screenshot: ^3.0.0
