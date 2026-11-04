@@ -14,6 +14,7 @@ import 'data/services/revenue_cat/revenue_cat_service.dart';
 import 'data/services/user_font_library.dart';
 import 'firebase_options.dart';
 import 'presentation/guest_upgrade/guest_upgrade_prompt.dart';
+import 'presentation/notifications/notification_inbox_controller.dart';
 import 'presentation/print/print_open_order_dock.dart';
 import 'presentation/print/print_open_orders_sync.dart';
 import 'presentation/subscription/push_auth_sync.dart';
@@ -86,6 +87,9 @@ Future<void> main() async {
     syncPushTokenAfterAuth();
   }
   syncPrintOpenOrdersAfterAuth();
+  if (prefs.isLoggedIn() && !prefs.isGuestAccount()) {
+    NotificationInboxController.instance.start();
+  }
 
   appLocaleNotifier.syncFromPrefs();
   // Warm custom font catalog in the background (text editor uses it as primary).
@@ -104,6 +108,7 @@ Future<void> main() async {
   SessionManager.instance.authClearedHandler = () {
     syncWalletAfterAuth(forceReset: true);
     syncPrintOpenOrdersAfterAuth(forceStop: true);
+    NotificationInboxController.instance.stop();
     // ignore: unawaited_futures
     syncRevenueCatAfterAuth(forceAnonymous: true);
   };

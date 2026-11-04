@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:musamimuk/core/utils/design_state_history.dart';
+import 'package:musamimuk/data/models/musami_document.dart';
 import 'package:pro_image_editor/pro_image_editor.dart';
 import 'package:pro_image_editor/shared/services/import_export/constants/export_import_version.dart';
 import 'package:pro_image_editor/shared/services/import_export/utils/key_minifier.dart';
@@ -92,4 +93,41 @@ void main() {
     expect(importedText.color, textColor);
     expect(importedText.colorMode, LayerBackgroundMode.onlyColor);
   });
+
+  test('envelope design_data imports active page PIE history only', () {
+    final pie = jsonEncode(buildMinifiedExportMap([
+      TextLayer(
+        text: 'Page two',
+        color: textColor,
+        background: const Color(0x00000000),
+        colorMode: LayerBackgroundMode.onlyColor,
+        align: TextAlign.center,
+      ),
+    ]));
+    final envelope = MusamiDocument(
+      activePageId: 'page_2',
+      pages: [
+        MusamiPage(
+          id: 'page_1',
+          name: 'Page 1',
+          width: 1080,
+          height: 1080,
+          historyJson: jsonEncode(buildMinifiedExportMap([])),
+        ),
+        MusamiPage(
+          id: 'page_2',
+          name: 'Page 2',
+          width: 1080,
+          height: 1080,
+          historyJson: pie,
+        ),
+      ],
+    ).serialize();
+
+    final imported = musamiTryParseDesignImportHistory(envelope);
+    expect(imported, isNotNull);
+    final texts = imported!.stateHistory.last.layers.whereType<TextLayer>();
+    expect(texts.single.text, 'Page two');
+  });
 }
+

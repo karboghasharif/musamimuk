@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/app_export.dart';
 import '../../../data/repositories/auth_repository.dart';
+import '../../notifications/notification_inbox_controller.dart';
 import '../../print/print_open_orders_sync.dart';
 import '../../subscription/push_auth_sync.dart';
 import '../../subscription/revenue_cat_auth_sync.dart';
@@ -99,6 +100,7 @@ class GuestUpgradeBloc extends Bloc<GuestUpgradeEvent, GuestUpgradeState> {
         }
         syncWalletAfterAuth(walletFromAuth: data.wallet);
         syncPrintOpenOrdersAfterAuth();
+        NotificationInboxController.instance.start();
         // ignore: unawaited_futures
         syncRevenueCatAfterAuth();
         // ignore: unawaited_futures

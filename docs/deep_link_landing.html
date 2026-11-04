@@ -32,20 +32,23 @@
 <body>
   <main>
     <h1>Opening Musamimuk…</h1>
-    <p>
+    <p id="hint">
       If the app is installed it should open automatically.
-      If nothing happens, install Musamimuk from Google Play.
+      If nothing happens, install Musamimuk from the store.
     </p>
     <a class="btn" id="store" href="https://play.google.com/store/apps/details?id=com.musamimuk.app">
-      Get it on Google Play
+      Get the app
     </a>
   </main>
   <script>
     (function () {
       var PLAY =
         'https://play.google.com/store/apps/details?id=com.musamimuk.app';
+      // Replace with https://apps.apple.com/app/idXXXX after App Store listing exists.
+      var APP_STORE = 'https://apps.apple.com/search?term=Musamimuk';
+      var isIos = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      var storeUrl = isIos ? APP_STORE : PLAY;
       var path = window.location.pathname + window.location.search + window.location.hash;
-      // Prefer custom scheme so installed apps open even before App Link verification.
       var custom = 'musamimuk://' + path.replace(/^\//, '');
       var intent =
         'intent://' +
@@ -55,14 +58,23 @@
         encodeURIComponent(PLAY) +
         ';end';
 
-      // Try custom scheme first, then Android intent URL, then Play Store.
+      document.getElementById('store').href = storeUrl;
+      document.getElementById('store').textContent = isIos
+        ? 'Get it on the App Store'
+        : 'Get it on Google Play';
+      document.getElementById('hint').textContent = isIos
+        ? 'If the app is installed it should open automatically. Otherwise continue to the App Store.'
+        : 'If the app is installed it should open automatically. Otherwise continue to Google Play.';
+
       window.location.href = custom;
+      if (!isIos) {
+        setTimeout(function () {
+          window.location.href = intent;
+        }, 400);
+      }
       setTimeout(function () {
-        window.location.href = intent;
-      }, 400);
-      setTimeout(function () {
-        window.location.href = PLAY;
-      }, 1400);
+        window.location.href = storeUrl;
+      }, isIos ? 800 : 1400);
     })();
   </script>
 </body>

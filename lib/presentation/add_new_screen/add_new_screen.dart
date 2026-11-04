@@ -46,9 +46,13 @@ import 'widgets/editor_contextual_toolbars.dart';
 import 'widgets/editor_ai_command_bar.dart';
 import 'widgets/draggable_editor_ai_fab.dart';
 import 'utils/musami_clipping_mask.dart';
+import 'utils/musami_curved_text_apply.dart';
 import 'utils/musami_layer_capture.dart';
 import 'utils/musami_layer_clipboard.dart';
 import 'utils/musami_page_background.dart';
+import 'utils/musami_perspective_warp_apply.dart';
+import 'widgets/musami_curved_text_layer.dart';
+import 'widgets/musami_curved_text_sheet.dart';
 import 'widgets/musami_layer_context_menu.dart';
 import 'widgets/musami_layer_floating_quick_bar.dart';
 import 'widgets/musami_layer_meta_sheets.dart';
@@ -67,7 +71,15 @@ import '../../background_removal/background_removal_state.dart';
 import '../../data/models/background_removal_api_models.dart';
 import '../../data/services/editor_ai/editor_ai_asset_registry.dart';
 import '../../core/utils/design_state_history.dart';
+import 'utils/musami_ai_image_tools_apply.dart';
+import 'utils/musami_design_pack_border_frame.dart';
+import 'utils/musami_document_controller.dart';
 import 'utils/musami_layer_raster_utils.dart';
+import 'widgets/musami_ai_inpaint_sheet.dart';
+import 'widgets/musami_ai_upscale_sheet.dart';
+import 'widgets/musami_page_strip.dart';
+import '../../data/services/editor_ai/editor_ai_api_service.dart';
+import '../ai_studio/ai_studio_shared.dart';
 import 'package:pro_image_editor/features/crop_rotate_editor/utils/crop_aspect_ratios.dart';
 
 /// Layer lock flag stored in [Layer.meta] (app-side; not provided by pub.dev
@@ -138,7 +150,14 @@ const ValueKey<String> kMusamiGalleryPickedChromeKey = ValueKey<String>(
 /// photos and colorful stickers keep multiply ([BlendMode.modulate]).
 bool musamiLayerUsesSilhouetteTint(Map<String, dynamic> meta) {
   final kind = meta['musamiLayerKind']?.toString();
-  return kind == 'shape' || kind == 'ai-shape' || kind == 'ai-icon';
+  if (kind == null || kind.isEmpty) return false;
+  if (kind == 'shape' || kind == 'ai-shape' || kind == 'ai-icon') return true;
+  // Canvas border frames recolor via srcIn inside MusamiDesignPackBorderFrame.
+  if (kind == 'design_pack_border' && musamiMetaIsCanvasBorderFrame(meta)) {
+    return true;
+  }
+  // Offline Design Pack silhouettes only (emoji/specialtext keep multi-color fills).
+  return kind == 'design_pack_shape' || kind == 'design_pack_border';
 }
 
 /// Whether a tint ARGB should drive a [ColorFiltered] on the layer.
@@ -469,6 +488,11 @@ WidgetLayer musamiRebuildWidgetLayerVisuals(
   Map<String, dynamic> meta, {
   List<TuneAdjustmentItem>? tuneAdjustmentItems,
 }) {
+  // Decorative canvas borders keep their own frame widget (tint + motif size).
+  if (musamiMetaIsCanvasBorderFrame(meta)) {
+    return _musamiRebuildCanvasBorderFrameLayer(current, meta);
+  }
+
   final core = _unwrapMusamiWidgetLayerBareCore(current.widget);
   final opacity =
       (meta['musamiOpacity'] as num?)?.toDouble().clamp(0.0, 1.0) ?? 1.0;
@@ -521,6 +545,82 @@ WidgetLayer musamiRebuildWidgetLayerVisuals(
     flipY: current.flipY,
     interaction: interaction,
     exportConfigs: current.exportConfigs,
+    meta: meta,
+    boxConstraints: current.boxConstraints,
+    groupId: current.groupId,
+    startTime: current.startTime,
+    endTime: current.endTime,
+    enterDuration: current.enterDuration,
+    exitDuration: current.exitDuration,
+    enterCurve: current.enterCurve,
+    exitCurve: current.exitCurve,
+    transitionBuilder: current.transitionBuilder,
+  );
+}
+
+/// Rebuilds a Design Pack canvas border so tint / size / thickness stick.
+WidgetLayer _musamiRebuildCanvasBorderFrameLayer(
+  WidgetLayer current,
+  Map<String, dynamic> meta,
+) {
+  final width = musamiSanitizedLayerWidth(
+    current.width ??
+        (meta['musamiFrameWidth'] as num?)?.toDouble() ??
+        1080,
+  );
+  double aspectFromMeta() {
+    final stored = (meta[kMusamiFrameAspectMetaKey] as num?)?.toDouble();
+    if (stored != null && stored.isFinite && stored > 0) return stored;
+    final fw = (meta['musamiFrameWidth'] as num?)?.toDouble();
+    final fh = (meta['musamiFrameHeight'] as num?)?.toDouble();
+    if (fw != null && fw > 0 && fh != null && fh > 0) return fh / fw;
+    return 1.0;
+  }
+
+  final aspect = musamiSanitizedLayerAspect(aspectFromMeta());
+  musamiSyncCanvasBorderFrameMetaSize(meta, width: width, aspect: aspect);
+
+  // Keep motif thickness in sync when Border sheet writes musamiBorderW.
+  final borderW = (meta['musamiBorderW'] as num?)?.toDouble();
+  if (borderW != null && borderW > 0.05) {
+    final frame = Size(width, width * aspect);
+    meta[kMusamiBorderMotifSizeMetaKey] =
+        musamiBorderMotifSizeFromThickness(frame, borderW);
+  }
+
+  final opacity =
+      (meta['musamiOpacity'] as num?)?.toDouble().clamp(0.0, 1.0) ?? 1.0;
+  final hidden = meta[kMusamiLayerHiddenMetaKey] == true;
+  final frameWidget = MusamiDesignPackBorderFrame.fromMeta(meta);
+  final interaction = hidden
+      ? current.interaction.copyWith(
+          enableMove: false,
+          enableScale: false,
+          enableRotate: false,
+          enableSelection: false,
+          enableEdit: false,
+        )
+      : current.interaction;
+
+  // Keep export meta aligned so redesign restores the same frame.
+  final exportMeta = Map<String, dynamic>.from(meta);
+  final exportConfigs = current.exportConfigs.copyWith(meta: exportMeta);
+
+  return WidgetLayer(
+    id: current.id,
+    key: current.key,
+    widget: Opacity(
+      opacity: hidden ? 0.0 : opacity,
+      child: frameWidget,
+    ),
+    width: width,
+    offset: current.offset,
+    rotation: current.rotation,
+    scale: current.scale,
+    flipX: current.flipX,
+    flipY: current.flipY,
+    interaction: interaction,
+    exportConfigs: exportConfigs,
     meta: meta,
     boxConstraints: current.boxConstraints,
     groupId: current.groupId,
@@ -686,6 +786,35 @@ void musamiMutateWidgetLayerGeometry(
       : Map<String, dynamic>.from(layer.meta!);
   meta[kMusamiFrameAspectMetaKey] = safeFrameAspect;
   meta[kMusamiImageAspectMetaKey] = imageAspect;
+
+  // Canvas border frames must rebuild the full edge/corner layout — do not
+  // wrap them in a photo FittedBox crop shell.
+  if (musamiMetaIsCanvasBorderFrame(meta)) {
+    musamiSyncCanvasBorderFrameMetaSize(
+      meta,
+      width: safeWidth,
+      aspect: safeFrameAspect,
+    );
+    final preliminary = layer.copyWith(
+      width: safeWidth,
+      scale: safeScale,
+      offset: safeOffset,
+      meta: meta,
+    );
+    final rebuilt = musamiRebuildWidgetLayerVisuals(
+      preliminary,
+      meta,
+      tuneAdjustmentItems: musamiTuneItemsFromEditor(editor),
+    );
+    layer
+      ..widget = rebuilt.widget
+      ..width = rebuilt.width
+      ..scale = rebuilt.scale
+      ..offset = rebuilt.offset
+      ..meta = rebuilt.meta
+      ..exportConfigs = rebuilt.exportConfigs;
+    return;
+  }
 
   final core = musamiResizeWidgetLayerCore(
     layer.widget,
@@ -1137,6 +1266,7 @@ class _AddNewScreenState extends State<AddNewScreen>
       GlobalKey<ExpandableFabState>();
   bool _aiBarVisible = false;
   bool _isSavingDesign = false;
+  MusamiDocumentController? _documentController;
   EditorAiGenerationMode _aiBarMode = EditorAiGenerationMode.text;
   String? _aiBarPrompt;
   bool _aiBarAutoSend = false;
@@ -1230,20 +1360,64 @@ class _AddNewScreenState extends State<AddNewScreen>
     );
   }
 
+  void _ensureDocumentController(BuildContext context, AddNewState state) {
+    if (_documentController != null) return;
+    final args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    final raw = state.pendingDesignHistoryJson ??
+        args?['designHistoryJson']?.toString();
+    final w = state.selectedwidth ?? widget.width;
+    final h = state.selectedheight ?? widget.height;
+    _documentController = MusamiDocumentController.fromRaw(
+      raw: raw,
+      width: w,
+      height: h,
+    );
+  }
+
+  Future<String?> _exportPersistableDesignData(
+    ProImageEditorState editor,
+  ) async {
+    final doc = _documentController;
+    if (doc != null) {
+      await doc.captureActivePage(editor);
+      final encoded = doc.serializeForSave();
+      if (encoded.trim().isNotEmpty) return encoded;
+    }
+    return musamiExportDesignStateHistory(editor);
+  }
+
+  Future<void> _runPageAction(
+    Future<String?> Function(ProImageEditorState editor) action,
+  ) async {
+    final editor = _addNewBloc?.state.editorKey?.currentState;
+    if (editor == null || _documentController == null) return;
+    final errKey = await action(editor);
+    if (!mounted) return;
+    if (errKey != null) {
+      showAppToast(errKey.tr, type: ToastificationType.error);
+      return;
+    }
+    _scheduleAutoSave();
+  }
+
   Future<void> _autoSaveLocalDraft({bool force = false}) async {
     if (_autoSaveInFlight && !force) return;
     final bloc = _addNewBloc;
     if (bloc == null) return;
     final editor = bloc.state.editorKey?.currentState;
     if (editor == null) return;
-    if (editor.activeLayers.isEmpty) return;
+    // Allow multipage drafts even when the active page is blank.
+    final hasPages = (_documentController?.pages.length ?? 0) > 1;
+    if (editor.activeLayers.isEmpty && !hasPages) return;
     _autoSaveInFlight = true;
     try {
-      final history = await musamiExportDesignStateHistory(editor);
+      final history = await _exportPersistableDesignData(editor);
       if (history == null || history.trim().isEmpty) return;
       final blocState = bloc.state;
-      final w = blocState.selectedwidth ?? widget.width;
-      final h = blocState.selectedheight ?? widget.height;
+      final active = _documentController?.activePage;
+      final w = active?.width ?? blocState.selectedwidth ?? widget.width;
+      final h = active?.height ?? blocState.selectedheight ?? widget.height;
       final name = widget.presetName.trim().isNotEmpty
           ? widget.presetName.trim()
           : 'Untitled draft';
@@ -1308,9 +1482,15 @@ class _AddNewScreenState extends State<AddNewScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _autoSaveDebounce?.cancel();
-    // Best-effort save without context (widget tree is already tearing down).
-    unawaited(_autoSaveLocalDraft(force: true));
-    _backgroundRemovalController.dispose();
+    // Best-effort save while [_documentController] is still attached, then dispose.
+    unawaited(() async {
+      try {
+        await _autoSaveLocalDraft(force: true);
+      } finally {
+        _documentController?.dispose();
+        _documentController = null;
+      }
+    }());    _backgroundRemovalController.dispose();
     super.dispose();
   }
 
@@ -2021,6 +2201,8 @@ class _AddNewScreenState extends State<AddNewScreen>
                 );
               }
 
+              _ensureDocumentController(context, state);
+
               return Scaffold(
                 key: _scaffoldKey,
                 backgroundColor: appTheme.blueGray90007,
@@ -2146,11 +2328,63 @@ class _AddNewScreenState extends State<AddNewScreen>
                       ),
                   ],
                 ),
-                bottomNavigationBar: state.activeToolbarMode == 'text'
-                    ? _buildTextContextBottomBar(context, state)
-                    : state.activeToolbarMode == 'image'
-                    ? _buildImageContextBottomBar(context, state)
-                    : Column(
+                bottomNavigationBar: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_documentController != null)
+                      MusamiPageStrip(
+                        controller: _documentController!,
+                        onSelectPage: (pageId) {
+                          unawaited(
+                            _runPageAction(
+                              (editor) => _documentController!
+                                  .switchToPage(editor, pageId)
+                                  .then((ok) => ok ? null : 'msg_page_action_failed'),
+                            ),
+                          );
+                        },
+                        onAddPage: () {
+                          unawaited(
+                            _runPageAction(
+                              (editor) => _documentController!.addPage(editor),
+                            ),
+                          );
+                        },
+                        onDuplicatePage: () {
+                          unawaited(
+                            _runPageAction(
+                              (editor) => _documentController!
+                                  .duplicateActivePage(editor),
+                            ),
+                          );
+                        },
+                        onDeletePage: () {
+                          unawaited(
+                            _runPageAction(
+                              (editor) => _documentController!
+                                  .deleteActivePage(editor),
+                            ),
+                          );
+                        },
+                        onMoveLeft: () {
+                          unawaited(
+                            _documentController!.reorderActiveBy(-1),
+                          );
+                          _scheduleAutoSave();
+                        },
+                        onMoveRight: () {
+                          unawaited(
+                            _documentController!.reorderActiveBy(1),
+                          );
+                          _scheduleAutoSave();
+                        },
+                      ),
+                    if (state.activeToolbarMode == 'text')
+                      _buildTextContextBottomBar(context, state)
+                    else if (state.activeToolbarMode == 'image')
+                      _buildImageContextBottomBar(context, state)
+                    else
+                      Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Visibility(
@@ -2402,6 +2636,8 @@ class _AddNewScreenState extends State<AddNewScreen>
                           ),
                         ],
                       ),
+                  ],
+                ),
               );
                 },
               ),
@@ -2904,6 +3140,29 @@ class _AddNewScreenState extends State<AddNewScreen>
         );
       },
       onColor: pickTextColor,
+      onCurveText: () {
+        final layer = selectedTextLayer();
+        if (layer == null) return;
+        if (_editorLayerInteractionBlocked(layer)) {
+          showAppToast('msg_layer_locked_action'.tr);
+          return;
+        }
+        showMusamiCurvedTextSheet(
+          context: context,
+          editor: editor,
+          textLayer: layer,
+          onCommitted: (curved) {
+            editor.layerInteractionManager.selectedLayerId = curved.id;
+            context.read<AddNewBloc>().add(
+              EditorSelectionChangedEvent(
+                selectedElementId: curved.id,
+                selectedElementType: 'image',
+              ),
+            );
+            editor.setState(() {});
+          },
+        );
+      },
     );
   }
 
@@ -3038,6 +3297,358 @@ class _AddNewScreenState extends State<AddNewScreen>
         ),
       ),
     );
+  }
+
+  Future<void> _openPerspectiveWarp(
+    BuildContext context,
+    ProImageEditorState editor,
+    WidgetLayer? layer,
+  ) async {
+    if (layer == null) return;
+    if (_editorLayerInteractionBlocked(layer)) {
+      showAppToast('msg_layer_locked_action'.tr);
+      return;
+    }
+    final block = musamiPerspectiveWarpBlockReason(layer);
+    if (block != null) {
+      showAppToast(block.tr, type: ToastificationType.warning);
+      return;
+    }
+
+    final source = await musamiResolveWarpSource(layer);
+    if (!context.mounted) return;
+    if (source == null) {
+      showAppToast('msg_warp_failed'.tr, type: ToastificationType.error);
+      return;
+    }
+    // Ensure gallery originals survive Apply → later Reset in this session.
+    if (source.originalBytes != null) {
+      musamiRememberWarpOriginalBytes(layer.id, source.originalBytes!);
+    } else if (!musamiMetaIsPerspectiveWarped(layer.meta)) {
+      musamiRememberWarpOriginalBytes(layer.id, source.bytes);
+    }
+
+    final pageResult = await musamiPushPerspectiveWarpPage(
+      context: context,
+      layer: layer,
+      source: source,
+    );
+    if (!context.mounted || pageResult == null) return;
+
+    if (pageResult.resetToOriginal) {
+      final resetBytes =
+          musamiPeekWarpOriginalBytes(layer.id) ?? source.bytesForReset;
+      final canReset = source.canResetToOriginal ||
+          musamiPeekWarpOriginalBytes(layer.id) != null;
+      if (!canReset) {
+        showAppToast(
+          'msg_warp_reset_unavailable'.tr,
+          type: ToastificationType.warning,
+        );
+        return;
+      }
+      await _commitPerspectiveWarpBytes(
+        context: context,
+        editor: editor,
+        layer: layer,
+        bytes: resetBytes,
+        source: source,
+        warped: false,
+        quad: musamiDefaultWarpQuad(),
+      );
+      return;
+    }
+
+    final warped = pageResult.warped;
+    if (warped == null || warped.pngBytes.isEmpty) {
+      showAppToast('msg_warp_failed'.tr, type: ToastificationType.error);
+      return;
+    }
+    // Cache pre-warp bytes before replacing the layer widget.
+    musamiRememberWarpOriginalBytes(
+      layer.id,
+      source.originalBytes ?? source.bytes,
+    );
+    await _commitPerspectiveWarpBytes(
+      context: context,
+      editor: editor,
+      layer: layer,
+      bytes: warped.pngBytes,
+      source: source,
+      warped: true,
+      quad: warped.quadNormalized,
+      width: warped.width.toDouble(),
+      height: warped.height.toDouble(),
+    );
+  }
+
+  Future<void> _runAiUpscaleOnLayer(
+    BuildContext context,
+    ProImageEditorState editor,
+    WidgetLayer layer,
+  ) async {
+    if (_editorLayerInteractionBlocked(layer)) {
+      showAppToast('msg_layer_locked_action'.tr);
+      return;
+    }
+    if (musamiMetaIsCurvedText(layer.meta) ||
+        musamiMetaIsCanvasBorderFrame(layer.meta)) {
+      showAppToast(
+        'msg_ai_image_tool_unsupported'.tr,
+        type: ToastificationType.warning,
+      );
+      return;
+    }
+    if (!await ensureCanSpendCoins(
+      context: context,
+      feature: WalletFeatureCost.aiOpenaiUpscale,
+    )) {
+      return;
+    }
+    if (!context.mounted) return;
+    final scale = await showMusamiAiUpscaleSheet(context);
+    if (scale == null || !context.mounted) return;
+
+    final sourceBytes = await musamiCaptureLayerImageBytes(layer);
+    if (sourceBytes == null || sourceBytes.isEmpty) {
+      showAppToast(
+        'msg_ai_image_tool_capture_failed'.tr,
+        type: ToastificationType.error,
+      );
+      return;
+    }
+    if (!context.mounted) return;
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      useRootNavigator: true,
+      builder: (_) => const PopScope(
+        canPop: false,
+        child: Center(child: CircularProgressIndicator()),
+      ),
+    );
+    try {
+      final api = EditorAiApiService();
+      final result = await musamiRunUpscale(
+        api: api,
+        imageBytes: sourceBytes,
+        scale: scale,
+      );
+      if (!context.mounted) return;
+      AiStudioChrome.applyWallet(context, api);
+      final out = result.decodeBytes();
+      if (out == null || out.isEmpty) {
+        throw const EditorAiApiException(
+          message: 'Empty upscale response',
+          retryable: true,
+        );
+      }
+      await musamiReplaceWidgetLayerRaster(
+        context: context,
+        editor: editor,
+        layer: layer,
+        bytes: out,
+        width: result.width.toDouble(),
+        height: result.height.toDouble(),
+        rebuildVisuals: musamiRebuildWidgetLayerVisuals,
+        tuneItems: musamiTuneItemsFromEditor(editor),
+        buildCore: ({
+          required ImageProvider image,
+          required double width,
+          required double height,
+        }) =>
+            _buildGalleryStickerWidget(
+          context,
+          image: image,
+          width: width,
+          height: height,
+        ),
+      );
+      if (context.mounted) {
+        showAppToast('msg_ai_upscale_done'.tr, type: ToastificationType.success);
+      }
+    } catch (error) {
+      if (context.mounted) AiStudioChrome.toastAiError(error);
+    } finally {
+      if (context.mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+    }
+  }
+
+  Future<void> _runAiInpaintOnLayer(
+    BuildContext context,
+    ProImageEditorState editor,
+    WidgetLayer layer,
+  ) async {
+    if (_editorLayerInteractionBlocked(layer)) {
+      showAppToast('msg_layer_locked_action'.tr);
+      return;
+    }
+    if (musamiMetaIsCurvedText(layer.meta) ||
+        musamiMetaIsCanvasBorderFrame(layer.meta)) {
+      showAppToast(
+        'msg_ai_image_tool_unsupported'.tr,
+        type: ToastificationType.warning,
+      );
+      return;
+    }
+    if (!await ensureCanSpendCoins(
+      context: context,
+      feature: WalletFeatureCost.aiOpenaiInpaint,
+    )) {
+      return;
+    }
+    if (!context.mounted) return;
+
+    final sourceBytes = await musamiCaptureLayerImageBytes(layer);
+    if (sourceBytes == null || sourceBytes.isEmpty) {
+      showAppToast(
+        'msg_ai_image_tool_capture_failed'.tr,
+        type: ToastificationType.error,
+      );
+      return;
+    }
+    if (!context.mounted) return;
+
+    final painted = await showMusamiAiInpaintSheet(
+      context: context,
+      imageBytes: sourceBytes,
+    );
+    if (painted == null || !context.mounted) return;
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      useRootNavigator: true,
+      builder: (_) => const PopScope(
+        canPop: false,
+        child: Center(child: CircularProgressIndicator()),
+      ),
+    );
+    try {
+      final api = EditorAiApiService();
+      final result = await musamiRunInpaint(
+        api: api,
+        imageBytes: sourceBytes,
+        maskBytes: painted.maskPng,
+        prompt: painted.prompt,
+      );
+      if (!context.mounted) return;
+      AiStudioChrome.applyWallet(context, api);
+      final out = result.decodeBytes();
+      if (out == null || out.isEmpty) {
+        throw const EditorAiApiException(
+          message: 'Empty inpaint response',
+          retryable: true,
+        );
+      }
+      await musamiReplaceWidgetLayerRaster(
+        context: context,
+        editor: editor,
+        layer: layer,
+        bytes: out,
+        width: result.width.toDouble(),
+        height: result.height.toDouble(),
+        rebuildVisuals: musamiRebuildWidgetLayerVisuals,
+        tuneItems: musamiTuneItemsFromEditor(editor),
+        buildCore: ({
+          required ImageProvider image,
+          required double width,
+          required double height,
+        }) =>
+            _buildGalleryStickerWidget(
+          context,
+          image: image,
+          width: width,
+          height: height,
+        ),
+      );
+      if (context.mounted) {
+        showAppToast('msg_ai_inpaint_done'.tr, type: ToastificationType.success);
+      }
+    } catch (error) {
+      if (context.mounted) AiStudioChrome.toastAiError(error);
+    } finally {
+      if (context.mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+    }
+  }
+
+  Future<void> _commitPerspectiveWarpBytes({
+    required BuildContext context,
+    required ProImageEditorState editor,
+    required WidgetLayer layer,
+    required Uint8List bytes,
+    required MusamiWarpSourceBundle source,
+    required bool warped,
+    required List<double> quad,
+    double? width,
+    double? height,
+  }) async {
+    final tuneItems = musamiTuneItemsFromEditor(editor);
+    final provider = MemoryImage(bytes);
+    await precacheImage(provider, context);
+    if (!context.mounted) return;
+
+    Size decodedSize;
+    if (width != null && height != null && width > 0 && height > 0) {
+      decodedSize = Size(width, height);
+    } else {
+      decodedSize = await _decodeImageSize(bytes);
+    }
+    if (!context.mounted) return;
+
+    final meta = Map<String, dynamic>.from(layer.meta ?? {});
+    meta[kMusamiWarpSourceMetaKey] =
+        warped ? kMusamiWarpSourceWarped : kMusamiWarpSourceOriginal;
+    if (warped) {
+      meta[kMusamiWarpQuadMetaKey] = quad;
+    } else {
+      meta.remove(kMusamiWarpQuadMetaKey);
+    }
+    final url = source.networkUrl?.trim();
+    final asset = source.assetPath?.trim();
+    if (url != null && url.isNotEmpty) {
+      meta[kMusamiWarpOriginalNetworkUrlMetaKey] = url;
+    }
+    if (asset != null && asset.isNotEmpty) {
+      meta[kMusamiWarpOriginalAssetPathMetaKey] = asset;
+    }
+    if (decodedSize.width > 0 && decodedSize.height > 0) {
+      final aspect = decodedSize.height / decodedSize.width;
+      meta[kMusamiFrameAspectMetaKey] = aspect;
+      meta[kMusamiImageAspectMetaKey] = aspect;
+    }
+
+    final newCore = _buildGalleryStickerWidget(
+      context,
+      image: provider,
+      width: decodedSize.width,
+      height: decodedSize.height,
+    );
+    final preliminary = layer.copyWith(
+      widget: newCore,
+      width: decodedSize.width,
+      meta: meta,
+      exportConfigs: WidgetLayerExportConfigs(
+        id: layer.exportConfigs.id,
+        meta: meta,
+      ),
+    );
+    final updated = musamiRebuildWidgetLayerVisuals(
+      preliminary,
+      meta,
+      tuneAdjustmentItems: tuneItems,
+    );
+    final idx = editor.activeLayers.indexWhere((l) => l.id == layer.id);
+    if (idx >= 0) {
+      editor.replaceLayer(index: idx, layer: updated);
+      editor.layerInteractionManager.selectedLayerId = updated.id;
+      editor.setState(() {});
+    }
   }
 
   Future<void> _applyBackgroundRemovedToWidgetLayer({
@@ -4171,8 +4782,12 @@ class _AddNewScreenState extends State<AddNewScreen>
       final meta0 = layer.meta == null
           ? <String, dynamic>{}
           : Map<String, dynamic>.from(layer.meta!);
-      final initialW = (meta0['musamiBorderW'] as num?)?.toDouble() ?? 0;
-      final initialArgb = (meta0['musamiBorderArgb'] as int?) ?? 0xFF212121;
+      final isCanvasBorder = musamiMetaIsCanvasBorderFrame(meta0);
+      final initialW = (meta0['musamiBorderW'] as num?)?.toDouble() ??
+          (isCanvasBorder ? 6.0 : 0.0);
+      final initialArgb = meta0['musamiBorderArgb'] as int? ??
+          meta0[kMusamiImageTintArgbMetaKey] as int? ??
+          0xFF212121;
 
       showAppModalBottomSheet<void>(
         context: context,
@@ -4201,9 +4816,29 @@ class _AddNewScreenState extends State<AddNewScreen>
                     if (bw <= 0.05) {
                       meta.remove('musamiBorderW');
                       meta.remove('musamiBorderArgb');
+                      meta.remove(kMusamiBorderMotifSizeMetaKey);
                     } else {
                       meta['musamiBorderW'] = bw;
                       meta['musamiBorderArgb'] = musamiColorToArgb32(bc);
+                      if (isCanvasBorder ||
+                          musamiMetaIsCanvasBorderFrame(meta)) {
+                        // Thickness controls decorative motif size; color tints
+                        // the SVG frame (same as Image → Color).
+                        final fw = (meta['musamiFrameWidth'] as num?)
+                                ?.toDouble() ??
+                            current.width ??
+                            1080;
+                        final fh = (meta['musamiFrameHeight'] as num?)
+                                ?.toDouble() ??
+                            fw;
+                        meta[kMusamiBorderMotifSizeMetaKey] =
+                            musamiBorderMotifSizeFromThickness(
+                          Size(fw, fh),
+                          bw,
+                        );
+                        meta[kMusamiImageTintArgbMetaKey] =
+                            musamiColorToArgb32(bc);
+                      }
                     }
                     final updated = musamiRebuildWidgetLayerVisuals(
                       current,
@@ -4240,7 +4875,9 @@ class _AddNewScreenState extends State<AddNewScreen>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'lbl_borders'.tr,
+                        isCanvasBorder
+                            ? 'lbl_border_thickness'.tr
+                            : 'lbl_borders'.tr,
                         style: AppDs.sheetTitle(
                           sheetTheme,
                           color: Colors.white,
@@ -4627,8 +5264,11 @@ class _AddNewScreenState extends State<AddNewScreen>
     }
 
     final selectedForCrop = selectedWidgetLayer();
+    final isCurvedText =
+        selectedForCrop != null && musamiMetaIsCurvedText(selectedForCrop.meta);
     final supportsClip =
         selectedForCrop != null &&
+        !isCurvedText &&
         musamiLayerSupportsClippingMaskAction(selectedForCrop);
     final clipActive =
         selectedForCrop != null &&
@@ -4637,14 +5277,76 @@ class _AddNewScreenState extends State<AddNewScreen>
     return ImageContextToolbar(
       theme: Theme.of(context),
       secondaryPanel: state.imageContextSecondaryPanel,
+      isCurvedTextLayer: isCurvedText,
+      onEditCurve: isCurvedText
+          ? () {
+              final layer = selectedWidgetLayer();
+              if (layer == null) return;
+              if (_editorLayerInteractionBlocked(layer)) {
+                showAppToast('msg_layer_locked_action'.tr);
+                return;
+              }
+              showMusamiCurvedTextSheet(
+                context: context,
+                editor: editor,
+                curvedLayer: layer,
+                onCommitted: (updated) {
+                  editor.layerInteractionManager.selectedLayerId = updated.id;
+                  context.read<AddNewBloc>().add(
+                    EditorSelectionChangedEvent(
+                      selectedElementId: updated.id,
+                      selectedElementType: 'image',
+                    ),
+                  );
+                  editor.setState(() {});
+                },
+              );
+            }
+          : null,
+      onEditCurvedText: isCurvedText
+          ? () {
+              final layer = selectedWidgetLayer();
+              if (layer == null) return;
+              if (_editorLayerInteractionBlocked(layer)) {
+                showAppToast('msg_layer_locked_action'.tr);
+                return;
+              }
+              showMusamiCurvedTextSheet(
+                context: context,
+                editor: editor,
+                curvedLayer: layer,
+                onCommitted: (updated) {
+                  editor.layerInteractionManager.selectedLayerId = updated.id;
+                  context.read<AddNewBloc>().add(
+                    EditorSelectionChangedEvent(
+                      selectedElementId: updated.id,
+                      selectedElementType: 'image',
+                    ),
+                  );
+                  editor.setState(() {});
+                },
+              );
+            }
+          : null,
       onDeselect: deselect,
       onDelete: delete,
       onResize: showResizeSheet,
-      onCrop:
-          selectedForCrop != null &&
-              musamiWidgetLayerHasRasterCropSource(selectedForCrop.widget)
-          ? () => _openWidgetLayerCropRaster(context, editor, selectedForCrop)
-          : null,
+      onCrop: isCurvedText
+          ? null
+          : (selectedForCrop != null &&
+                  musamiWidgetLayerHasRasterCropSource(selectedForCrop.widget)
+              ? () =>
+                    _openWidgetLayerCropRaster(context, editor, selectedForCrop)
+              : null),
+      onPerspectiveWarp: isCurvedText
+          ? null
+          : () => _openPerspectiveWarp(context, editor, selectedForCrop),
+      onAiUpscale: isCurvedText || selectedForCrop == null
+          ? null
+          : () => _runAiUpscaleOnLayer(context, editor, selectedForCrop),
+      onAiInpaint: isCurvedText || selectedForCrop == null
+          ? null
+          : () => _runAiInpaintOnLayer(context, editor, selectedForCrop),
       onBorder: showBorderSheet,
       onShadow: showShadowSheet,
       onDuplicate: duplicate,
@@ -4857,6 +5559,20 @@ class _AddNewScreenState extends State<AddNewScreen>
       if (layer is! WidgetLayer) continue;
       final meta = layer.meta;
       if (meta == null || meta.isEmpty) continue;
+
+      // Curved text is fully rebuilt by widgetLoader from meta — do not wrap
+      // in image frame/tint shells (would clip/distort the arc).
+      if (musamiMetaIsCurvedText(meta)) {
+        layer.widget = MusamiCurvedTextLayer.fromMeta(meta);
+        continue;
+      }
+
+      // Canvas border frames are a composite Stack (corners + edges) — do not
+      // wrap in photo frame/crop shells.
+      if (musamiMetaIsCanvasBorderFrame(meta)) {
+        layer.widget = MusamiDesignPackBorderFrame.fromMeta(meta);
+        continue;
+      }
 
       // Import rebuilds the widget as a bare image, which would fall back to
       // the image's own ratio. Re-apply the saved frame so a cropped/reshaped
@@ -6178,11 +6894,11 @@ class _AddNewScreenState extends State<AddNewScreen>
         return;
       }
 
-      // Pro Image Editor exportStateHistory → design_data for redesign.
+      // Pro Image Editor export → design_data (envelope when multipage).
       String? designData;
       final editor = context.read<AddNewBloc>().state.editorKey?.currentState;
       if (editor != null) {
-        designData = await musamiExportDesignStateHistory(editor);
+        designData = await _exportPersistableDesignData(editor);
       }
       if (!context.mounted) return;
 

@@ -107,7 +107,13 @@ class _PrintShopProfileScreenState extends State<PrintShopProfileScreen> {
     PrintOpenOrdersController.instance.refresh();
     NavigatorService.pushNamed(
       AppRoutes.printChatScreen,
-      arguments: {'orderId': order.id, 'shopId': widget.shopId},
+      arguments: {
+        if (order.conversationId != null) 'conversationId': order.conversationId,
+        'orderId': order.id,
+        'shopId': widget.shopId,
+        'viewer': 'customer',
+        'thread': 'customer_shop',
+      },
     );
   }
 

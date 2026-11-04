@@ -9,6 +9,9 @@ import 'package:musamimuk/data/repositories/wallet_repository.dart';
 /// Android application id used for Play Billing verify payloads.
 const String kMusamimukAndroidPackageName = 'com.musamimuk.app';
 
+/// iOS bundle id (App Store / StoreKit).
+const String kMusamimukIosBundleId = 'com.musamimuk.ios.app';
+
 /// Wraps store purchase + server `POST /wallet/iap/verify`.
 ///
 /// Completes / acknowledges the store purchase **only after** a successful
@@ -176,8 +179,9 @@ class IapPurchaseService {
       purchaseToken: platform == 'android'
           ? details.verificationData.serverVerificationData
           : null,
-      packageName:
-          platform == 'android' ? kMusamimukAndroidPackageName : null,
+      packageName: platform == 'android'
+          ? kMusamimukAndroidPackageName
+          : kMusamimukIosBundleId,
       receiptData: platform == 'ios'
           ? details.verificationData.localVerificationData
           : null,

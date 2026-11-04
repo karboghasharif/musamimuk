@@ -9,6 +9,7 @@ import '../../core/app_export.dart';
 import '../../core/utils/app_toast.dart';
 import '../../data/models/print_models.dart';
 import '../../data/repositories/print_repository.dart';
+import '../subscription/push_auth_sync.dart';
 import 'print_earnings_card.dart';
 import 'print_dispute_sheet.dart';
 import 'print_review_sheet.dart';
@@ -435,6 +436,7 @@ class _PrintShopHomeScreenState extends State<PrintShopHomeScreen> {
   int _section = 0;
   Timer? _poll;
   VoidCallback? _stopLive;
+  VoidCallback? _releaseSession;
   Set<int>? _knownOrderIds;
   PrintOrder? _banner;
 
@@ -442,14 +444,17 @@ class _PrintShopHomeScreenState extends State<PrintShopHomeScreen> {
   void initState() {
     super.initState();
     _load();
-    _poll = Timer.periodic(const Duration(seconds: 20), (_) => _refreshOrders());
+    _poll = Timer.periodic(const Duration(seconds: 10), (_) => _refreshOrders());
+    _releaseSession = PrintLive.instance.holdSession();
     _stopLive = PrintLive.instance.listen(_refreshOrders);
+    unawaited(syncPushTokenAfterAuth());
   }
 
   @override
   void dispose() {
     _poll?.cancel();
     _stopLive?.call();
+    _releaseSession?.call();
     super.dispose();
   }
 
@@ -493,13 +498,24 @@ class _PrintShopHomeScreenState extends State<PrintShopHomeScreen> {
     if (!mounted || ordersResult is! PrintSuccess<List<PrintOrder>>) return;
     final rows = ordersResult.data;
     final known = _knownOrderIds;
+    final prevStatus = {
+      for (final order in _orders) order.id: order.status,
+    };
     PrintOrder? fresh;
+    PrintOrder? statusChanged;
     if (known != null) {
       for (final order in rows) {
         if (!known.contains(order.id)) {
           fresh = order;
           break;
         }
+      }
+    }
+    for (final order in rows) {
+      final before = prevStatus[order.id];
+      if (before != null && before != order.status) {
+        statusChanged = order;
+        break;
       }
     }
     setState(() {
@@ -512,6 +528,12 @@ class _PrintShopHomeScreenState extends State<PrintShopHomeScreen> {
         '${'lbl_print_new_request'.tr} #${fresh.number}',
         type: ToastificationType.info,
         autoCloseDuration: const Duration(seconds: 6),
+      );
+    } else if (statusChanged != null) {
+      showAppToast(
+        '#${statusChanged.number} · ${'lbl_print_status_${statusChanged.status}'.tr}',
+        type: ToastificationType.info,
+        autoCloseDuration: const Duration(seconds: 4),
       );
     }
   }
@@ -531,7 +553,10 @@ class _PrintShopHomeScreenState extends State<PrintShopHomeScreen> {
     NavigatorService.pushNamed(
       AppRoutes.printChatScreen,
       arguments: {
+        if (order.conversationId != null) 'conversationId': order.conversationId,
         'orderId': order.id,
+        'shopId': order.shopId,
+        'customerUserId': null,
         'thread': 'customer_shop',
         'viewer': 'shop',
       },
@@ -548,10 +573,23 @@ class _PrintShopHomeScreenState extends State<PrintShopHomeScreen> {
     return chats.last.body;
   }
 
+  /// One inbox row per designer profile (not per order).
   List<PrintOrder> get _conversationOrders {
-    final active = _orders
-        .where((o) => o.status != 'cancelled')
-        .toList(growable: false);
+    final byCustomer = <String, PrintOrder>{};
+    for (final order in _orders.where((o) => o.status != 'cancelled')) {
+      final key = (order.customerName ?? '').trim().isNotEmpty
+          ? order.customerName!.trim().toLowerCase()
+          : 'order-${order.id}';
+      final existing = byCustomer[key];
+      if (existing == null) {
+        byCustomer[key] = order;
+        continue;
+      }
+      final existingMs = existing.messages.isEmpty ? 0 : existing.messages.last.id;
+      final nextMs = order.messages.isEmpty ? 0 : order.messages.last.id;
+      if (nextMs >= existingMs) byCustomer[key] = order;
+    }
+    final active = byCustomer.values.toList(growable: false);
     active.sort((a, b) {
       final aMs = a.messages.isEmpty ? 0 : a.messages.last.id;
       final bMs = b.messages.isEmpty ? 0 : b.messages.last.id;
@@ -1363,135 +1401,64 @@ class _PrintShopOrderPanelState extends State<PrintShopOrderPanel> {
             SizedBox(height: AppDs.space3.v),
           ],
           if (isQuote) ...[
-            Container(
-              padding: EdgeInsets.all(AppDs.space3.h),
-              decoration: BoxDecoration(
-                color: AppDs.atelierInk.withValues(alpha: 0.45),
-                borderRadius: BorderRadius.circular(AppDs.radiusMd),
-                border: Border.all(color: AppDs.atelierHairline(0.12)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    'lbl_print_quote_workbench'.tr,
-                    style: AppTypography.body(theme).copyWith(
-                      color: AppDs.textOnDarkPrimary,
-                      fontWeight: FontWeight.w800,
+            Row(
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: TextField(
+                    controller: _shopPrice,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
                     ),
-                  ),
-                  SizedBox(height: AppDs.space1.v),
-                  Text(
-                    'msg_print_quote_hint'.tr,
-                    style: AppTypography.caption(theme).copyWith(
-                      color: AppDs.textOnDarkSecondary,
-                      height: 1.35,
-                    ),
-                  ),
-                  SizedBox(height: AppDs.space3.v),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _shopPrice,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          style: const TextStyle(color: AppDs.textOnDarkPrimary),
-                          decoration: printTicketField('lbl_print_shop_price'.tr),
-                        ),
-                      ),
-                      SizedBox(width: AppDs.space2.h),
-                      Expanded(
-                        child: TextField(
-                          controller: _eta,
-                          keyboardType: TextInputType.number,
-                          style: const TextStyle(color: AppDs.textOnDarkPrimary),
-                          decoration: printTicketField('lbl_print_eta_hours'.tr),
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: AppDs.space2.v),
-                  TextField(
-                    controller: _note,
-                    minLines: 2,
-                    maxLines: 3,
                     style: const TextStyle(color: AppDs.textOnDarkPrimary),
-                    decoration: printTicketField('lbl_print_note'.tr),
+                    decoration: printTicketField('lbl_print_shop_price'.tr),
                   ),
-                  SizedBox(height: AppDs.space3.v),
-                  PrintGoldButton(
-                    label: 'lbl_print_send_quote'.tr,
-                    loading: _busy,
-                    onPressed: _quote,
+                ),
+                SizedBox(width: AppDs.space2.h),
+                Expanded(
+                  flex: 2,
+                  child: TextField(
+                    controller: _eta,
+                    keyboardType: TextInputType.number,
+                    style: const TextStyle(color: AppDs.textOnDarkPrimary),
+                    decoration: printTicketField('lbl_print_eta_hours'.tr),
                   ),
-                  SizedBox(height: AppDs.space2.v),
-                  PrintGhostButton(
-                    label: 'lbl_print_decline'.tr,
-                    onPressed: _busy ? null : _decline,
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-            SizedBox(height: AppDs.space3.v),
-          ],
-          if (lastChat.isNotEmpty) ...[
-            Text(
-              lastChat.last.body,
+            SizedBox(height: AppDs.space2.v),
+            TextField(
+              controller: _note,
+              minLines: 1,
               maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: AppTypography.caption(theme).copyWith(
-                color: AppDs.textOnDarkSecondary,
-                fontStyle: FontStyle.italic,
-                height: 1.35,
-              ),
+              style: const TextStyle(color: AppDs.textOnDarkPrimary),
+              decoration: printTicketField('lbl_print_optional_note'.tr),
+            ),
+            SizedBox(height: AppDs.space3.v),
+            PrintGoldButton(
+              label: 'lbl_print_send_quote'.tr,
+              loading: _busy,
+              onPressed: _quote,
+            ),
+            SizedBox(height: AppDs.space2.v),
+            PrintTextActionRow(
+              actions: [
+                ('lbl_print_decline'.tr, _busy ? null : _decline),
+              ],
             ),
             SizedBox(height: AppDs.space3.v),
           ],
-          if ((order.printFileUrl ?? '').isNotEmpty) ...[
-            PrintGhostButton(
-              label: 'lbl_print_download_file'.tr,
-              icon: Icons.download_outlined,
-              onPressed: () async {
-                final uri = Uri.tryParse(order.printFileUrl!);
-                if (uri == null) return;
-                await launchUrl(uri, mode: LaunchMode.externalApplication);
-              },
+          if (!isQuote && order.nextAction != null) ...[
+            PrintGoldButton(
+              label: 'lbl_print_action_${order.nextAction}'.tr,
+              loading: _busy,
+              onPressed: () => _advance(order.nextAction!),
             ),
-            SizedBox(height: AppDs.space2.v),
-          ],
-          PrintGhostButton(
-            label: 'lbl_print_designer_chat'.tr,
-            icon: Icons.chat_bubble_outline,
-            onPressed: () => NavigatorService.pushNamed(
-              AppRoutes.printChatScreen,
-              arguments: {
-                'orderId': order.id,
-                'thread': 'customer_shop',
-                'viewer': 'shop',
-              },
-            ),
-          ),
-          if (order.delivery?.riderId != null) ...[
-            SizedBox(height: AppDs.space2.v),
-            PrintGhostButton(
-              label: 'lbl_print_rider_chat'.tr,
-              icon: Icons.two_wheeler_outlined,
-              onPressed: () => NavigatorService.pushNamed(
-                AppRoutes.printChatScreen,
-                arguments: {
-                  'orderId': order.id,
-                  'thread': 'shop_rider',
-                  'viewer': 'shop',
-                },
-              ),
-            ),
+            SizedBox(height: AppDs.space3.v),
           ],
           if (order.status == 'ready' &&
               order.fulfillment == 'delivery' &&
               order.delivery?.riderId == null) ...[
-            SizedBox(height: AppDs.space3.v),
             PrintGoldButton(
               label: 'lbl_print_request_rider'.tr,
               loading: _busy,
@@ -1507,17 +1474,9 @@ class _PrintShopOrderPanelState extends State<PrintShopOrderPanel> {
                 widget.onChanged();
               },
             ),
-          ],
-          if (order.nextAction != null && !isQuote) ...[
             SizedBox(height: AppDs.space3.v),
-            PrintGoldButton(
-              label: 'lbl_print_action_${order.nextAction}'.tr,
-              loading: _busy,
-              onPressed: () => _advance(order.nextAction!),
-            ),
           ],
-          if (order.status == 'ready') ...[
-            SizedBox(height: AppDs.space3.v),
+          if (order.status == 'ready' && order.fulfillment != 'delivery') ...[
             TextField(
               controller: _pickupCode,
               style: const TextStyle(color: AppDs.textOnDarkPrimary),
@@ -1528,6 +1487,59 @@ class _PrintShopOrderPanelState extends State<PrintShopOrderPanel> {
               label: 'lbl_print_verify_pickup'.tr,
               loading: _busy,
               onPressed: _verifyPickup,
+            ),
+            SizedBox(height: AppDs.space3.v),
+          ],
+          PrintTextActionRow(
+            actions: [
+              (
+                'lbl_print_designer_chat'.tr,
+                () => NavigatorService.pushNamed(
+                      AppRoutes.printChatScreen,
+                      arguments: {
+                        if (order.conversationId != null)
+                          'conversationId': order.conversationId,
+                        'orderId': order.id,
+                        'thread': 'customer_shop',
+                        'viewer': 'shop',
+                      },
+                    ),
+              ),
+              if (order.delivery?.riderId != null)
+                (
+                  'lbl_print_rider_chat'.tr,
+                  () => NavigatorService.pushNamed(
+                        AppRoutes.printChatScreen,
+                        arguments: {
+                          if (order.riderConversationId != null)
+                            'conversationId': order.riderConversationId,
+                          'orderId': order.id,
+                          'thread': 'shop_rider',
+                          'viewer': 'shop',
+                        },
+                      ),
+                ),
+              if ((order.printFileUrl ?? '').isNotEmpty)
+                (
+                  'lbl_print_download_file'.tr,
+                  () async {
+                    final uri = Uri.tryParse(order.printFileUrl!);
+                    if (uri == null) return;
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  },
+                ),
+            ],
+          ),
+          if (lastChat.isNotEmpty) ...[
+            SizedBox(height: AppDs.space2.v),
+            Text(
+              lastChat.last.body,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.caption(theme).copyWith(
+                color: AppDs.textOnDarkSecondary,
+                height: 1.35,
+              ),
             ),
           ],
           if (order.status == 'completed') ...[
@@ -1638,11 +1650,48 @@ class _PrintShopOrderDetailScreenState
   PrintOrder? _order;
   bool _loading = true;
   String? _error;
+  Timer? _poll;
+  VoidCallback? _stopLive;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _poll = Timer.periodic(const Duration(seconds: 8), (_) => _softReload());
+    _stopLive = PrintLive.instance.listen(_softReload);
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    _stopLive?.call();
+    super.dispose();
+  }
+
+  Future<void> _softReload() async {
+    if (widget.orderId <= 0 || !mounted) return;
+    final result = await _repo.order(widget.orderId);
+    if (!mounted || result is! PrintSuccess<PrintOrder>) return;
+    final next = result.data;
+    final prevStatus = _order?.status;
+    final prevAction = _order?.nextAction;
+    if (prevStatus == next.status &&
+        prevAction == next.nextAction &&
+        _order?.shopId == next.shopId) {
+      return;
+    }
+    setState(() {
+      _order = next;
+      _loading = false;
+      _error = null;
+    });
+    if (prevStatus != null && prevStatus != next.status) {
+      showAppToast(
+        '#${next.number} · ${'lbl_print_status_${next.status}'.tr}',
+        type: ToastificationType.info,
+        autoCloseDuration: const Duration(seconds: 4),
+      );
+    }
   }
 
   Future<void> _load() async {
@@ -1696,7 +1745,13 @@ class _PrintShopOrderDetailScreenState
                       ),
                     )
                   else if (order != null)
-                    PrintShopOrderPanel(order: order, onChanged: _load),
+                    PrintShopOrderPanel(
+                      key: ValueKey(
+                        '${order.id}-${order.status}-${order.nextAction}',
+                      ),
+                      order: order,
+                      onChanged: _softReload,
+                    ),
                 ],
               ),
             ),

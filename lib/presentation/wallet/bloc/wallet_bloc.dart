@@ -407,6 +407,9 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
         return 3;
       case WalletFeatureCost.aiOpenaiImages:
         return 8;
+      case WalletFeatureCost.aiOpenaiUpscale:
+      case WalletFeatureCost.aiOpenaiInpaint:
+        return 10;
       case WalletFeatureCost.removeBackground:
         return 0;
       default:

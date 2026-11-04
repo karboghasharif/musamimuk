@@ -20,7 +20,8 @@ Do these once. After that: tag → CI builds AAB → uploads to **production**.
 ### 1. Play Console app ready for production
 
 1. Open [Google Play Console](https://play.google.com/console)
-2. App package must be: `com.musamimuk.app`
+2. Android package must be: `com.musamimuk.app`  
+   iOS Bundle ID (App Store): `com.musamimuk.ios.app` (Team `3FZZ5UHWCA`)
 3. Finish **all** dashboard items Google marks as required for production (store listing, graphics, content rating, privacy policy, target audience, etc.)
 4. If the app was never published, complete the first production release setup in Console (countries, declarations)
 

@@ -5,6 +5,7 @@ import 'package:toastification/toastification.dart';
 
 import '../../core/app_export.dart';
 import '../../core/utils/app_toast.dart';
+import '../../core/utils/saudi_iban.dart';
 import '../../data/repositories/referral_repository.dart';
 import '../print/print_ui.dart';
 
@@ -81,9 +82,18 @@ class _ReferralScreenState extends State<ReferralScreen> {
   }
 
   Future<void> _apply() async {
+    final iban = SaudiIban.normalize(_ibanCtrl.text);
+    if (!SaudiIban.isValid(iban)) {
+      showAppToast('msg_print_iban_invalid'.tr, type: ToastificationType.error);
+      return;
+    }
+    if (_bankCtrl.text.trim().isEmpty || _accountCtrl.text.trim().isEmpty) {
+      showAppToast('msg_print_field_required'.tr, type: ToastificationType.error);
+      return;
+    }
     setState(() => _busy = true);
     final result = await _repo.apply(
-      iban: _ibanCtrl.text.trim(),
+      iban: iban!,
       bankName: _bankCtrl.text.trim(),
       accountName: _accountCtrl.text.trim(),
     );
@@ -155,6 +165,14 @@ class _ReferralScreenState extends State<ReferralScreen> {
                   SizedBox(height: 16.v),
                   if (_program == null) ...[
                     _field(_ibanCtrl, 'lbl_print_iban'.tr),
+                    SizedBox(height: 4.v),
+                    Text(
+                      'msg_print_iban_hint'.tr,
+                      style: const TextStyle(
+                        color: AppDs.textOnDarkSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
                     SizedBox(height: 8.v),
                     _field(_bankCtrl, 'lbl_referral_bank_name'.tr),
                     SizedBox(height: 8.v),

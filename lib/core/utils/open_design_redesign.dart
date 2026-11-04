@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:toastification/toastification.dart';
 
 import '../../data/models/design_persistence_models.dart';
+import '../../data/models/musami_document.dart';
 import '../../data/services/design_redesign_service.dart';
 import '../app_export.dart';
 import '../network/api_client.dart';
@@ -50,6 +51,11 @@ Future<void> openDesignForRedesign(
 
     final canvasSize = await _resolveCanvasSize(design, bytes);
     if (!context.mounted) return;
+    // Envelope → active page size + PIE history; legacy → full design_data.
+    final envelope = tryParseMusamiDocument(design.designDataJson);
+    final resolvedSize = envelope != null
+        ? Size(envelope.activePage.width, envelope.activePage.height)
+        : canvasSize;
     final importHistory = musamiTryParseDesignImportHistory(
       design.designDataJson,
     );
@@ -64,8 +70,8 @@ Future<void> openDesignForRedesign(
     await NavigatorService.pushNamed(
       AppRoutes.screen3AddNewScreen,
       arguments: <String, dynamic>{
-        'width': canvasSize.width,
-        'height': canvasSize.height,
+        'width': resolvedSize.width,
+        'height': resolvedSize.height,
         'unit': 'px',
         'presetName': design.name.trim().isNotEmpty
             ? design.name.trim()
@@ -76,6 +82,7 @@ Future<void> openDesignForRedesign(
             .map((asset) => asset.id)
             .toList(growable: false),
         if (!hasEditableHistory) 'backgroundImageBytes': bytes,
+        // Pass full raw (envelope or legacy) so the editor can restore all pages.
         if (hasEditableHistory) 'designHistoryJson': design.designDataJson,
       },
     );

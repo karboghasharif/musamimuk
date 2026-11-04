@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/app_export.dart';
 import '../../data/models/print_models.dart';
 import '../../data/repositories/print_repository.dart';
+import '../subscription/push_auth_sync.dart';
 import 'print_open_orders_sync.dart';
 
 /// Opens the normal design app, the print shop, or the print rider.
@@ -227,6 +228,8 @@ Future<void> applyWorkMode(String mode) async {
   }
   await prefs.setWorkMode(mode);
   syncPrintOpenOrdersAfterWorkMode();
+  // Re-bind FCM token to the active account when switching hubs.
+  unawaited(syncPushTokenAfterAuth());
   final route = switch (mode) {
     PrefUtils.workModeShop => AppRoutes.printShopHomeScreen,
     PrefUtils.workModeRider => AppRoutes.printRiderHomeScreen,

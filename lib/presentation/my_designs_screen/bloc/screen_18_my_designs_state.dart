@@ -9,6 +9,9 @@ class Screen18MyDesignsState extends Equatable {
     this.visibilityTab = MyDesignsVisibilityTab.public,
     this.deletingDesignId,
     this.deleteFeedback,
+    this.folders = const [],
+    this.selectedFolderId,
+    this.folderFeedback,
   });
 
   final TextEditingController? searchController;
@@ -18,6 +21,11 @@ class Screen18MyDesignsState extends Equatable {
   final MyDesignsVisibilityTab visibilityTab;
   final int? deletingDesignId;
   final String? deleteFeedback;
+  final List<DesignFolder> folders;
+
+  /// `null` = All designs; [DesignFolderStore.unfiledId] = Unfiled; else folder id.
+  final String? selectedFolderId;
+  final String? folderFeedback;
 
   @override
   List<Object?> get props => [
@@ -28,6 +36,9 @@ class Screen18MyDesignsState extends Equatable {
         visibilityTab,
         deletingDesignId,
         deleteFeedback,
+        folders,
+        selectedFolderId,
+        folderFeedback,
       ];
 
   Screen18MyDesignsState copyWith({
@@ -40,6 +51,11 @@ class Screen18MyDesignsState extends Equatable {
     bool clearDeletingDesignId = false,
     String? deleteFeedback,
     bool clearDeleteFeedback = false,
+    List<DesignFolder>? folders,
+    String? selectedFolderId,
+    bool clearSelectedFolderId = false,
+    String? folderFeedback,
+    bool clearFolderFeedback = false,
   }) {
     return Screen18MyDesignsState(
       searchController: searchController ?? this.searchController,
@@ -54,6 +70,13 @@ class Screen18MyDesignsState extends Equatable {
       deleteFeedback: clearDeleteFeedback
           ? null
           : (deleteFeedback ?? this.deleteFeedback),
+      folders: folders ?? this.folders,
+      selectedFolderId: clearSelectedFolderId
+          ? null
+          : (selectedFolderId ?? this.selectedFolderId),
+      folderFeedback: clearFolderFeedback
+          ? null
+          : (folderFeedback ?? this.folderFeedback),
     );
   }
 }

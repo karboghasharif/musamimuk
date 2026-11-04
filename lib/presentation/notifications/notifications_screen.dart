@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/app_export.dart';
 import '../../data/models/notification_item.dart';
 import '../../data/repositories/notification_repository.dart';
 import '../../presentation/contest/contest_navigation.dart';
+import '../../presentation/notifications/notification_inbox_controller.dart';
 import '../../presentation/print/print_live.dart';
 import '../../widgets/app_bar/appbar_leading_image.dart';
 import '../../widgets/app_bar/appbar_title.dart';
@@ -45,6 +48,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     final result = await _repo.list(perPage: 30);
     if (!mounted || result is! NotificationsSuccess) return;
     setState(() => _items = result.items);
+    unawaited(NotificationInboxController.instance.refresh());
   }
 
   Future<void> _load() async {
@@ -72,6 +76,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       _items = (result as NotificationsSuccess).items;
       _loading = false;
     });
+    unawaited(NotificationInboxController.instance.refresh());
   }
 
   Future<void> _onTap(NotificationItem item) async {

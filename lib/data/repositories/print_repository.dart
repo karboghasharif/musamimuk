@@ -260,15 +260,176 @@ class PrintRepository {
 
   Future<PrintResult<PrintOrder>> sendMessage({
     required int orderId,
-    required String body,
+    String? body,
     String thread = 'customer_shop',
+    String? attachmentPath,
+    String? attachmentName,
   }) {
-    return _sendOrder(
-      () => _dio.post<Map<String, dynamic>>(
+    return _sendOrder(() async {
+      if (attachmentPath != null && attachmentPath.isNotEmpty) {
+        final form = FormData();
+        if (body != null && body.trim().isNotEmpty) {
+          form.fields.add(MapEntry('body', body.trim()));
+        }
+        form.fields.add(MapEntry('thread', thread));
+        form.files.add(
+          MapEntry(
+            'attachment',
+            await MultipartFile.fromFile(
+              attachmentPath,
+              filename: attachmentName ?? 'attachment',
+            ),
+          ),
+        );
+        return _dio.post<Map<String, dynamic>>(
+          'print/orders/$orderId/messages',
+          data: form,
+          options: _kycMultipartOptions,
+        );
+      }
+      return _dio.post<Map<String, dynamic>>(
         'print/orders/$orderId/messages',
-        data: {'body': body, 'thread': thread},
-      ),
-    );
+        data: {
+          if (body != null && body.trim().isNotEmpty) 'body': body.trim(),
+          'thread': thread,
+        },
+      );
+    });
+  }
+
+  Future<PrintResult<List<PrintConversation>>> conversations() async {
+    try {
+      final response =
+          await _dio.get<Map<String, dynamic>>('print/conversations');
+      final data = response.data;
+      if (data == null || !apiResponseIsSuccess(data)) {
+        return PrintFailure(
+          apiExtractMessage(data) ?? 'Unable to load conversations.',
+        );
+      }
+      return PrintSuccess(
+        apiExtractDataList(data).map(PrintConversation.fromJson).toList(),
+      );
+    } on DioException catch (e) {
+      return PrintFailure(apiMessageFromDioException(e));
+    }
+  }
+
+  Future<PrintResult<PrintConversation>> conversation(int id) async {
+    try {
+      final response =
+          await _dio.get<Map<String, dynamic>>('print/conversations/$id');
+      final map = apiExtractPayloadMap(response.data);
+      if (response.data == null ||
+          !apiResponseIsSuccess(response.data!) ||
+          map == null) {
+        return PrintFailure(
+          apiExtractMessage(response.data) ?? 'Conversation not found.',
+        );
+      }
+      return PrintSuccess(PrintConversation.fromJson(map));
+    } on DioException catch (e) {
+      return PrintFailure(apiMessageFromDioException(e));
+    }
+  }
+
+  Future<PrintResult<PrintConversation>> openConversation({
+    int? shopId,
+    int? customerUserId,
+    int? riderUserId,
+    int? orderId,
+    String? thread,
+    String? body,
+    String? attachmentPath,
+    String? attachmentName,
+  }) async {
+    try {
+      final form = FormData();
+      if (shopId != null) form.fields.add(MapEntry('shop_id', '$shopId'));
+      if (customerUserId != null) {
+        form.fields.add(MapEntry('customer_user_id', '$customerUserId'));
+      }
+      if (riderUserId != null) {
+        form.fields.add(MapEntry('rider_user_id', '$riderUserId'));
+      }
+      if (orderId != null) form.fields.add(MapEntry('order_id', '$orderId'));
+      if (thread != null && thread.isNotEmpty) {
+        form.fields.add(MapEntry('thread', thread));
+      }
+      if (body != null && body.trim().isNotEmpty) {
+        form.fields.add(MapEntry('body', body.trim()));
+      }
+      if (attachmentPath != null && attachmentPath.isNotEmpty) {
+        form.files.add(
+          MapEntry(
+            'attachment',
+            await MultipartFile.fromFile(
+              attachmentPath,
+              filename: attachmentName ?? 'attachment',
+            ),
+          ),
+        );
+      }
+      final response = await _dio.post<Map<String, dynamic>>(
+        'print/conversations',
+        data: form,
+        options: _kycMultipartOptions,
+      );
+      final map = apiExtractPayloadMap(response.data);
+      if (response.data == null ||
+          !apiResponseIsSuccess(response.data!) ||
+          map == null) {
+        return PrintFailure(
+          apiExtractMessage(response.data) ?? 'Unable to open conversation.',
+        );
+      }
+      return PrintSuccess(PrintConversation.fromJson(map));
+    } on DioException catch (e) {
+      return PrintFailure(apiMessageFromDioException(e));
+    }
+  }
+
+  Future<PrintResult<PrintConversation>> sendConversationMessage({
+    required int conversationId,
+    String? body,
+    int? orderId,
+    String? attachmentPath,
+    String? attachmentName,
+  }) async {
+    try {
+      final form = FormData();
+      if (body != null && body.trim().isNotEmpty) {
+        form.fields.add(MapEntry('body', body.trim()));
+      }
+      if (orderId != null) form.fields.add(MapEntry('order_id', '$orderId'));
+      if (attachmentPath != null && attachmentPath.isNotEmpty) {
+        form.files.add(
+          MapEntry(
+            'attachment',
+            await MultipartFile.fromFile(
+              attachmentPath,
+              filename: attachmentName ?? 'attachment',
+            ),
+          ),
+        );
+      }
+      final response = await _dio.post<Map<String, dynamic>>(
+        'print/conversations/$conversationId/messages',
+        data: form,
+        options: _kycMultipartOptions,
+      );
+      final map = apiExtractPayloadMap(response.data);
+      if (response.data == null ||
+          !apiResponseIsSuccess(response.data!) ||
+          map == null) {
+        return PrintFailure(
+          apiExtractMessage(response.data) ?? 'Unable to send message.',
+        );
+      }
+      return PrintSuccess(PrintConversation.fromJson(map));
+    } on DioException catch (e) {
+      return PrintFailure(apiMessageFromDioException(e));
+    }
   }
 
   Future<PrintResult<PrintOrder>> createQuote({

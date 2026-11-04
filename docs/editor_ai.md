@@ -35,14 +35,33 @@ Home **AI Studio** tiles open ChatGPT-powered tools:
 | --- | --- |
 | Generate Images | Prompt → `POST ai/editor/openai/images` → preview → open editor |
 | Generate Designs | Prompt + size → editor with composition mode auto-started |
+| Upscale | Gallery pick → scale 2×/4× → `POST ai/editor/upscale` → preview → editor |
+| Inpaint | Gallery pick → brush mask + prompt → `POST ai/editor/inpaint` → preview → editor |
 | AI Chat | Multi-turn `POST ai/editor/openai` design assistant |
 | AI Vision | Photo + question → multimodal ChatGPT chat |
 | Gallery / Remove BG / Inspired | Existing screens |
-| Generate Videos | Coming soon message |
+| Generate Videos | Coming soon message (`msg_ai_video_coming_soon`) — no video API |
 
 Ensure `OPENAI_API_KEY` is set on the Laravel backend (never in Flutter).
 
-Edits apply through `editor.addHistory(...)` so **Undo / Redo** still work.
+Edits apply through `editor.addHistory(...)` / `replaceLayer` so **Undo / Redo** still work.
+
+## AI upscale + inpaint
+
+Server-side only (OpenAI Images **Edit** / `gpt-image-1.5`). No vendor keys in the app.
+
+| Endpoint | Body | Coins |
+| --- | --- | --- |
+| `POST ai/editor/upscale` | `image_base64`, optional `scale` (`2`\|`4`), optional `size`/`quality` | `ai.openai.upscale` (default 10) |
+| `POST ai/editor/inpaint` | `image_base64`, `mask_base64`, `prompt`, optional `size`/`quality` | `ai.openai.inpaint` (default 10) |
+
+**Mask convention (client):** white = edit region, black = keep. The API converts white→transparent for OpenAI’s alpha mask.
+
+**Response (flat JSON, same style as image gen):** `image_base64`, `width`, `height`, `action` (`upscale`\|`inpaint`), plus `data[0]` asset fields (`b64_json`, `asset_id`, `url`). Auth + `block_guest`; insufficient coins → HTTP 402 / `insufficient_coins`.
+
+**Editor:** select an image `WidgetLayer` → image toolbar **Upscale** / **Inpaint**. Capture layer bytes → API → replace raster via `musamiReplaceWidgetLayerRaster` (keeps offset/scale; single undo step). Curved text / canvas border frames are blocked. Multipage: active page only.
+
+**Code:** `EditorAiApiService.upscaleImage` / `inpaintImage`, sheets `musami_ai_*_sheet.dart`, apply helper `musami_ai_image_tools_apply.dart`, AI Studio `ai_studio_image_tools_screen.dart`.
 
 ## Fully editable designs
 
@@ -91,4 +110,7 @@ Pixels inside a generated sticker are not individually editable.
 | Composition builder | `lib/data/services/editor_ai/editor_ai_composition_builder.dart` |
 | Providers | `lib/data/services/editor_ai/editor_ai_*_provider.dart` |
 | UI bar | `lib/presentation/add_new_screen/widgets/editor_ai_command_bar.dart` |
+| Upscale / inpaint sheets | `lib/presentation/add_new_screen/widgets/musami_ai_*_sheet.dart` |
+| Layer replace helper | `lib/presentation/add_new_screen/utils/musami_ai_image_tools_apply.dart` |
+| AI Studio image tools | `lib/presentation/ai_studio/ai_studio_image_tools_screen.dart` |
 | Wiring | `MainEditorWidgets.bodyItems` in `add_new_screen.dart` |

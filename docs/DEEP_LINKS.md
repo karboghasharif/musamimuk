@@ -29,7 +29,14 @@ Shared Musamimuk links should open the **app** when installed, and the **Play St
 - Custom scheme `musamimuk://` (Android + iOS)
 - Flutter handler: `lib/core/deeplink/`
 
-## Backend / website (required for “no app → Play Store”)
+## Backend / website (required for “no app → store”)
+
+**Package ids**
+
+| Platform | Id |
+| --- | --- |
+| Android / Play | `com.musamimuk.app` |
+| iOS / App Store | `com.musamimuk.ios.app` (Team `3FZZ5UHWCA`) |
 
 1. **Host Digital Asset Links** so Android trusts HTTPS opens into the app:
 
@@ -57,15 +64,35 @@ keytool -list -v -keystore android/app/upload-keystore.jks -alias upload
 
 If you use Play App Signing, also add the **App signing** SHA-256 from Play Console → App integrity.
 
-2. **Landing pages** for `/open/*`, `/contest/*`, `/share/*`:
+2. **Host Apple App Site Association** for iOS Universal Links:
+
+   Serve at `https://HOST/.well-known/apple-app-site-association` (no `.json` extension; `application/json`):
+
+```json
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "3FZZ5UHWCA.com.musamimuk.ios.app",
+        "paths": [ "/contest/*", "/share/*", "/s/*", "/open/*", "/design/*" ]
+      }
+    ]
+  }
+}
+```
+
+Associated Domains are declared in `ios/Runner/Runner.entitlements`.
+
+3. **Landing pages** for `/open/*`, `/contest/*`, `/share/*`:
 
    Copy `docs/deep_link_landing.html` to those routes (or rewrite all of them to it).  
    Behaviour:
    - Tries `musamimuk://…` (opens installed app)
-   - Tries Android `intent://…` with Play Store fallback
-   - Finally redirects to Play Store
+   - Android: `intent://…` with Play Store fallback
+   - iOS / Android: redirects to App Store or Play Store
 
-3. **Share URLs from API** (`share_url`) should use one of the supported paths above, e.g.:
+4. **Share URLs from API** (`share_url`) should use one of the supported paths above, e.g.:
 
    `https://srv1813447.hstgr.cloud/share/123`  
    or  

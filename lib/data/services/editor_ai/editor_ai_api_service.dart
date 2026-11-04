@@ -86,6 +86,46 @@ class EditorAiApiService {
     }
   }
 
+  Future<EditorAiImageToolResponse> upscaleImage(
+    EditorAiUpscaleRequest request,
+  ) async {
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        'ai/editor/upscale',
+        data: request.toJson(),
+        options: _aiOptions,
+      );
+      return EditorAiImageToolResponse.fromJson(_unwrapAiBody(response.data));
+    } on DioException catch (error) {
+      throw _mapError(error);
+    } on FormatException catch (_) {
+      throw const EditorAiApiException(
+        message: 'Upscale returned an invalid response. Please retry.',
+        retryable: true,
+      );
+    }
+  }
+
+  Future<EditorAiImageToolResponse> inpaintImage(
+    EditorAiInpaintRequest request,
+  ) async {
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        'ai/editor/inpaint',
+        data: request.toJson(),
+        options: _aiOptions,
+      );
+      return EditorAiImageToolResponse.fromJson(_unwrapAiBody(response.data));
+    } on DioException catch (error) {
+      throw _mapError(error);
+    } on FormatException catch (_) {
+      throw const EditorAiApiException(
+        message: 'Inpaint returned an invalid response. Please retry.',
+        retryable: true,
+      );
+    }
+  }
+
   Future<OpenAiEditorResponse> sendGrokEditor(
     OpenAiEditorRequest request,
   ) async {

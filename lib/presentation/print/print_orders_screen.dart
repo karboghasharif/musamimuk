@@ -1,8 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:toastification/toastification.dart';
 
 import '../../core/app_export.dart';
+import '../../core/utils/app_toast.dart';
 import '../../data/models/print_models.dart';
 import '../../data/repositories/print_repository.dart';
+import 'print_live.dart';
 import 'print_review_sheet.dart';
 import 'print_ui.dart';
 
@@ -26,11 +31,49 @@ class _PrintOrdersScreenState extends State<PrintOrdersScreen> {
   List<PrintOrder> _orders = const [];
   bool _loading = true;
   String? _error;
+  Timer? _poll;
+  VoidCallback? _stopLive;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _poll = Timer.periodic(const Duration(seconds: 10), (_) => _softReload());
+    _stopLive = PrintLive.instance.listen(_softReload);
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    _stopLive?.call();
+    super.dispose();
+  }
+
+  Future<void> _softReload() async {
+    if (!mounted || _loading) return;
+    final result =
+        widget.shopMode ? await _repo.shopOrders() : await _repo.myOrders();
+    if (!mounted || result is! PrintSuccess<List<PrintOrder>>) return;
+    final next = result.data;
+    final prev = {
+      for (final order in _orders) order.id: order.status,
+    };
+    PrintOrder? changed;
+    for (final order in next) {
+      final before = prev[order.id];
+      if (before != null && before != order.status) {
+        changed = order;
+        break;
+      }
+    }
+    setState(() => _orders = next);
+    if (changed != null) {
+      showAppToast(
+        '#${changed.number} · ${'lbl_print_status_${changed.status}'.tr}',
+        type: ToastificationType.info,
+        autoCloseDuration: const Duration(seconds: 4),
+      );
+    }
   }
 
   Future<void> _load() async {

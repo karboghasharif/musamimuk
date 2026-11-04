@@ -4,6 +4,7 @@ import 'package:toastification/toastification.dart';
 
 import '../../../core/app_export.dart';
 import '../../../core/utils/app_toast.dart';
+import '../../ai_studio/ai_studio_image_tools_screen.dart';
 import '../../wallet/bloc/wallet_bloc.dart';
 import '../../wallet/wallet_cost_guard.dart';
 
@@ -20,11 +21,14 @@ class HomeAiStudioSection extends StatelessWidget {
   /// Optional credits / plan chip text (falls back to Free / Pro).
   final String? creditsLabel;
 
-  Future<void> _openAiTool(String route) async {
-    if (!SessionManager.instance.requireAuthenticated(routeName: route)) {
+  Future<void> _openAiTool(String route, {dynamic arguments}) async {
+    if (!SessionManager.instance.requireAuthenticated(
+      routeName: route,
+      arguments: arguments,
+    )) {
       return;
     }
-    NavigatorService.pushNamed(route);
+    NavigatorService.pushNamed(route, arguments: arguments);
   }
 
   @override
@@ -50,6 +54,24 @@ class HomeAiStudioSection extends StatelessWidget {
         icon: Icons.play_circle_outline_rounded,
         colors: const [Color(0xFFFF7A45), Color(0xFFE24B2D)],
         onTap: () => _comingSoonVideo(context),
+      ),
+      _AiStudioAction(
+        label: 'lbl_ai_upscale'.tr,
+        icon: Icons.high_quality_outlined,
+        colors: const [Color(0xFF12B886), Color(0xFF0B7285)],
+        onTap: () => _openAiTool(
+          AppRoutes.aiStudioImageToolsScreen,
+          arguments: AiStudioImageToolMode.upscale,
+        ),
+      ),
+      _AiStudioAction(
+        label: 'lbl_ai_inpaint'.tr,
+        icon: Icons.format_paint_outlined,
+        colors: const [Color(0xFFFD7E14), Color(0xFFE8590C)],
+        onTap: () => _openAiTool(
+          AppRoutes.aiStudioImageToolsScreen,
+          arguments: AiStudioImageToolMode.inpaint,
+        ),
       ),
       _AiStudioAction(
         label: 'lbl_ai_chat'.tr,

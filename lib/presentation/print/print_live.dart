@@ -1,12 +1,16 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dart_pusher_channels/dart_pusher_channels.dart';
 import 'package:flutter/foundation.dart';
 import 'package:musamimuk/core/network/api_client.dart' show baseUrl;
 import 'package:musamimuk/core/network/api_utils.dart';
+import 'package:musamimuk/core/utils/app_toast.dart';
 import 'package:musamimuk/core/utils/pref_utils.dart';
 import 'package:musamimuk/data/models/print_models.dart';
 import 'package:musamimuk/data/repositories/print_repository.dart';
+import 'package:musamimuk/data/services/push/push_notification_service.dart';
+import 'package:toastification/toastification.dart';
 
 /// One Reverb socket for the signed-in user.
 ///
@@ -25,8 +29,15 @@ class PrintLive {
   PusherChannelsClient? _client;
   StreamSubscription<void>? _connectionSub;
   StreamSubscription<ChannelReadEvent>? _printEventSub;
+  StreamSubscription<ChannelReadEvent>? _printEventSubAlt;
   StreamSubscription<ChannelReadEvent>? _notificationEventSub;
+  StreamSubscription<ChannelReadEvent>? _notificationEventSubAlt;
+  StreamSubscription<ChannelReadEvent>? _printCatchAllSub;
+  StreamSubscription<ChannelReadEvent>? _userCatchAllSub;
   bool _starting = false;
+  int _sessionHolds = 0;
+  DateTime? _lastNotifToastAt;
+  DateTime? _lastPrintNotifyAt;
 
   VoidCallback listen(VoidCallback onEvent) {
     _listeners.add(onEvent);
@@ -47,14 +58,32 @@ class PrintLive {
     };
   }
 
+  /// Keep the socket alive for the signed-in session (designer dock / mode hubs).
+  /// Uses a ref-count so shop/rider/designer hubs can overlap safely.
+  VoidCallback holdSession() {
+    _sessionHolds++;
+    unawaited(_ensure());
+    var released = false;
+    return () {
+      if (released) return;
+      released = true;
+      if (_sessionHolds > 0) _sessionHolds--;
+      _maybeClose();
+    };
+  }
+
   void _maybeClose() {
-    if (_listeners.isEmpty && _notificationListeners.isEmpty) {
+    if (_listeners.isEmpty &&
+        _notificationListeners.isEmpty &&
+        _sessionHolds <= 0) {
       _close();
     }
   }
 
   bool get _hasListeners =>
-      _listeners.isNotEmpty || _notificationListeners.isNotEmpty;
+      _listeners.isNotEmpty ||
+      _notificationListeners.isNotEmpty ||
+      _sessionHolds > 0;
 
   Future<void> _ensure() async {
     if (_client != null || _starting || !_hasListeners) return;
@@ -64,6 +93,7 @@ class PrintLive {
       if (!_hasListeners) return;
       if (result is! PrintSuccess<Map<String, dynamic>>) {
         if (kDebugMode) debugPrint('PrintLive: realtime config failed');
+        _scheduleRetry();
         return;
       }
       final data = result.data;
@@ -78,12 +108,14 @@ class PrintLive {
       final userId = apiParseInt(data['user_id']);
       final token = PrefUtils().getToken() ?? '';
       if (key.isEmpty || userId <= 0 || token.isEmpty || !_hasListeners) {
+        _scheduleRetry();
         return;
       }
 
       final endpoint = _resolveEndpoint(data);
       if (endpoint == null) {
         if (kDebugMode) debugPrint('PrintLive: invalid host/auth endpoint');
+        _scheduleRetry();
         return;
       }
 
@@ -111,7 +143,8 @@ class PrintLive {
       final printChannel = client.privateChannel(
         'private-print.user.$userId',
         authorizationDelegate:
-            EndpointAuthorizableChannelTokenAuthorizationDelegate.forPrivateChannel(
+            EndpointAuthorizableChannelTokenAuthorizationDelegate
+                .forPrivateChannel(
           authorizationEndpoint: endpoint.authUri,
           headers: authHeaders,
         ),
@@ -119,7 +152,8 @@ class PrintLive {
       final userChannel = client.privateChannel(
         'private-user.$userId',
         authorizationDelegate:
-            EndpointAuthorizableChannelTokenAuthorizationDelegate.forPrivateChannel(
+            EndpointAuthorizableChannelTokenAuthorizationDelegate
+                .forPrivateChannel(
           authorizationEndpoint: endpoint.authUri,
           headers: authHeaders,
         ),
@@ -135,21 +169,73 @@ class PrintLive {
         userChannel.subscribeIfNotUnsubscribed();
       });
 
-      _printEventSub = printChannel.bind('print.marketplace').listen((_) {
+      void notifyPrintListeners() {
+        final now = DateTime.now();
+        final last = _lastPrintNotifyAt;
+        if (last != null &&
+            now.difference(last) < const Duration(milliseconds: 400)) {
+          return;
+        }
+        _lastPrintNotifyAt = now;
         for (final listener in List<VoidCallback>.from(_listeners)) {
           listener();
         }
-      });
-      _notificationEventSub =
-          userChannel.bind('notification.sent').listen((_) {
+      }
+
+      void notifyNotificationListeners(ChannelReadEvent? event) {
+        _maybeToastNotification(event);
         for (final listener
             in List<VoidCallback>.from(_notificationListeners)) {
           listener();
         }
-        // Print desks also refresh — notices badge / incoming lists.
-        for (final listener in List<VoidCallback>.from(_listeners)) {
-          listener();
+        notifyPrintListeners();
+      }
+
+      bool isPrintMarketplace(String name) =>
+          name == 'print.marketplace' ||
+          name == '.print.marketplace' ||
+          name.endsWith('print.marketplace');
+
+      bool isNotificationSent(String name) =>
+          name == 'notification.sent' ||
+          name == '.notification.sent' ||
+          name.endsWith('notification.sent');
+
+      _printEventSub =
+          printChannel.bind('print.marketplace').listen((_) {
+        if (kDebugMode) debugPrint('PrintLive ← print.marketplace');
+        notifyPrintListeners();
+      });
+      _printEventSubAlt =
+          printChannel.bind('.print.marketplace').listen((_) {
+        if (kDebugMode) debugPrint('PrintLive ← .print.marketplace');
+        notifyPrintListeners();
+      });
+      _notificationEventSub =
+          userChannel.bind('notification.sent').listen((event) {
+        if (kDebugMode) debugPrint('PrintLive ← notification.sent');
+        notifyNotificationListeners(event);
+      });
+      _notificationEventSubAlt =
+          userChannel.bind('.notification.sent').listen((event) {
+        if (kDebugMode) debugPrint('PrintLive ← .notification.sent');
+        notifyNotificationListeners(event);
+      });
+
+      // Catch-all in case Reverb/Pusher renames events slightly.
+      _printCatchAllSub = printChannel.bindToAll().listen((event) {
+        if (!isPrintMarketplace(event.name)) return;
+        if (kDebugMode) {
+          debugPrint('PrintLive ← catch-all ${event.name}');
         }
+        notifyPrintListeners();
+      });
+      _userCatchAllSub = userChannel.bindToAll().listen((event) {
+        if (!isNotificationSent(event.name)) return;
+        if (kDebugMode) {
+          debugPrint('PrintLive ← catch-all ${event.name}');
+        }
+        notifyNotificationListeners(event);
       });
 
       if (!_hasListeners) {
@@ -161,9 +247,63 @@ class PrintLive {
     } catch (e, st) {
       if (kDebugMode) debugPrint('PrintLive start failed: $e\n$st');
       _close();
+      _scheduleRetry();
     } finally {
       _starting = false;
     }
+  }
+
+  void _maybeToastNotification(ChannelReadEvent? event) {
+    if (event == null) return;
+    final now = DateTime.now();
+    final last = _lastNotifToastAt;
+    if (last != null && now.difference(last) < const Duration(seconds: 2)) {
+      return;
+    }
+    final map = _eventMap(event.data);
+    final title = (map['title'] ?? '').toString().trim();
+    final message = (map['message'] ?? map['body'] ?? '').toString().trim();
+    if (title.isEmpty && message.isEmpty) return;
+    _lastNotifToastAt = now;
+    showAppToast(
+      message.isEmpty ? title : (title.isEmpty ? message : '$title — $message'),
+      type: ToastificationType.info,
+      autoCloseDuration: const Duration(seconds: 5),
+    );
+    // Also post a system tray notification so it is visible if the toast is missed.
+    unawaited(
+      PushNotificationService.instance.showLocal(
+        title: title.isEmpty ? 'Musamimuk' : title,
+        body: message,
+        data: map,
+      ),
+    );
+  }
+
+  Map<String, dynamic> _eventMap(dynamic raw) {
+    if (raw is Map<String, dynamic>) return raw;
+    if (raw is Map) {
+      return raw.map((key, value) => MapEntry('$key', value));
+    }
+    if (raw is String && raw.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map<String, dynamic>) return decoded;
+        if (decoded is Map) {
+          return decoded.map((key, value) => MapEntry('$key', value));
+        }
+      } catch (_) {}
+    }
+    return const {};
+  }
+
+  void _scheduleRetry() {
+    if (!_hasListeners || _client != null) return;
+    Future<void>.delayed(const Duration(seconds: 8), () {
+      if (_hasListeners && _client == null && !_starting) {
+        unawaited(_ensure());
+      }
+    });
   }
 
   /// Rewrite loopback hosts from a misconfigured server .env to the API host.
@@ -221,10 +361,18 @@ class PrintLive {
   void _close() {
     _connectionSub?.cancel();
     _printEventSub?.cancel();
+    _printEventSubAlt?.cancel();
     _notificationEventSub?.cancel();
+    _notificationEventSubAlt?.cancel();
+    _printCatchAllSub?.cancel();
+    _userCatchAllSub?.cancel();
     _connectionSub = null;
     _printEventSub = null;
+    _printEventSubAlt = null;
     _notificationEventSub = null;
+    _notificationEventSubAlt = null;
+    _printCatchAllSub = null;
+    _userCatchAllSub = null;
     _client?.dispose();
     _client = null;
   }

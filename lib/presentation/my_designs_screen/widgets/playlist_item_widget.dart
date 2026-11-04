@@ -3,9 +3,11 @@ import 'package:toastification/toastification.dart';
 
 import '../../../core/app_export.dart';
 import '../../../core/utils/app_toast.dart';
+import '../../../data/models/musami_document.dart';
 import '../../../widgets/design_preview_sheet.dart';
 import '../bloc/screen_18_my_designs_bloc.dart';
 import '../models/playlist_item_model.dart';
+import 'design_folder_bar.dart';
 
 class PlaylistItemWidget extends StatelessWidget {
   PlaylistItemWidget(
@@ -47,8 +49,12 @@ class PlaylistItemWidget extends StatelessWidget {
       );
       return;
     }
-    final w = (playlistItemModelObj.width ?? 1080).toDouble();
-    final h = (playlistItemModelObj.height ?? 1080).toDouble();
+    // Multipage envelope → active page size; legacy → stored draft size.
+    final envelope = tryParseMusamiDocument(history);
+    final w = envelope?.activePage.width ??
+        (playlistItemModelObj.width ?? 1080).toDouble();
+    final h = envelope?.activePage.height ??
+        (playlistItemModelObj.height ?? 1080).toDouble();
     await NavigatorService.pushNamed(
       AppRoutes.screen3AddNewScreen,
       arguments: <String, dynamic>{
@@ -206,9 +212,33 @@ class PlaylistItemWidget extends StatelessWidget {
                               onSelected: (value) {
                                 if (value == 'delete') {
                                   _confirmDelete(context);
+                                } else if (value == 'move') {
+                                  final id =
+                                      (playlistItemModelObj.id ?? '').trim();
+                                  if (id.isEmpty) return;
+                                  showMoveDesignFolderSheet(
+                                    context: context,
+                                    designId: id,
+                                    isLocal: playlistItemModelObj.isLocal,
+                                    currentFolderId:
+                                        playlistItemModelObj.folderId,
+                                  );
                                 }
                               },
                               itemBuilder: (_) => [
+                                PopupMenuItem(
+                                  value: 'move',
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.drive_file_move_outline,
+                                        size: 18.adaptSize,
+                                      ),
+                                      SizedBox(width: 8.h),
+                                      Text('lbl_folder_move_to'.tr),
+                                    ],
+                                  ),
+                                ),
                                 PopupMenuItem(
                                   value: 'delete',
                                   child: Row(

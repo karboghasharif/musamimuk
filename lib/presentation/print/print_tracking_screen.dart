@@ -49,8 +49,8 @@ class _PrintTrackingScreenState extends State<PrintTrackingScreen> {
   void initState() {
     super.initState();
     _load();
-    _poll = Timer.periodic(const Duration(seconds: 20), (_) => _load());
-    _stopLive = PrintLive.instance.listen(_load);
+    _poll = Timer.periodic(const Duration(seconds: 8), (_) => _softReload());
+    _stopLive = PrintLive.instance.listen(_softReload);
   }
 
   @override
@@ -64,10 +64,45 @@ class _PrintTrackingScreenState extends State<PrintTrackingScreen> {
     super.dispose();
   }
 
+  Future<void> _softReload() async {
+    if (!mounted || widget.orderId <= 0) return;
+    final result = await _repo.order(widget.orderId);
+    if (!mounted || result is! PrintSuccess<PrintOrder>) return;
+    final next = result.data;
+    final prevStatus = _order?.status;
+    final otp = next.delivery?.otp?.trim();
+    if (otp != null && otp.isNotEmpty && _otp.text.trim().isEmpty) {
+      _otp.text = otp;
+    }
+    setState(() => _order = next);
+    if (prevStatus != null && prevStatus != next.status) {
+      showAppToast(
+        '#${next.number} · ${'lbl_print_status_${next.status}'.tr}',
+        type: ToastificationType.info,
+        autoCloseDuration: const Duration(seconds: 4),
+      );
+    }
+    if (next.status == 'completed') {
+      _poll?.cancel();
+      if (!_reviewPrompted &&
+          next.pendingReviews.any((e) => !e.submitted)) {
+        _reviewPrompted = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          promptPendingPrintReviews(context: context, order: next);
+        });
+      }
+    }
+  }
+
   Future<void> _load() async {
     final result = await _repo.order(widget.orderId);
     if (!mounted) return;
     if (result is PrintSuccess<PrintOrder>) {
+      final otp = result.data.delivery?.otp?.trim();
+      if (otp != null && otp.isNotEmpty && _otp.text.trim().isEmpty) {
+        _otp.text = otp;
+      }
       setState(() => _order = result.data);
       if (result.data.status == 'completed') {
         _poll?.cancel();
@@ -232,9 +267,54 @@ class _PrintTrackingScreenState extends State<PrintTrackingScreen> {
     setState(() => _order = (result as PrintSuccess<PrintOrder>).data);
   }
 
+  String? _stageHint(PrintOrder order) {
+    switch (order.status) {
+      case 'quote':
+        return 'msg_print_waiting_for_quotes_body'.tr;
+      case 'awaiting_payment':
+        return 'lbl_print_pay_now'.tr;
+      case 'accepted':
+      case 'printing':
+      case 'print_complete':
+      case 'quality_check':
+      case 'protected':
+        return 'msg_print_shop_preparing'.tr;
+      case 'ready':
+        if (order.fulfillment == 'delivery' && order.delivery?.riderId == null) {
+          return 'msg_print_waiting_rider'.tr;
+        }
+        return null;
+      case 'out_for_delivery':
+        final arrived = (order.delivery?.arrivedCustomerAt ?? '').isNotEmpty;
+        return arrived
+            ? null
+            : 'msg_print_need_otp_when_arrived'.tr;
+      default:
+        return null;
+    }
+  }
+
+  String? _deliveryOtp(PrintOrder order) {
+    final fromApi = order.delivery?.otp?.trim();
+    if (fromApi != null && fromApi.isNotEmpty) return fromApi;
+    final once = _otpOnce?.trim();
+    if (once != null && once.isNotEmpty) return once;
+    return null;
+  }
+
+  bool _showDeliveryOtpConfirm(PrintOrder order) {
+    if (order.fulfillment != 'delivery' || order.status == 'completed') {
+      return false;
+    }
+    // Confirm only after the rider marks arrived at customer.
+    return order.status == 'out_for_delivery' &&
+        (order.delivery?.arrivedCustomerAt ?? '').isNotEmpty;
+  }
+
   @override
   Widget build(BuildContext context) {
     final order = _order;
+    final theme = Theme.of(context);
     return PrintScaffold(
       title: 'lbl_print_tracking'.tr,
       body: order == null
@@ -242,37 +322,33 @@ class _PrintTrackingScreenState extends State<PrintTrackingScreen> {
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView(
-                padding: EdgeInsets.all(16.h),
+                padding: EdgeInsets.fromLTRB(
+                  AppDs.space4.h,
+                  AppDs.space4.v,
+                  AppDs.space4.h,
+                  AppDs.space8.v,
+                ),
                 children: [
-                  Text(
-                    '#${order.number}',
-                    style: TextStyle(
-                      color: AppDs.printGold,
-                      fontSize: 20.fSize,
-                      fontWeight: FontWeight.w700,
-                    ),
+                  PrintStatusHero(
+                    number: order.number,
+                    statusLabel: 'lbl_print_status_${order.status}'.tr,
+                    shopName: order.shop?.name,
+                    totalLabel: order.total != null
+                        ? '${'lbl_print_total_due'.tr} · ${printSar(order.total!)}'
+                        : null,
+                    hint: _stageHint(order),
                   ),
-                  Text(
-                    'lbl_print_status_${order.status}'.tr,
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                  if (order.shop?.name != null)
-                    Padding(
-                      padding: EdgeInsets.only(top: 4.v),
-                      child: Text(
-                        order.shop!.name,
-                        style: const TextStyle(color: AppDs.textOnDarkSecondary),
+                  if (order.dispute != null) ...[
+                    SizedBox(height: AppDs.space3.v),
+                    Text(
+                      '${'lbl_print_dispute_status'.tr}: ${'lbl_print_dispute_${order.dispute!.status}'.tr}',
+                      style: AppTypography.caption(theme).copyWith(
+                        color: AppDs.atelierBrass,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                  if (order.dispute != null)
-                    Padding(
-                      padding: EdgeInsets.only(top: 8.v),
-                      child: Text(
-                        '${'lbl_print_dispute_status'.tr}: ${'lbl_print_dispute_${order.dispute!.status}'.tr}',
-                        style: const TextStyle(color: AppDs.printGold),
-                      ),
-                    ),
-                  SizedBox(height: 12.v),
+                  ],
+                  SizedBox(height: AppDs.space4.v),
                   PrintQuoteOffersBoard(
                     order: order,
                     busy: _busy,
@@ -280,179 +356,107 @@ class _PrintTrackingScreenState extends State<PrintTrackingScreen> {
                     onDecline: _declineQuote,
                   ),
                   if (order.status == 'awaiting_payment') ...[
-                    SizedBox(height: 12.v),
                     PrintGoldButton(
                       label: 'lbl_print_pay_now'.tr,
                       loading: _busy,
                       onPressed: _payNow,
                     ),
-                  ],
-                  SizedBox(height: 12.v),
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      NavigatorService.pushNamed(
-                        AppRoutes.printChatScreen,
-                        arguments: {
-                          'orderId': order.id,
-                          'viewer': 'customer',
-                          'thread': 'customer_shop',
-                        },
-                      );
-                    },
-                    icon: const Icon(Icons.chat_bubble_outline, color: AppDs.printGold),
-                    label: Text('lbl_print_message_shop'.tr),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppDs.printGold,
-                      side: const BorderSide(color: AppDs.printGold),
-                      minimumSize: Size(double.infinity, 48.v),
-                    ),
-                  ),
-                  if (order.canCancel) ...[
-                    SizedBox(height: 8.v),
-                    SizedBox(
-                      height: 44.v,
-                      width: double.infinity,
-                      child: OutlinedButton(
-                        onPressed: _busy ? null : _cancelOrder,
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white70,
-                          side: const BorderSide(color: Colors.white24),
-                          minimumSize: Size(double.infinity, 44.v),
-                        ),
-                        child: Text('lbl_print_cancel_order'.tr),
-                      ),
-                    ),
+                    SizedBox(height: AppDs.space3.v),
                   ],
                   if (order.status == 'ready' && order.fulfillment == null) ...[
-                    SizedBox(height: 16.v),
                     PrintGoldButton(
                       label: 'lbl_print_pick_up'.tr,
                       loading: _busy,
                       onPressed: _confirmPickup,
                     ),
-                    SizedBox(height: 10.v),
+                    SizedBox(height: AppDs.space3.v),
+                    Text(
+                      'lbl_print_deliver_to_me'.tr,
+                      style: AppTypography.body(theme).copyWith(
+                        color: AppDs.textOnDarkPrimary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    SizedBox(height: AppDs.space2.v),
                     TextField(
                       controller: _address,
                       style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        labelText: 'lbl_print_delivery_address'.tr,
-                        labelStyle: const TextStyle(color: AppDs.textOnDarkSecondary),
-                        filled: true,
-                        fillColor: AppDs.surfaceRaised,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
+                      decoration: printTicketField('lbl_print_delivery_address'.tr),
                     ),
-                    SizedBox(height: 10.v),
+                    SizedBox(height: AppDs.space2.v),
                     PrintLocationPicker(
                       latController: _dropLat,
                       lngController: _dropLng,
                       addressController: _address,
                       onChanged: () => setState(() {}),
                     ),
-                    SizedBox(height: 10.v),
+                    SizedBox(height: AppDs.space2.v),
                     PrintGoldButton(
                       label: 'lbl_print_deliver_to_me'.tr,
                       loading: _busy,
                       onPressed: _previewDelivery,
                     ),
                     if (_preview != null) ...[
-                      SizedBox(height: 12.v),
-                      _TotalsCard(quote: _preview!),
-                      SizedBox(height: 10.v),
+                      SizedBox(height: AppDs.space3.v),
+                      _SimpleTotals(quote: _preview!),
+                      SizedBox(height: AppDs.space2.v),
                       PrintGoldButton(
                         label: 'lbl_print_confirm_delivery'.tr,
                         loading: _busy,
                         onPressed: _confirmDelivery,
                       ),
                     ],
+                    SizedBox(height: AppDs.space3.v),
                   ],
-                  if (order.fulfillment == 'pickup' ||
-                      (order.readyForPickup && order.fulfillment == 'pickup')) ...[
-                    SizedBox(height: 12.v),
+                  if (order.fulfillment == 'pickup' &&
+                      (order.readyForPickup ||
+                          order.status == 'ready' ||
+                          order.status == 'completed')) ...[
                     _PickupCodeCard(code: order.pickupCode),
+                    SizedBox(height: AppDs.space3.v),
                   ],
-                  if (order.fulfillment == 'delivery') ...[
-                    SizedBox(height: 12.v),
-                    _TotalsCard(
-                      quote: PrintDeliveryQuote(
-                        printSubtotal: order.printSubtotal ?? 0,
-                        deliveryFee: order.deliveryFee ?? 0,
-                        total: order.total ?? 0,
+                  if (_deliveryOtp(order) != null &&
+                      order.fulfillment == 'delivery' &&
+                      order.status != 'completed') ...[
+                    _OtpReveal(code: _deliveryOtp(order)!),
+                    SizedBox(height: AppDs.space1.v),
+                    Text(
+                      'msg_print_otp_not_order_number'.tr,
+                      style: AppTypography.caption(theme).copyWith(
+                        color: AppDs.textOnDarkSecondary,
+                        height: 1.35,
                       ),
                     ),
-                    if (_otpOnce != null) ...[
-                      SizedBox(height: 12.v),
-                      Container(
-                        padding: EdgeInsets.all(16.h),
-                        decoration: BoxDecoration(
-                          color: AppDs.printGold,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Column(
-                          children: [
-                            Text(
-                              'lbl_print_otp_once'.tr,
-                              style: const TextStyle(
-                                color: Colors.black,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            Text(
-                              _otpOnce!,
-                              style: TextStyle(
-                                color: Colors.black,
-                                fontSize: 28.fSize,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                    if (order.delivery != null) ...[
-                      SizedBox(height: 12.v),
-                      _MapCard(order: order),
-                    ],
-                    if (order.status != 'completed') ...[
-                      SizedBox(height: 12.v),
-                      TextField(
-                        controller: _otp,
-                        keyboardType: TextInputType.number,
-                        maxLength: 4,
-                        style: const TextStyle(color: Colors.white),
-                        decoration: InputDecoration(
-                          labelText: 'lbl_print_enter_otp'.tr,
-                          counterText: '',
-                          labelStyle: const TextStyle(color: AppDs.textOnDarkSecondary),
-                          filled: true,
-                          fillColor: AppDs.surfaceRaised,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
-                      SizedBox(height: 8.v),
-                      PrintGoldButton(
-                        label: 'lbl_print_confirm_otp'.tr,
-                        loading: _busy,
-                        onPressed: _submitOtp,
-                      ),
-                    ],
+                    SizedBox(height: AppDs.space3.v),
+                  ],
+                  if (_showDeliveryOtpConfirm(order)) ...[
+                    TextField(
+                      controller: _otp,
+                      keyboardType: TextInputType.number,
+                      maxLength: 4,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: printTicketField('lbl_print_enter_otp'.tr)
+                          .copyWith(counterText: ''),
+                    ),
+                    SizedBox(height: AppDs.space2.v),
+                    PrintGoldButton(
+                      label: 'lbl_print_confirm_otp'.tr,
+                      loading: _busy,
+                      onPressed: _submitOtp,
+                    ),
+                    SizedBox(height: AppDs.space3.v),
                   ],
                   if (order.status == 'completed') ...[
-                    SizedBox(height: 16.v),
                     Text(
                       'lbl_print_please_review'.tr,
-                      style: const TextStyle(
-                        color: AppDs.printGold,
+                      style: AppTypography.body(theme).copyWith(
+                        color: AppDs.atelierBrass,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                     ...order.pendingReviews.where((e) => !e.submitted).map(
                       (pending) => Padding(
-                        padding: EdgeInsets.only(top: 8.v),
+                        padding: EdgeInsets.only(top: AppDs.space2.v),
                         child: PrintGoldButton(
                           label: 'lbl_print_review_${pending.target}'.tr,
                           onPressed: () async {
@@ -466,81 +470,122 @@ class _PrintTrackingScreenState extends State<PrintTrackingScreen> {
                         ),
                       ),
                     ),
+                    SizedBox(height: AppDs.space3.v),
                   ],
-                  if (order.payment != null)
-                    Padding(
-                      padding: EdgeInsets.only(top: 12.v),
-                      child: Text(
-                        '${'msg_print_payment_protected'.tr}\n${printSar(order.payment!.amount)} · ${order.payment!.status}',
-                        style: const TextStyle(color: Colors.white70),
+                  PrintTextActionRow(
+                    actions: [
+                      (
+                        'lbl_print_message_shop'.tr,
+                        () => NavigatorService.pushNamed(
+                              AppRoutes.printChatScreen,
+                              arguments: {
+                                if (order.conversationId != null)
+                                  'conversationId': order.conversationId,
+                                'orderId': order.id,
+                                'shopId': order.shopId,
+                                'viewer': 'customer',
+                                'thread': 'customer_shop',
+                              },
+                            ),
+                      ),
+                      if (order.canCancel)
+                        ('lbl_print_cancel_order'.tr, _busy ? null : _cancelOrder),
+                      if (order.dispute == null &&
+                          order.status != 'quote' &&
+                          order.status != 'awaiting_payment' &&
+                          order.status != 'cancelled')
+                        (
+                          'lbl_print_report_problem'.tr,
+                          () async {
+                            await showPrintDisputeSheet(
+                              context: context,
+                              orderId: order.id,
+                            );
+                            _load();
+                          },
+                        ),
+                    ],
+                  ),
+                  if (order.payment != null) ...[
+                    SizedBox(height: AppDs.space2.v),
+                    Text(
+                      '${'msg_print_payment_protected'.tr} · ${printSar(order.payment!.amount)}',
+                      style: AppTypography.caption(theme).copyWith(
+                        color: AppDs.textOnDarkSecondary,
+                        height: 1.35,
                       ),
                     ),
-                  if (order.dispute == null &&
-                      order.status != 'quote' &&
-                      order.status != 'awaiting_payment' &&
-                      order.status != 'cancelled') ...[
-                    SizedBox(height: 12.v),
-                    PrintGoldButton(
-                      label: 'lbl_print_report_problem'.tr,
-                      onPressed: () async {
-                        await showPrintDisputeSheet(
-                          context: context,
-                          orderId: order.id,
-                        );
-                        _load();
-                      },
-                    ),
                   ],
-                  SizedBox(height: 20.v),
-                  ...order.timeline.map(
-                    (event) => Padding(
-                      padding: EdgeInsets.only(bottom: 16.v),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Column(
-                            children: [
-                              Container(
-                                width: 14,
-                                height: 14,
-                                decoration: const BoxDecoration(
-                                  color: AppDs.printGold,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              Container(
-                                width: 2,
-                                height: 36,
-                                color: AppDs.printGold.withValues(alpha: 0.4),
-                              ),
-                            ],
+                  if (order.fulfillment == 'delivery' &&
+                      order.delivery != null) ...[
+                    SizedBox(height: AppDs.space4.v),
+                    _CompactMaps(order: order),
+                  ],
+                  if (order.timeline.isNotEmpty) ...[
+                    SizedBox(height: AppDs.space4.v),
+                    Theme(
+                      data: theme.copyWith(dividerColor: Colors.transparent),
+                      child: ExpansionTile(
+                        tilePadding: EdgeInsets.zero,
+                        childrenPadding: EdgeInsets.only(top: AppDs.space2.v),
+                        iconColor: AppDs.atelierBrass,
+                        collapsedIconColor: AppDs.textOnDarkSecondary,
+                        title: Text(
+                          'lbl_print_activity'.tr,
+                          style: AppTypography.body(theme).copyWith(
+                            color: AppDs.textOnDarkPrimary,
+                            fontWeight: FontWeight.w700,
                           ),
-                          SizedBox(width: 12.h),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  event.title,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                if (event.detail != null)
-                                  Text(
-                                    event.detail!,
-                                    style: const TextStyle(
-                                      color: AppDs.textOnDarkSecondary,
+                        ),
+                        children: [
+                          for (final event in order.timeline.reversed.take(8))
+                            Padding(
+                              padding: EdgeInsets.only(bottom: AppDs.space3.v),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    width: 8.adaptSize,
+                                    height: 8.adaptSize,
+                                    margin: EdgeInsets.only(top: 6.v),
+                                    decoration: const BoxDecoration(
+                                      color: AppDs.atelierBrass,
+                                      shape: BoxShape.circle,
                                     ),
                                   ),
-                              ],
+                                  SizedBox(width: AppDs.space3.h),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          event.title,
+                                          style: AppTypography.secondary(theme)
+                                              .copyWith(
+                                            color: AppDs.textOnDarkPrimary,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        if (event.detail != null)
+                                          Text(
+                                            event.detail!,
+                                            style: AppTypography.caption(theme)
+                                                .copyWith(
+                                              color: AppDs.textOnDarkSecondary,
+                                              height: 1.35,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
                         ],
                       ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
@@ -555,37 +600,39 @@ class _PickupCodeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Container(
-      padding: EdgeInsets.all(16.h),
+      padding: EdgeInsets.all(AppDs.space4.h),
       decoration: BoxDecoration(
-        color: AppDs.printGold,
-        borderRadius: BorderRadius.circular(12),
+        color: AppDs.atelierBrass,
+        borderRadius: BorderRadius.circular(AppDs.radiusLg),
       ),
       child: Column(
         children: [
           Text(
             'lbl_print_ready_pickup'.tr,
-            style: const TextStyle(
-              color: Colors.black,
+            style: AppTypography.caption(theme).copyWith(
+              color: Colors.black87,
               fontWeight: FontWeight.w700,
             ),
           ),
-          SizedBox(height: 8.v),
+          SizedBox(height: AppDs.space2.v),
           ColoredBox(
             color: Colors.white,
             child: QrImageView(
               data: code,
-              size: 160,
+              size: 140,
               backgroundColor: Colors.white,
             ),
           ),
-          SizedBox(height: 8.v),
+          SizedBox(height: AppDs.space2.v),
           Text(
             code,
             style: TextStyle(
               color: Colors.black,
-              fontSize: 24.fSize,
+              fontSize: 26.fSize,
               fontWeight: FontWeight.w800,
+              letterSpacing: 1,
             ),
           ),
         ],
@@ -594,124 +641,138 @@ class _PickupCodeCard extends StatelessWidget {
   }
 }
 
-class _TotalsCard extends StatelessWidget {
-  const _TotalsCard({required this.quote});
+class _OtpReveal extends StatelessWidget {
+  const _OtpReveal({required this.code});
+
+  final String code;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(
+        horizontal: AppDs.space4.h,
+        vertical: AppDs.space4.v,
+      ),
+      decoration: BoxDecoration(
+        color: AppDs.atelierBrass,
+        borderRadius: BorderRadius.circular(AppDs.radiusLg),
+      ),
+      child: Column(
+        children: [
+          Text(
+            'lbl_print_delivery_otp'.tr,
+            style: const TextStyle(
+              color: Colors.black87,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          SizedBox(height: AppDs.space1.v),
+          Text(
+            'OTP: $code',
+            style: TextStyle(
+              color: Colors.black,
+              fontSize: 32.fSize,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SimpleTotals extends StatelessWidget {
+  const _SimpleTotals({required this.quote});
 
   final PrintDeliveryQuote quote;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.all(14.h),
-      decoration: BoxDecoration(
-        color: AppDs.surfaceRaised,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            '${'lbl_print_subtotal'.tr}: ${printSar(quote.printSubtotal)}',
-            style: const TextStyle(color: Colors.white),
-          ),
-          Text(
-            '${'lbl_print_delivery_fee'.tr}: ${printSar(quote.deliveryFee)}',
-            style: const TextStyle(color: Colors.white),
-          ),
-          Text(
-            '${'lbl_print_grand_total'.tr}: ${printSar(quote.total)}',
-            style: const TextStyle(
-              color: AppDs.printGold,
-              fontWeight: FontWeight.w700,
+    final theme = Theme.of(context);
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            '${'lbl_print_delivery_fee'.tr} ${printSar(quote.deliveryFee)}',
+            style: AppTypography.caption(theme).copyWith(
+              color: AppDs.textOnDarkSecondary,
             ),
           ),
-        ],
-      ),
+        ),
+        Text(
+          printSar(quote.total),
+          style: AppTypography.body(theme).copyWith(
+            color: AppDs.atelierBrass,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
     );
   }
 }
 
-class _MapCard extends StatelessWidget {
-  const _MapCard({required this.order});
+class _CompactMaps extends StatelessWidget {
+  const _CompactMaps({required this.order});
 
   final PrintOrder order;
 
-  Widget _pointRow({
-    required String label,
-    required double? lat,
-    required double? lng,
-    String? detail,
-  }) {
-    if (lat == null || lng == null) return const SizedBox.shrink();
-    return Padding(
-      padding: EdgeInsets.only(top: 8.v),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            detail == null || detail.isEmpty
-                ? '$label: $lat, $lng'
-                : '$label: $detail · $lat, $lng',
-            style: const TextStyle(color: Colors.white70),
-          ),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: () => printOpenInMaps(lat, lng),
-              icon: const Icon(Icons.map_outlined, color: AppDs.printGold, size: 18),
-              label: Text(
-                'lbl_print_open_in_maps'.tr,
-                style: const TextStyle(color: AppDs.printGold),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final delivery = order.delivery;
     final shop = order.shop;
-    return Container(
-      padding: EdgeInsets.all(14.h),
-      decoration: BoxDecoration(
-        color: AppDs.surfaceRaised,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'lbl_print_live_map'.tr,
-            style: const TextStyle(
-              color: AppDs.printGold,
-              fontWeight: FontWeight.w700,
-            ),
+    final links = <(String, double, double)>[
+      if (shop?.lat != null && shop?.lng != null)
+        ('lbl_print_shop_mode'.tr, shop!.lat!, shop.lng!),
+      if (delivery?.customerLat != null && delivery?.customerLng != null)
+        (
+          'lbl_print_customer'.tr,
+          delivery!.customerLat!,
+          delivery.customerLng!,
+        ),
+      if (delivery?.riderLat != null && delivery?.riderLng != null)
+        (
+          (delivery?.riderName?.isNotEmpty ?? false)
+              ? delivery!.riderName!
+              : 'lbl_print_rider'.tr,
+          delivery!.riderLat!,
+          delivery.riderLng!,
+        ),
+    ];
+    if (links.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'lbl_print_locations'.tr,
+          style: AppTypography.body(theme).copyWith(
+            color: AppDs.textOnDarkPrimary,
+            fontWeight: FontWeight.w700,
           ),
-          _pointRow(
-            label: 'lbl_print_shop_mode'.tr,
-            lat: shop?.lat,
-            lng: shop?.lng,
-          ),
-          _pointRow(
-            label: 'lbl_print_customer'.tr,
-            lat: delivery?.customerLat,
-            lng: delivery?.customerLng,
-          ),
-          _pointRow(
-            label: 'lbl_print_rider'.tr,
-            lat: delivery?.riderLat,
-            lng: delivery?.riderLng,
-            detail: delivery?.riderName,
-          ),
-          Text(
-            'lbl_print_status_${delivery?.status ?? order.status}'.tr,
-            style: const TextStyle(color: Colors.white),
-          ),
-        ],
-      ),
+        ),
+        SizedBox(height: AppDs.space1.v),
+        Wrap(
+          spacing: AppDs.space2.h,
+          children: [
+            for (final link in links)
+              TextButton.icon(
+                onPressed: () => printOpenInMaps(link.$2, link.$3),
+                icon: Icon(
+                  Icons.map_outlined,
+                  size: 16.adaptSize,
+                  color: AppDs.atelierBrass,
+                ),
+                label: Text(link.$1),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppDs.atelierBrass,
+                ),
+              ),
+          ],
+        ),
+      ],
     );
   }
 }

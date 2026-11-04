@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 40" fill="#1f2937">
+  <!-- Generic sample with simple S-curve -->
+  <path d="M 14 26 C 60 26, 60 14, 110 14 C 160 14, 160 26, 210 26 L 210 21 C 160 21, 160 9, 110 9 C 60 9, 60 21, 14 21 Z" />
+</svg>

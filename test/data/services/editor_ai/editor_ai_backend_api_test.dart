@@ -184,6 +184,122 @@ void main() {
         );
       });
     }
+
+    test('upscale posts allowlisted fields and parses image tool response',
+        () async {
+      RequestOptions? captured;
+      final service = EditorAiApiService(
+        dio: _dioReturning({
+          'action': 'upscale',
+          'image_base64': 'AQID',
+          'width': 2048,
+          'height': 2048,
+          'data': [
+            {
+              'asset_id': 'up-1',
+              'b64_json': 'AQID',
+              'url': 'https://example.test/a/up-1',
+            },
+          ],
+        }, onRequest: (request) => captured = request),
+      );
+
+      final response = await service.upscaleImage(
+        const EditorAiUpscaleRequest(
+          imageBase64: 'c291cmNl',
+          scale: 4,
+          quality: 'high',
+        ),
+      );
+
+      expect(captured?.path, 'ai/editor/upscale');
+      expect((captured?.data as Map<String, dynamic>).keys.toSet(), {
+        'image_base64',
+        'scale',
+        'quality',
+      });
+      expect(
+        (captured?.data as Map<String, dynamic>).keys,
+        isNot(contains(anyOf('api_key', 'model'))),
+      );
+      expect(response.action, 'upscale');
+      expect(response.width, 2048);
+      expect(response.height, 2048);
+      expect(response.decodeBytes(), [1, 2, 3]);
+    });
+
+    test('inpaint posts image mask prompt without client keys', () async {
+      RequestOptions? captured;
+      final service = EditorAiApiService(
+        dio: _dioReturning({
+          'action': 'inpaint',
+          'image_base64': 'AQID',
+          'width': 1024,
+          'height': 1024,
+          'data': [
+            {'asset_id': 'in-1', 'b64_json': 'AQID'},
+          ],
+        }, onRequest: (request) => captured = request),
+      );
+
+      final response = await service.inpaintImage(
+        const EditorAiInpaintRequest(
+          imageBase64: 'aW1n',
+          maskBase64: 'bWFzaw==',
+          prompt: 'blue sky',
+        ),
+      );
+
+      expect(captured?.path, 'ai/editor/inpaint');
+      expect((captured?.data as Map<String, dynamic>).keys.toSet(), {
+        'image_base64',
+        'mask_base64',
+        'prompt',
+        'quality',
+      });
+      expect(response.action, 'inpaint');
+      expect(response.width, 1024);
+      expect(response.decodeBytes(), [1, 2, 3]);
+    });
+
+    test('upscale 402 maps to insufficientCoins', () async {
+      final service = EditorAiApiService(
+        dio: _dioRejecting(
+          402,
+          body: {
+            'message': 'Not enough coins',
+            'code': 'insufficient_coins',
+          },
+        ),
+      );
+
+      await expectLater(
+        service.upscaleImage(
+          const EditorAiUpscaleRequest(imageBase64: 'YQ==', scale: 2),
+        ),
+        throwsA(
+          isA<EditorAiApiException>()
+              .having((e) => e.insufficientCoins, 'insufficientCoins', isTrue)
+              .having((e) => e.statusCode, 'statusCode', 402),
+        ),
+      );
+    });
+
+    test('EditorAiImageToolResponse prefers top-level image_base64', () {
+      final parsed = EditorAiImageToolResponse.fromJson({
+        'image_base64': 'AQID',
+        'width': 512,
+        'height': 256,
+        'action': 'upscale',
+        'data': [
+          {'b64_json': '9999', 'asset_id': 'x'},
+        ],
+      });
+      expect(parsed.imageBase64, 'AQID');
+      expect(parsed.width, 512);
+      expect(parsed.height, 256);
+      expect(parsed.asset?.id, 'x');
+    });
   });
 }
 
@@ -209,7 +325,7 @@ Dio _dioReturning(
   return dio;
 }
 
-Dio _dioRejecting(int status) {
+Dio _dioRejecting(int status, {Map<String, dynamic>? body}) {
   final dio = Dio(BaseOptions(baseUrl: 'https://example.test/api/v1/'));
   dio.interceptors.add(
     InterceptorsWrapper(
@@ -221,9 +337,11 @@ Dio _dioRejecting(int status) {
             response: Response<Map<String, dynamic>>(
               requestOptions: request,
               statusCode: status,
-              data: {
-                'message': status == 422 ? 'Prompt is required' : 'Unavailable',
-              },
+              data: body ??
+                  {
+                    'message':
+                        status == 422 ? 'Prompt is required' : 'Unavailable',
+                  },
               headers: status == 429
                   ? Headers.fromMap({
                       'retry-after': ['10'],

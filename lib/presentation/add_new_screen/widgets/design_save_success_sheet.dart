@@ -1,6 +1,6 @@
 import 'dart:io';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:gal/gal.dart';
 import 'package:path_provider/path_provider.dart';
@@ -8,12 +8,15 @@ import 'package:share_plus/share_plus.dart';
 import 'package:toastification/toastification.dart';
 
 import '../../../core/app_export.dart';
+import '../../../core/deeplink/app_link_config.dart';
 import '../../../core/utils/app_toast.dart';
 import 'design_export_encode.dart';
 
-/// Appended caption when sharing an exported design (hashtag + Play Store link).
-const String musamiDesignSharePromotionText =
-    '#MUSAMIMUK\nhttps://play.google.com/store/apps/details?id=com.musamimuk.app';
+/// Appended caption when sharing an exported design (hashtag + store link).
+String get musamiDesignSharePromotionText {
+  final isIos = !kIsWeb && Platform.isIOS;
+  return '#MUSAMIMUK\n${AppLinkConfig.storeUrl(isIos: isIos)}';
+}
 
 String? _sanitizePreferredGalleryBase(String? name) {
   if (name == null || name.trim().isEmpty) return null;

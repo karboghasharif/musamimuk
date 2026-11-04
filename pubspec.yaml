@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.7+26
+version: 1.0.8+27
 
 environment:
   sdk: ^3.10.4
@@ -130,6 +130,44 @@ flutter:
   assets:
     - assets/images/
     - assets/fonts/
+    # Offline design pack (v1: borders / patterns / shapes / specialtext / emoji).
+    # Do not register brushes/ or blends/ until a later pass.
+    - assets/assets/svg-manifest.json
+    - assets/assets/borders/borders-manifest.json
+    - assets/assets/patterns/patterns.json
+    - assets/assets/borders/files/
+    - assets/assets/borders/thumbs/
+    - assets/assets/patterns/
+    # Flutter only bundles files directly in a listed folder — list each subcategory.
+    - assets/assets/shapes/basic/
+    - assets/assets/shapes/bedges/
+    - assets/assets/shapes/dividers-labels/
+    - assets/assets/shapes/elements/
+    - assets/assets/shapes/grooming/
+    - assets/assets/shapes/labels/
+    - assets/assets/shapes/leafs/
+    - assets/assets/shapes/lines/
+    - assets/assets/shapes/love/
+    - assets/assets/shapes/moments/
+    - assets/assets/shapes/pakistan/
+    - assets/assets/shapes/social-media/
+    - assets/assets/shapes/speech-bubble/
+    - assets/assets/shapes/splatter/
+    - assets/assets/specialtext/aaraab/
+    - assets/assets/specialtext/allah/
+    - assets/assets/specialtext/bisamallah/
+    - assets/assets/specialtext/blessings/
+    - assets/assets/specialtext/ehal-e-byat/
+    - assets/assets/specialtext/eid/
+    - assets/assets/specialtext/islmic-months/
+    - assets/assets/specialtext/jumah/
+    - assets/assets/specialtext/kalma/
+    - assets/assets/specialtext/mehfil-majlis/
+    - assets/assets/specialtext/misc/
+    - assets/assets/specialtext/muhammad/
+    - assets/assets/specialtext/quran/
+    - assets/assets/specialtext/ramzan/
+    - assets/assets/emoji/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

@@ -8,5 +8,11 @@
 	<array>
 		<string>Default</string>
 	</array>
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:srv1813447.hstgr.cloud</string>
+		<string>applinks:musamimuk.app</string>
+		<string>applinks:www.musamimuk.app</string>
+	</array>
 </dict>
 </plist>

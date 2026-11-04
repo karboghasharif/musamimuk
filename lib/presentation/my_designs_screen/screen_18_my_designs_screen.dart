@@ -7,6 +7,7 @@ import '../../widgets/app_bar/appbar_title.dart';
 import '../../widgets/app_bar/custom_app_bar.dart';
 import 'bloc/screen_18_my_designs_bloc.dart';
 import 'models/screen_18_my_designs_model.dart';
+import 'widgets/design_folder_bar.dart';
 import 'widgets/playlist_item_widget.dart';
 
 class Screen18MyDesignsScreen extends StatelessWidget {
@@ -26,21 +27,46 @@ class Screen18MyDesignsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final primary = theme.colorScheme.primary;
 
-    return BlocListener<Screen18MyDesignsBloc, Screen18MyDesignsState>(
-      listenWhen: (prev, next) =>
-          next.deleteFeedback != null &&
-          next.deleteFeedback != prev.deleteFeedback,
-      listener: (context, state) {
-        final msg = state.deleteFeedback;
-        if (msg == null || msg.isEmpty) return;
-        final isSuccess = msg == 'msg_design_deleted'.tr;
-        showAppToast(
-          msg,
-          type: isSuccess
-              ? ToastificationType.success
-              : ToastificationType.error,
-        );
-      },
+    return MultiBlocListener(
+      listeners: [
+        BlocListener<Screen18MyDesignsBloc, Screen18MyDesignsState>(
+          listenWhen: (prev, next) =>
+              next.deleteFeedback != null &&
+              next.deleteFeedback != prev.deleteFeedback,
+          listener: (context, state) {
+            final msg = state.deleteFeedback;
+            if (msg == null || msg.isEmpty) return;
+            final isSuccess = msg == 'msg_design_deleted'.tr ||
+                msg == 'msg_local_design_deleted'.tr;
+            showAppToast(
+              msg,
+              type: isSuccess
+                  ? ToastificationType.success
+                  : ToastificationType.error,
+            );
+          },
+        ),
+        BlocListener<Screen18MyDesignsBloc, Screen18MyDesignsState>(
+          listenWhen: (prev, next) =>
+              next.folderFeedback != null &&
+              next.folderFeedback != prev.folderFeedback,
+          listener: (context, state) {
+            final msg = state.folderFeedback;
+            if (msg == null || msg.isEmpty) return;
+            final isError = msg == 'msg_folder_action_failed'.tr ||
+                msg == 'msg_folder_name_length'.tr ||
+                msg == 'msg_folder_name_invalid'.tr ||
+                msg == 'msg_folder_name_duplicate'.tr ||
+                msg == 'msg_folder_limit'.tr;
+            showAppToast(
+              msg,
+              type: isError
+                  ? ToastificationType.error
+                  : ToastificationType.success,
+            );
+          },
+        ),
+      ],
       child: SafeArea(
         child: Scaffold(
           appBar: _buildAppBar(context),
@@ -130,7 +156,9 @@ class Screen18MyDesignsScreen extends StatelessWidget {
                     );
                   },
                 ),
-                SizedBox(height: AppDs.space4.v),
+                SizedBox(height: AppDs.space3.v),
+                const DesignFolderBar(),
+                SizedBox(height: AppDs.space3.v),
                 BlocBuilder<Screen18MyDesignsBloc, Screen18MyDesignsState>(
                   buildWhen: (prev, next) =>
                       prev.visibilityTab != next.visibilityTab,
@@ -170,11 +198,13 @@ class Screen18MyDesignsScreen extends StatelessWidget {
       builder: (context, state) {
         final items =
             state.screen18MyDesignsModelObj?.playlistItemList ?? const [];
-        final emptyMessage = switch (state.visibilityTab) {
-          MyDesignsVisibilityTab.private => 'msg_no_private_designs'.tr,
-          MyDesignsVisibilityTab.local => 'msg_no_local_designs'.tr,
-          MyDesignsVisibilityTab.public => 'msg_no_public_designs'.tr,
-        };
+        final emptyMessage = state.selectedFolderId != null
+            ? 'msg_no_designs_in_folder'.tr
+            : switch (state.visibilityTab) {
+                MyDesignsVisibilityTab.private => 'msg_no_private_designs'.tr,
+                MyDesignsVisibilityTab.local => 'msg_no_local_designs'.tr,
+                MyDesignsVisibilityTab.public => 'msg_no_public_designs'.tr,
+              };
         return AppAsyncBody(
           isLoading: state.isLoading,
           errorMessage: state.errorMessage,

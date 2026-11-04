@@ -17,6 +17,7 @@ class PrintOpenOrdersController extends ChangeNotifier {
   final _repo = PrintRepository();
   Timer? _poll;
   VoidCallback? _stopLive;
+  VoidCallback? _releaseSession;
   bool _started = false;
   bool _refreshing = false;
   bool minimized = false;
@@ -66,7 +67,8 @@ class PrintOpenOrdersController extends ChangeNotifier {
   void _ensurePolling() {
     if (_started) return;
     _started = true;
-    _poll = Timer.periodic(const Duration(seconds: 45), (_) => refresh());
+    _poll = Timer.periodic(const Duration(seconds: 12), (_) => refresh());
+    _releaseSession = PrintLive.instance.holdSession();
     _stopLive = PrintLive.instance.listen(refresh);
     unawaited(refresh());
   }
@@ -76,6 +78,8 @@ class PrintOpenOrdersController extends ChangeNotifier {
     _poll = null;
     _stopLive?.call();
     _stopLive = null;
+    _releaseSession?.call();
+    _releaseSession = null;
     _started = false;
     if (openOrders.isNotEmpty || minimized || _dismissedFingerprint != null) {
       openOrders = const [];

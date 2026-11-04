@@ -42,7 +42,7 @@
               "client_id": "REPLACE_WITH_IOS_OAUTH_CLIENT_ID.apps.googleusercontent.com",
               "client_type": 2,
               "ios_info": {
-                "bundle_id": "com.musamimuk.app"
+                "bundle_id": "com.musamimuk.ios.app"
               }
             }
           ]

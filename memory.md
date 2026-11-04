@@ -4,7 +4,8 @@ Living reference for agents and developers. Prefer this file for orientation; de
 
 **Last updated:** 2026-08-15  
 **App version:** `1.0.5+22` (`pubspec.yaml`)  
-**Package ID:** `com.musamimuk.app`  
+**Package ID (Android / Play):** `com.musamimuk.app`  
+**Bundle ID (iOS / App Store):** `com.musamimuk.ios.app` (Team `3FZZ5UHWCA`)  
 **API root:** `https://srv1813447.hstgr.cloud/api/v1/`
 
 ### Sister projects (same product)

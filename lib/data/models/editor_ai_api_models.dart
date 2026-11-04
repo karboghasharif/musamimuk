@@ -93,7 +93,11 @@ class OpenAiImageRequest {
     }
   }
 
-  static const Set<String> allowedSizes = {'1024x1024', '1536x1024'};
+  static const Set<String> allowedSizes = {
+    '1024x1024',
+    '1536x1024',
+    '1024x1536',
+  };
   static const Set<String> allowedQualities = {'low', 'medium', 'high'};
   static const Set<String> allowedBackgrounds = {'opaque', 'transparent'};
 
@@ -184,6 +188,108 @@ class OpenAiImageResponse {
     }
     return OpenAiImageResponse(assets: assets);
   }
+}
+
+/// Response for `POST ai/editor/upscale` and `POST ai/editor/inpaint`.
+class EditorAiImageToolResponse {
+  const EditorAiImageToolResponse({
+    required this.imageBase64,
+    required this.width,
+    required this.height,
+    this.action,
+    this.asset,
+  });
+
+  final String imageBase64;
+  final int width;
+  final int height;
+  final String? action;
+  final GeneratedAiAsset? asset;
+
+  Uint8List? decodeBytes() {
+    if (imageBase64.isEmpty) return null;
+    try {
+      return base64Decode(imageBase64);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  factory EditorAiImageToolResponse.fromJson(Map<String, dynamic> json) {
+    String? b64 = json['image_base64']?.toString();
+    GeneratedAiAsset? asset;
+    final data = json['data'];
+    if (data is List && data.isNotEmpty && data.first is Map) {
+      final first = Map<String, dynamic>.from(data.first as Map);
+      asset = GeneratedAiAsset.fromJson(first);
+      b64 ??= first['b64_json']?.toString();
+    }
+    if (b64 == null || b64.trim().isEmpty) {
+      throw const FormatException('Missing image_base64 in AI tool response');
+    }
+    final width =
+        _parsePositiveInt(json['width']) ?? asset?.width ?? 1024;
+    final height =
+        _parsePositiveInt(json['height']) ?? asset?.height ?? 1024;
+    return EditorAiImageToolResponse(
+      imageBase64: b64.trim(),
+      width: width,
+      height: height,
+      action: json['action']?.toString(),
+      asset: asset,
+    );
+  }
+
+  static int? _parsePositiveInt(dynamic value) {
+    if (value is int && value > 0) return value;
+    if (value is num && value > 0) return value.toInt();
+    return int.tryParse(value?.toString() ?? '');
+  }
+}
+
+class EditorAiUpscaleRequest {
+  const EditorAiUpscaleRequest({
+    required this.imageBase64,
+    this.scale = 2,
+    this.size,
+    this.quality = 'high',
+  });
+
+  final String imageBase64;
+  final int scale;
+  final String? size;
+  final String quality;
+
+  Map<String, dynamic> toJson() => {
+        'image_base64': imageBase64,
+        'scale': scale,
+        'quality': quality,
+        if (size != null) 'size': size,
+      };
+}
+
+class EditorAiInpaintRequest {
+  const EditorAiInpaintRequest({
+    required this.imageBase64,
+    required this.maskBase64,
+    required this.prompt,
+    this.size,
+    this.quality = 'high',
+  });
+
+  final String imageBase64;
+  final String maskBase64;
+  final String prompt;
+  final String? size;
+  final String quality;
+
+  Map<String, dynamic> toJson() => {
+        'image_base64': imageBase64,
+        'mask_base64': maskBase64,
+        'prompt': prompt,
+        'quality': quality,
+        if (size != null) 'size': size,
+      };
 }
 
 class GeminiEditorRequest {

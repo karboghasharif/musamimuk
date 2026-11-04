@@ -59,10 +59,10 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyCpUvHz2bcpDSrUdnZJbcuhq0rkx-hqeaU',
-    appId: '1:774036147464:ios:be7c7b7ea77e02eacdb0bd',
+    appId: '1:774036147464:ios:a048720539daee71cdb0bd',
     messagingSenderId: '774036147464',
     projectId: 'musamimuk-1556b',
     storageBucket: 'musamimuk-1556b.firebasestorage.app',
-    iosBundleId: 'com.musamimuk.app',
+    iosBundleId: 'com.musamimuk.ios.app',
   );
 }

@@ -1,5 +1,6 @@
 // Replace placeholders with credentials from Google Cloud Console, Meta for Developers,
-// and Apple Developer (Sign in with Apple capability on the App ID).
+// and Apple Developer (Sign in with Apple on App ID `com.musamimuk.ios.app`).
+// Google iOS OAuth client must list bundle id com.musamimuk.ios.app.
 GOOGLE_IOS_CLIENT_ID=REPLACE_WITH_IOS_OAUTH_CLIENT_ID.apps.googleusercontent.com
 GOOGLE_REVERSED_CLIENT_ID=com.googleusercontent.apps.REPLACE_WITH_NUMERIC_ID
 FACEBOOK_APP_ID=REPLACE_WITH_FACEBOOK_APP_ID

@@ -1,10 +1,12 @@
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:musamimuk/core/network/api_client.dart';
 
 import 'musami_clipping_mask.dart';
+import 'musami_curved_text_meta.dart';
 
 /// Extracts raw bytes from the first [MemoryImage] found under [root].
 ///
@@ -91,12 +93,36 @@ String? musamiTryExtractNetworkImageUrl(Widget root) {
   return null;
 }
 
+String? musamiTryExtractAssetImagePath(Widget root) {
+  final provider = musamiTryExtractImageProvider(root);
+  if (provider == null) return null;
+  ImageProvider resolved = provider;
+  if (resolved is ResizeImage) {
+    resolved = resolved.imageProvider;
+  }
+  if (resolved is AssetImage) {
+    return resolved.assetName;
+  }
+  if (resolved is ExactAssetImage) {
+    return resolved.assetName;
+  }
+  return null;
+}
+
 /// Resolves raster bytes from a widget layer (memory gallery or remote asset).
 Future<Uint8List?> musamiResolveRasterBytesForBackgroundRemoval(
   Widget root,
 ) async {
   final memory = musamiTryExtractMemoryImageBytes(root);
   if (memory != null && memory.isNotEmpty) return memory;
+
+  final assetPath = musamiTryExtractAssetImagePath(root);
+  if (assetPath != null && assetPath.isNotEmpty) {
+    try {
+      final data = await rootBundle.load(assetPath);
+      return data.buffer.asUint8List();
+    } catch (_) {}
+  }
 
   final url = musamiTryExtractNetworkImageUrl(root);
   if (url == null || url.trim().isEmpty) return null;
@@ -115,6 +141,19 @@ Future<Uint8List?> musamiResolveRasterBytesForBackgroundRemoval(
   } catch (_) {
     return null;
   }
+}
+
+/// True when a widget layer meta/kind can be perspective-warped (not curved /
+/// vector design-pack). Caller still must resolve raster bytes.
+bool musamiLayerMetaSupportsPerspectiveWarp(Map<String, dynamic>? meta) {
+  if (musamiMetaIsCurvedText(meta)) return false;
+  final kind = meta?['musamiLayerKind']?.toString() ?? '';
+  if (kind == 'curved_text') return false;
+  // SVG design-pack motifs are vector; warp needs a bitmap.
+  if (kind.startsWith('design_pack_') && kind != 'design_pack_pattern') {
+    return false;
+  }
+  return true;
 }
 
 /// Prefix for any future non-destructive crop metadata. Not used in the current

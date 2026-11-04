@@ -7,6 +7,12 @@ import 'package:lottie/lottie.dart';
 import 'package:pro_image_editor/pro_image_editor.dart';
 
 import '../network/authenticated_image.dart';
+import '../../data/models/musami_document.dart';
+import '../../data/services/design_pack_catalog.dart';
+import '../../presentation/add_new_screen/utils/musami_curved_text_meta.dart';
+import '../../presentation/add_new_screen/utils/musami_design_pack_border_frame.dart';
+import '../../presentation/add_new_screen/utils/musami_design_pack_widgets.dart';
+import '../../presentation/add_new_screen/widgets/musami_curved_text_layer.dart';
 
 /// Layer kind for animated (Lottie JSON) online assets, e.g. Lordicon icons.
 ///
@@ -110,6 +116,33 @@ Widget musamiDesignWidgetLoader(String id, {Map<String, dynamic>? meta}) {
     );
   }
 
+  final kind = meta?['musamiLayerKind']?.toString();
+  if (id.startsWith(kMusamiCurvedTextIdPrefix) ||
+      musamiMetaIsCurvedText(meta)) {
+    return MusamiCurvedTextLayer.fromMeta(meta);
+  }
+
+  if (id.startsWith(kMusamiDesignPackIdPrefix) ||
+      musamiIsDesignPackLayerKind(kind)) {
+    // Full-canvas border frames restore as the composite frame widget.
+    if (kind == 'design_pack_border' && musamiMetaIsCanvasBorderFrame(meta)) {
+      return MusamiDesignPackBorderFrame.fromMeta(meta);
+    }
+    final packPath = DesignPackCatalog.resolveAssetPath(
+      meta?['assetPath']?.toString(),
+    );
+    if (packPath != null) {
+      final isSvg = packPath.toLowerCase().endsWith('.svg');
+      // Bare SVG/PNG — layer tint/shadow/tune re-applied via meta on import.
+      return musamiDesignPackWidget(
+        assetPath: packPath,
+        isSvg: isSvg,
+        width: 100,
+        height: 100,
+      );
+    }
+  }
+
   final url =
       meta?['fileUrl']?.toString() ??
       meta?['file_url']?.toString() ??
@@ -174,14 +207,19 @@ Widget musamiDesignWidgetLoader(String id, {Map<String, dynamic>? meta}) {
 }
 
 /// Parses Pro Image Editor history JSON for [StateHistoryConfigs.initStateHistory].
+///
+/// Accepts classic PIE history **or** a Musami multipage envelope
+/// (`musamiDocumentVersion`); envelopes import the **active page** only.
 ImportStateHistory? musamiTryParseDesignImportHistory(String? rawJson) {
-  final raw = rawJson?.trim();
-  if (raw == null || raw.isEmpty) return null;
+  final pie = musamiExtractPieHistoryJson(rawJson)?.trim();
+  if (pie == null || pie.isEmpty) return null;
   try {
-    final decoded = jsonDecode(raw);
+    final decoded = jsonDecode(pie);
     if (decoded is! Map && decoded is! List) return null;
+    // Reject bare envelopes that somehow lacked page history.
+    if (musamiIsDocumentEnvelopeMap(decoded)) return null;
     return ImportStateHistory.fromJson(
-      raw,
+      pie,
       configs: musamiDesignImportConfigs(),
     );
   } catch (_) {

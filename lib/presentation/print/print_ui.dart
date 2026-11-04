@@ -716,36 +716,53 @@ class PrintOrderSlip extends StatelessWidget {
   }
 }
 
-/// Inbox row for an order conversation thread.
+/// Inbox row for a profile conversation thread.
 class PrintConversationSlip extends StatelessWidget {
   const PrintConversationSlip({
     super.key,
-    required this.order,
     required this.onTap,
+    this.title,
+    this.preview,
+    this.subtitle,
+    this.badge,
+    @Deprecated('Use title/preview — conversations are profile-wise')
+    this.order,
     this.peerName,
     this.threadLabel,
   });
 
-  final PrintOrder order;
   final VoidCallback onTap;
+  final String? title;
+  final String? preview;
+  final String? subtitle;
+  final String? badge;
+  final PrintOrder? order;
   final String? peerName;
   final String? threadLabel;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final chats = order.messages
-        .where(
-          (m) => m.thread == 'customer_shop' && m.from != 'system',
-        )
-        .toList();
+    final chats = order?.messages
+            .where(
+              (m) => m.thread == 'customer_shop' && m.from != 'system',
+            )
+            .toList() ??
+        const <PrintChatMessage>[];
     final last = chats.isEmpty ? null : chats.last;
-    final title = (peerName ?? '').trim().isNotEmpty
-        ? peerName!.trim()
-        : (order.customerName ?? order.shop?.name ?? '#${order.number}');
-    final preview = (last?.body ?? '').trim().isNotEmpty
-        ? last!.body.trim()
+    final resolvedTitle = (title ?? peerName ?? '').trim().isNotEmpty
+        ? (title ?? peerName)!.trim()
+        : (order?.customerName ?? order?.shop?.name ?? 'lbl_print_chat'.tr);
+    final resolvedPreview = (preview ?? last?.body ?? '').trim().isNotEmpty
+        ? (preview ?? last?.body)!.trim()
         : 'msg_print_chat_start'.tr;
+    final resolvedSubtitle = subtitle ??
+        [
+          if ((threadLabel ?? '').isNotEmpty) threadLabel!,
+          if (order != null) 'lbl_print_status_${order!.status}'.tr,
+        ].where((s) => s.isNotEmpty).join(' · ');
+    final resolvedBadge =
+        badge ?? (order != null ? '#${order!.number}' : null);
 
     return Material(
       color: Colors.transparent,
@@ -793,7 +810,7 @@ class PrintConversationSlip extends StatelessWidget {
                         children: [
                           Expanded(
                             child: Text(
-                              title,
+                              resolvedTitle,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: AppTypography.body(theme).copyWith(
@@ -802,30 +819,30 @@ class PrintConversationSlip extends StatelessWidget {
                               ),
                             ),
                           ),
-                          Text(
-                            '#${order.number}',
-                            style: AppTypography.caption(theme).copyWith(
-                              color: AppDs.atelierBrass,
-                              fontWeight: FontWeight.w700,
+                          if (resolvedBadge != null)
+                            Text(
+                              resolvedBadge,
+                              style: AppTypography.caption(theme).copyWith(
+                                color: AppDs.atelierBrass,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
-                          ),
                         ],
                       ),
-                      SizedBox(height: 2.v),
-                      Text(
-                        [
-                          if ((threadLabel ?? '').isNotEmpty) threadLabel!,
-                          'lbl_print_status_${order.status}'.tr,
-                        ].join(' · '),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppTypography.caption(theme).copyWith(
-                          color: AppDs.textOnDarkSecondary,
+                      if (resolvedSubtitle.isNotEmpty) ...[
+                        SizedBox(height: 2.v),
+                        Text(
+                          resolvedSubtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.caption(theme).copyWith(
+                            color: AppDs.textOnDarkSecondary,
+                          ),
                         ),
-                      ),
+                      ],
                       SizedBox(height: AppDs.space1.v),
                       Text(
-                        preview,
+                        resolvedPreview,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: AppTypography.caption(theme).copyWith(
@@ -1004,6 +1021,116 @@ class PrintSpecPills extends StatelessWidget {
                 color: AppDs.textOnDarkPrimary,
                 fontWeight: FontWeight.w600,
               ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Compact order identity for tracking / job detail (status first, noise last).
+class PrintStatusHero extends StatelessWidget {
+  const PrintStatusHero({
+    super.key,
+    required this.number,
+    required this.statusLabel,
+    this.shopName,
+    this.totalLabel,
+    this.hint,
+  });
+
+  final int number;
+  final String statusLabel;
+  final String? shopName;
+  final String? totalLabel;
+  final String? hint;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          '#$number',
+          style: AppTypography.body(theme).copyWith(
+            color: AppDs.atelierBrass,
+            fontWeight: FontWeight.w800,
+            fontSize: 34.fSize,
+            height: 1,
+            letterSpacing: -0.5,
+          ),
+        ),
+        SizedBox(height: AppDs.space2.v),
+        Text(
+          statusLabel,
+          style: AppTypography.body(theme).copyWith(
+            color: AppDs.textOnDarkPrimary,
+            fontWeight: FontWeight.w700,
+            fontSize: 20.fSize,
+          ),
+        ),
+        if (shopName != null && shopName!.trim().isNotEmpty) ...[
+          SizedBox(height: AppDs.space1.v),
+          Text(
+            shopName!,
+            style: AppTypography.secondary(theme).copyWith(
+              color: AppDs.textOnDarkSecondary,
+            ),
+          ),
+        ],
+        if (totalLabel != null) ...[
+          SizedBox(height: AppDs.space3.v),
+          Text(
+            totalLabel!,
+            style: AppTypography.body(theme).copyWith(
+              color: AppDs.atelierBrass,
+              fontWeight: FontWeight.w800,
+              fontSize: 18.fSize,
+            ),
+          ),
+        ],
+        if (hint != null && hint!.trim().isNotEmpty) ...[
+          SizedBox(height: AppDs.space2.v),
+          Text(
+            hint!,
+            style: AppTypography.caption(theme).copyWith(
+              color: AppDs.textOnDarkSecondary,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Quiet text actions under the primary CTA (chat / cancel / report).
+class PrintTextActionRow extends StatelessWidget {
+  const PrintTextActionRow({super.key, required this.actions});
+
+  final List<(String label, VoidCallback? onTap)> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    final visible = actions.where((e) => e.$2 != null).toList();
+    if (visible.isEmpty) return const SizedBox.shrink();
+    return Wrap(
+      spacing: AppDs.space4.h,
+      runSpacing: AppDs.space1.v,
+      children: [
+        for (final action in visible)
+          TextButton(
+            onPressed: action.$2,
+            style: TextButton.styleFrom(
+              foregroundColor: AppDs.atelierBrass,
+              padding: EdgeInsets.symmetric(horizontal: 0, vertical: AppDs.space1.v),
+              minimumSize: Size(0, AppDs.minTap.v),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Text(
+              action.$1,
+              style: const TextStyle(fontWeight: FontWeight.w700),
             ),
           ),
       ],

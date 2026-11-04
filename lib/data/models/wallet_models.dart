@@ -74,6 +74,8 @@ class WalletFeatureCost {
   /// Known server feature keys for costly actions.
   static const String aiOpenaiEditor = 'ai.openai.editor';
   static const String aiOpenaiImages = 'ai.openai.images';
+  static const String aiOpenaiUpscale = 'ai.openai.upscale';
+  static const String aiOpenaiInpaint = 'ai.openai.inpaint';
   static const String aiGeminiEditor = 'ai.gemini.editor';
   static const String aiGrokEditor = 'ai.grok.editor';
   static const String removeBackground = 'remove_background';

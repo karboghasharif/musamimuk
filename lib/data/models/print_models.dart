@@ -321,6 +321,40 @@ class PrintPaymentInfo {
   }
 }
 
+class PrintChatAttachment {
+  const PrintChatAttachment({
+    this.name,
+    this.mime,
+    this.size,
+    this.url,
+  });
+
+  final String? name;
+  final String? mime;
+  final int? size;
+  final String? url;
+
+  bool get isImage {
+    final m = (mime ?? '').toLowerCase();
+    final n = (name ?? '').toLowerCase();
+    return m.startsWith('image/') ||
+        n.endsWith('.jpg') ||
+        n.endsWith('.jpeg') ||
+        n.endsWith('.png') ||
+        n.endsWith('.webp') ||
+        n.endsWith('.gif');
+  }
+
+  factory PrintChatAttachment.fromJson(Map<String, dynamic> json) {
+    return PrintChatAttachment(
+      name: json['name']?.toString(),
+      mime: json['mime']?.toString(),
+      size: PrintSpec._asInt(json['size']),
+      url: json['url']?.toString(),
+    );
+  }
+}
+
 class PrintChatMessage {
   const PrintChatMessage({
     required this.id,
@@ -328,6 +362,9 @@ class PrintChatMessage {
     required this.body,
     this.quoteId,
     this.thread = 'customer_shop',
+    this.conversationId,
+    this.orderId,
+    this.attachment,
     this.createdAt,
   });
 
@@ -336,16 +373,83 @@ class PrintChatMessage {
   final String body;
   final int? quoteId;
   final String thread;
+  final int? conversationId;
+  final int? orderId;
+  final PrintChatAttachment? attachment;
   final String? createdAt;
 
   factory PrintChatMessage.fromJson(Map<String, dynamic> json) {
+    final rawAttachment = json['attachment'];
     return PrintChatMessage(
       id: PrintSpec._asInt(json['id']) ?? 0,
       from: json['from']?.toString() ?? 'system',
       body: json['body']?.toString() ?? '',
       quoteId: PrintSpec._asInt(json['quote_id']),
       thread: json['thread']?.toString() ?? 'customer_shop',
+      conversationId: PrintSpec._asInt(json['conversation_id']),
+      orderId: PrintSpec._asInt(json['order_id']),
+      attachment: rawAttachment is Map
+          ? PrintChatAttachment.fromJson(rawAttachment.cast<String, dynamic>())
+          : null,
       createdAt: json['created_at']?.toString(),
+    );
+  }
+}
+
+class PrintConversation {
+  const PrintConversation({
+    required this.id,
+    required this.kind,
+    this.shopId,
+    this.customerUserId,
+    this.riderUserId,
+    this.lastOrderId,
+    this.lastOrderNumber,
+    this.lastBody,
+    this.lastMessageAt,
+    this.peerName,
+    this.peerRole,
+    this.shopName,
+    this.messages = const [],
+  });
+
+  final int id;
+  final String kind;
+  final int? shopId;
+  final int? customerUserId;
+  final int? riderUserId;
+  final int? lastOrderId;
+  final String? lastOrderNumber;
+  final String? lastBody;
+  final String? lastMessageAt;
+  final String? peerName;
+  final String? peerRole;
+  final String? shopName;
+  final List<PrintChatMessage> messages;
+
+  factory PrintConversation.fromJson(Map<String, dynamic> json) {
+    final peer = json['peer'];
+    final shop = json['shop'];
+    final messages = json['messages'];
+    return PrintConversation(
+      id: PrintSpec._asInt(json['id']) ?? 0,
+      kind: json['kind']?.toString() ?? 'customer_shop',
+      shopId: PrintSpec._asInt(json['shop_id']),
+      customerUserId: PrintSpec._asInt(json['customer_user_id']),
+      riderUserId: PrintSpec._asInt(json['rider_user_id']),
+      lastOrderId: PrintSpec._asInt(json['last_order_id']),
+      lastOrderNumber: json['last_order_number']?.toString(),
+      lastBody: json['last_body']?.toString(),
+      lastMessageAt: json['last_message_at']?.toString(),
+      peerName: peer is Map ? peer['name']?.toString() : null,
+      peerRole: peer is Map ? peer['role']?.toString() : null,
+      shopName: shop is Map ? shop['name']?.toString() : null,
+      messages: messages is List
+          ? messages
+              .whereType<Map>()
+              .map((e) => PrintChatMessage.fromJson(e.cast<String, dynamic>()))
+              .toList()
+          : const [],
     );
   }
 }
@@ -404,6 +508,8 @@ class PrintOrder {
     this.printFileUrl,
     this.customerName,
     this.dropoffAddress,
+    this.conversationId,
+    this.riderConversationId,
   });
 
   final int id;
@@ -435,6 +541,8 @@ class PrintOrder {
   final String? printFileUrl;
   final String? customerName;
   final String? dropoffAddress;
+  final int? conversationId;
+  final int? riderConversationId;
 
   PrintQuote? get offeredQuote {
     for (final quote in quotes) {
@@ -533,6 +641,8 @@ class PrintOrder {
           (design is Map ? design['file_url']?.toString() : null),
       customerName: customer is Map ? customer['name']?.toString() : null,
       dropoffAddress: dropoff is Map ? dropoff['address']?.toString() : null,
+      conversationId: PrintSpec._asInt(json['conversation_id']),
+      riderConversationId: PrintSpec._asInt(json['rider_conversation_id']),
     );
   }
 }
@@ -559,6 +669,7 @@ class PrintDeliveryInfo {
     this.pickupCode,
     this.orderStatus,
     this.shopName,
+    this.otp,
   });
 
   final int id;
@@ -581,12 +692,15 @@ class PrintDeliveryInfo {
   final String? pickupCode;
   final String? orderStatus;
   final String? shopName;
+  /// Customer-only 4-digit delivery OTP (not the order number).
+  final String? otp;
 
   factory PrintDeliveryInfo.fromJson(Map<String, dynamic> json) {
     final area = json['area'];
     final rider = json['rider'];
     final order = json['order'];
     final shop = order is Map ? order['shop'] : null;
+    final otpRaw = json['otp']?.toString().trim();
     return PrintDeliveryInfo(
       id: PrintSpec._asInt(json['id']) ?? 0,
       status: json['status']?.toString() ?? 'requested',
@@ -608,6 +722,7 @@ class PrintDeliveryInfo {
       pickupCode: order is Map ? order['pickup_code']?.toString() : null,
       orderStatus: order is Map ? order['status']?.toString() : null,
       shopName: shop is Map ? shop['name']?.toString() : null,
+      otp: (otpRaw != null && otpRaw.isNotEmpty) ? otpRaw : null,
     );
   }
 }

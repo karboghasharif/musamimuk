@@ -5,18 +5,17 @@ import '../../data/models/print_models.dart';
 import '../../data/repositories/print_repository.dart';
 import 'print_ui.dart';
 
-/// Conversation inbox for designer (customer) or shop viewer.
+/// Profile-wise conversation inbox (one thread per peer, not per order).
 class PrintChatsScreen extends StatefulWidget {
   const PrintChatsScreen({super.key, this.viewer = 'customer'});
 
-  /// `customer` loads myOrders; `shop` loads shopOrders.
   final String viewer;
 
   static Widget builder(BuildContext context) {
     final args = ModalRoute.of(context)?.settings.arguments;
     final viewer = args is Map ? args['viewer']?.toString() : null;
     return PrintChatsScreen(
-      viewer: (viewer == 'shop') ? 'shop' : 'customer',
+      viewer: (viewer == 'shop' || viewer == 'rider') ? viewer! : 'customer',
     );
   }
 
@@ -26,11 +25,9 @@ class PrintChatsScreen extends StatefulWidget {
 
 class _PrintChatsScreenState extends State<PrintChatsScreen> {
   final _repo = PrintRepository();
-  List<PrintOrder> _orders = const [];
+  List<PrintConversation> _rows = const [];
   bool _loading = true;
   String? _error;
-
-  bool get _isShop => widget.viewer == 'shop';
 
   @override
   void initState() {
@@ -43,37 +40,35 @@ class _PrintChatsScreenState extends State<PrintChatsScreen> {
       _loading = true;
       _error = null;
     });
-    final result = _isShop ? await _repo.shopOrders() : await _repo.myOrders();
+    final result = await _repo.conversations();
     if (!mounted) return;
-    if (result is PrintFailure<List<PrintOrder>>) {
+    if (result is PrintFailure<List<PrintConversation>>) {
       setState(() {
         _loading = false;
         _error = result.message;
       });
       return;
     }
-    final orders = (result as PrintSuccess<List<PrintOrder>>).data;
-    final active = orders
-        .where((o) => o.status != 'cancelled')
-        .toList(growable: true);
-    active.sort((a, b) {
-      final aMs = a.messages.isEmpty ? 0 : a.messages.last.id;
-      final bMs = b.messages.isEmpty ? 0 : b.messages.last.id;
-      return bMs.compareTo(aMs);
-    });
+    var rows = (result as PrintSuccess<List<PrintConversation>>).data;
+    if (widget.viewer == 'customer') {
+      rows = rows.where((c) => c.kind == 'customer_shop').toList();
+    } else if (widget.viewer == 'rider') {
+      rows = rows.where((c) => c.kind == 'shop_rider').toList();
+    }
     setState(() {
-      _orders = active;
+      _rows = rows;
       _loading = false;
     });
   }
 
-  void _openChat(PrintOrder order) {
+  void _openChat(PrintConversation conversation) {
     NavigatorService.pushNamed(
       AppRoutes.printChatScreen,
       arguments: {
-        'orderId': order.id,
-        'viewer': _isShop ? 'shop' : 'customer',
-        'thread': 'customer_shop',
+        'conversationId': conversation.id,
+        'viewer': widget.viewer,
+        'thread': conversation.kind,
+        if (conversation.lastOrderId != null) 'orderId': conversation.lastOrderId,
       },
     );
   }
@@ -99,7 +94,7 @@ class _PrintChatsScreenState extends State<PrintChatsScreen> {
                         ),
                       ],
                     )
-                  : _orders.isEmpty
+                  : _rows.isEmpty
                       ? ListView(
                           children: [
                             SizedBox(height: 120.v),
@@ -107,7 +102,7 @@ class _PrintChatsScreenState extends State<PrintChatsScreen> {
                               child: Padding(
                                 padding: EdgeInsets.symmetric(horizontal: 24.h),
                                 child: Text(
-                                  _isShop
+                                  widget.viewer == 'shop'
                                       ? 'msg_print_shop_chats_empty'.tr
                                       : 'msg_print_no_chats'.tr,
                                   style: const TextStyle(color: Colors.white70),
@@ -119,19 +114,22 @@ class _PrintChatsScreenState extends State<PrintChatsScreen> {
                         )
                       : ListView.separated(
                           padding: EdgeInsets.all(16.h),
-                          itemCount: _orders.length,
+                          itemCount: _rows.length,
                           separatorBuilder: (_, _) => SizedBox(height: 8.v),
                           itemBuilder: (context, index) {
-                            final order = _orders[index];
+                            final conversation = _rows[index];
                             return PrintConversationSlip(
-                              order: order,
-                              peerName: _isShop
-                                  ? order.customerName
-                                  : order.shop?.name,
-                              threadLabel: _isShop
-                                  ? 'lbl_print_designer_chat'.tr
-                                  : 'lbl_print_message_shop'.tr,
-                              onTap: () => _openChat(order),
+                              title: conversation.peerName ??
+                                  conversation.shopName ??
+                                  'lbl_print_chat'.tr,
+                              preview: conversation.lastBody,
+                              subtitle: conversation.kind == 'shop_rider'
+                                  ? 'lbl_print_rider_chat'.tr
+                                  : 'lbl_print_designer_chat'.tr,
+                              badge: conversation.lastOrderNumber != null
+                                  ? '#${conversation.lastOrderNumber}'
+                                  : null,
+                              onTap: () => _openChat(conversation),
                             );
                           },
                         ),

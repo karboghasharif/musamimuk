@@ -7,12 +7,14 @@ import '../../core/app_export.dart';
 import '../../core/utils/app_toast.dart';
 import '../../data/models/print_models.dart';
 import '../../data/repositories/print_repository.dart';
+import '../subscription/push_auth_sync.dart';
 import 'print_earnings_card.dart';
 import 'print_review_sheet.dart';
 import 'print_mode_switch.dart';
 import 'print_live.dart';
 import 'print_kyc_wizard.dart';
 import 'print_location_picker.dart';
+import 'print_rider_ui.dart';
 import 'print_ui.dart';
 
 class PrintRiderHomeScreen extends StatefulWidget {
@@ -35,13 +37,16 @@ class _PrintRiderHomeScreenState extends State<PrintRiderHomeScreen> {
   Timer? _poll;
   Timer? _locationPing;
   VoidCallback? _stopLive;
+  VoidCallback? _releaseSession;
 
   @override
   void initState() {
     super.initState();
     _load();
-    _poll = Timer.periodic(const Duration(seconds: 20), (_) => _load());
-    _stopLive = PrintLive.instance.listen(_load);
+    _poll = Timer.periodic(const Duration(seconds: 8), (_) => _softReload());
+    _releaseSession = PrintLive.instance.holdSession();
+    _stopLive = PrintLive.instance.listen(_softReload);
+    unawaited(syncPushTokenAfterAuth());
   }
 
   @override
@@ -49,7 +54,58 @@ class _PrintRiderHomeScreenState extends State<PrintRiderHomeScreen> {
     _poll?.cancel();
     _locationPing?.cancel();
     _stopLive?.call();
+    _releaseSession?.call();
     super.dispose();
+  }
+
+  Future<void> _softReload() async {
+    if (!mounted || _loading) return;
+    final rider = _rider;
+    if (rider == null || !rider.isApproved) {
+      await _load();
+      return;
+    }
+    final jobsResult = await _repo.riderJobs();
+    if (!mounted || jobsResult is! PrintSuccess<List<PrintDeliveryInfo>>) {
+      return;
+    }
+    final next = jobsResult.data;
+    final known = _jobs.map((job) => job.id).toSet();
+    PrintDeliveryInfo? fresh;
+    for (final job in next) {
+      if (!known.contains(job.id)) {
+        fresh = job;
+        break;
+      }
+    }
+    PrintDeliveryInfo? statusChanged;
+    final prevStatus = {
+      for (final job in _jobs) job.id: job.status,
+    };
+    for (final job in next) {
+      final before = prevStatus[job.id];
+      if (before != null && before != job.status) {
+        statusChanged = job;
+        break;
+      }
+    }
+    setState(() => _jobs = next);
+    if (fresh != null) {
+      final label = fresh.shopName ?? fresh.pickupCode ?? '#${fresh.id}';
+      showAppToast(
+        '${'lbl_print_new_request'.tr} · $label',
+        type: ToastificationType.info,
+        autoCloseDuration: const Duration(seconds: 6),
+      );
+    } else if (statusChanged != null) {
+      final label =
+          statusChanged.shopName ?? statusChanged.pickupCode ?? '#${statusChanged.id}';
+      showAppToast(
+        '$label · ${statusChanged.status}',
+        type: ToastificationType.info,
+        autoCloseDuration: const Duration(seconds: 4),
+      );
+    }
   }
 
   void _syncLocationPing(bool online) {
@@ -196,6 +252,13 @@ class _PrintRiderHomeScreenState extends State<PrintRiderHomeScreen> {
         ),
       );
     }
+    final activeRuns =
+        _jobs.where(riderJobIsActive).toList(growable: false);
+    final openCalls = _jobs
+        .where((job) => job.status == 'requested')
+        .toList(growable: false);
+    final openCount = openCalls.length;
+
     return PrintScaffold(
       title: rider.name,
       showBack: false,
@@ -211,7 +274,11 @@ class _PrintRiderHomeScreenState extends State<PrintRiderHomeScreen> {
             label: 'lbl_home'.tr,
           ),
           NavigationDestination(
-            icon: const Icon(Icons.local_shipping_outlined),
+            icon: Badge(
+              isLabelVisible: openCount > 0,
+              label: Text('$openCount'),
+              child: const Icon(Icons.local_shipping_outlined),
+            ),
             label: 'lbl_print_jobs'.tr,
           ),
           NavigationDestination(
@@ -229,106 +296,273 @@ class _PrintRiderHomeScreenState extends State<PrintRiderHomeScreen> {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: _load,
-        child: ListView(
-          padding: EdgeInsets.all(16.h),
-          children: [
-            if (_section == 0) ...[
-              PrintDeskHero(
-                name: rider.name,
-                statusLabel: rider.online
-                    ? 'lbl_print_online_active'.tr
-                    : 'lbl_print_online_idle'.tr,
-                statusActive: rider.online,
-                subtitle: [
-                  if (rider.district != null && rider.district!.trim().isNotEmpty)
-                    rider.district!,
-                  if (rider.areas.isNotEmpty)
-                    rider.areas.take(3).join(', '),
-                ].join(' · '),
-                levelLabel: rider.levelLabel,
-                levelLabelAr: rider.levelLabelAr,
-                levelProgress: rider.levelProgress,
-                leadingIcon: Icons.two_wheeler_outlined,
-                metrics: [
-                  ('${_jobs.length}', 'lbl_print_jobs'.tr),
-                  (rider.rating.toStringAsFixed(1), 'lbl_print_desk_rating'.tr),
-                  (
-                    '${rider.completedDeliveries}',
-                    'lbl_print_desk_done'.tr,
+          color: AppDs.printGold,
+          onRefresh: _load,
+          child: ListView(
+            padding: EdgeInsets.fromLTRB(
+              AppDs.space4.h,
+              AppDs.space3.v,
+              AppDs.space4.h,
+              AppDs.space8.v,
+            ),
+            children: [
+              if (_section == 0) ...[
+                RiderSignalStrip(
+                  online: rider.online,
+                  busy: _togglingOnline,
+                  onChanged: _togglingOnline ? null : _toggleOnline,
+                  name: rider.name,
+                  plate: rider.plate,
+                  district: rider.district,
+                ),
+                SizedBox(height: AppDs.space4.v),
+                RiderStatLane(
+                  jobs: _jobs.length,
+                  rating: rider.rating,
+                  completed: rider.completedDeliveries,
+                ),
+                SizedBox(height: AppDs.space5.v),
+                if (activeRuns.isNotEmpty) ...[
+                  RiderSectionLabel('lbl_print_rider_active_run'.tr),
+                  SizedBox(height: AppDs.space2.v),
+                  ...activeRuns.map(
+                    (job) => Padding(
+                      padding: EdgeInsets.only(bottom: AppDs.space3.v),
+                      child: _RiderJobCard(
+                        job: job,
+                        onChanged: _load,
+                        variant: _RiderJobVariant.runBoard,
+                      ),
+                    ),
+                  ),
+                ] else if (openCalls.isNotEmpty) ...[
+                  RiderSectionLabel('lbl_print_rider_open_calls'.tr),
+                  SizedBox(height: AppDs.space2.v),
+                  ...openCalls.take(3).map(
+                    (job) => Padding(
+                      padding: EdgeInsets.only(bottom: AppDs.space2.v),
+                      child: _RiderJobCard(
+                        job: job,
+                        onChanged: _load,
+                        variant: _RiderJobVariant.slip,
+                      ),
+                    ),
+                  ),
+                  if (openCalls.length > 3)
+                    TextButton(
+                      onPressed: () => setState(() => _section = 1),
+                      child: Text(
+                        'lbl_print_jobs'.tr,
+                        style: TextStyle(
+                          color: AppDs.atelierBrass,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                ] else
+                  RiderEmptyLane(
+                    online: rider.online,
+                    onGoOnline: rider.online || _togglingOnline
+                        ? null
+                        : () => _toggleOnline(true),
+                  ),
+                if (_reviews.isNotEmpty) ...[
+                  SizedBox(height: AppDs.space5.v),
+                  RiderSectionLabel('lbl_print_verified_reviews'.tr),
+                  SizedBox(height: AppDs.space2.v),
+                  PrintVerifiedReviewList(reviews: _reviews),
+                ],
+              ],
+              if (_section == 1) ...[
+                if (_jobs.isEmpty)
+                  RiderEmptyLane(
+                    online: rider.online,
+                    onGoOnline: rider.online || _togglingOnline
+                        ? null
+                        : () => _toggleOnline(true),
+                  )
+                else ...[
+                  if (activeRuns.isNotEmpty) ...[
+                    RiderSectionLabel('lbl_print_rider_active_run'.tr),
+                    SizedBox(height: AppDs.space2.v),
+                    ...activeRuns.map(
+                      (job) => Padding(
+                        padding: EdgeInsets.only(bottom: AppDs.space3.v),
+                        child: _RiderJobCard(
+                          job: job,
+                          onChanged: _load,
+                          variant: _RiderJobVariant.runBoard,
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (openCalls.isNotEmpty) ...[
+                    RiderSectionLabel('lbl_print_rider_open_calls'.tr),
+                    SizedBox(height: AppDs.space2.v),
+                    ...openCalls.map(
+                      (job) => Padding(
+                        padding: EdgeInsets.only(bottom: AppDs.space2.v),
+                        child: _RiderJobCard(
+                          job: job,
+                          onChanged: _load,
+                          variant: _RiderJobVariant.slip,
+                        ),
+                      ),
+                    ),
+                  ],
+                  ..._jobs
+                      .where(
+                        (job) =>
+                            !riderJobIsActive(job) && job.status != 'requested',
+                      )
+                      .map(
+                        (job) => Padding(
+                          padding: EdgeInsets.only(bottom: AppDs.space2.v),
+                          child: _RiderJobCard(
+                            job: job,
+                            onChanged: _load,
+                            variant: _RiderJobVariant.slip,
+                          ),
+                        ),
+                      ),
+                ],
+              ],
+              if (_section == 2) ...[
+                RiderSignalStrip(
+                  online: rider.online,
+                  busy: _togglingOnline,
+                  onChanged: _togglingOnline ? null : _toggleOnline,
+                  name: rider.name,
+                  plate: rider.plate,
+                  district: rider.district,
+                ),
+                SizedBox(height: AppDs.space4.v),
+                Text(
+                  rider.online
+                      ? 'msg_print_online_active_hint'.tr
+                      : 'msg_print_online_idle_hint'.tr,
+                  style: AppTypography.secondary(Theme.of(context)).copyWith(
+                    color: AppDs.textOnDarkSecondary,
+                    height: 1.4,
+                  ),
+                ),
+                if (rider.areas.isNotEmpty) ...[
+                  SizedBox(height: AppDs.space4.v),
+                  RiderSectionLabel('lbl_print_service_areas'.tr),
+                  SizedBox(height: AppDs.space2.v),
+                  Wrap(
+                    spacing: AppDs.space2.h,
+                    runSpacing: AppDs.space2.v,
+                    children: rider.areas
+                        .map(
+                          (area) => Container(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: AppDs.space3.h,
+                              vertical: AppDs.space1.v,
+                            ),
+                            decoration: BoxDecoration(
+                              color: RiderDs.panel,
+                              borderRadius:
+                                  BorderRadius.circular(AppDs.radiusSm),
+                              border: Border.all(
+                                color: RiderDs.accent.withValues(alpha: 0.35),
+                              ),
+                            ),
+                            child: Text(
+                              area,
+                              style: AppTypography.caption(
+                                Theme.of(context),
+                              ).copyWith(
+                                color: RiderDs.accent,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        )
+                        .toList(),
                   ),
                 ],
-              ),
-              SizedBox(height: AppDs.space5.v),
-              PrintSectionTitle('lbl_print_verified_reviews'.tr),
-              SizedBox(height: AppDs.space3.v),
-              PrintVerifiedReviewList(reviews: _reviews),
-            ],
-            if (_section == 1) ...[
-              if (_jobs.isEmpty)
-                PrintEmptyWork(
-                  icon: Icons.local_shipping_outlined,
-                  title: 'msg_print_no_jobs'.tr,
-                  body: 'msg_print_rider_jobs_empty'.tr,
-                )
-              else
-                ..._jobs.map(
-                  (job) => Padding(
-                    padding: EdgeInsets.only(bottom: AppDs.space2.v),
-                    child: _RiderJobCard(job: job, onChanged: _load),
+              ],
+              if (_section == 3) const PrintEarningsCard(kind: 'rider'),
+              if (_section == 4) ...[
+                if (rider.needsKycAction)
+                  PrintKycStatusBanner(
+                    status: rider.status,
+                    reviewNote: rider.reviewNote,
+                    onFixDocs: () => _uploadDocsSheet(rider),
+                    onEdit: () => _editProfileSheet(rider),
+                  ),
+                Container(
+                  width: double.infinity,
+                  padding: EdgeInsets.all(AppDs.space4.h),
+                  decoration: BoxDecoration(
+                    color: RiderDs.panel,
+                    borderRadius: BorderRadius.circular(AppDs.radiusMd),
+                    border: Border.all(color: AppDs.atelierHairline(0.1)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.two_wheeler_outlined,
+                            color: RiderDs.accent,
+                            size: 22.adaptSize,
+                          ),
+                          SizedBox(width: AppDs.space2.h),
+                          Expanded(
+                            child: Text(
+                              rider.name,
+                              style: AppTypography.body(Theme.of(context))
+                                  .copyWith(
+                                color: AppDs.textOnDarkPrimary,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 18.fSize,
+                              ),
+                            ),
+                          ),
+                          if ((rider.levelLabel ?? '').isNotEmpty)
+                            PrintLevelBadge(
+                              label: rider.levelLabel,
+                              labelAr: rider.levelLabelAr,
+                            ),
+                        ],
+                      ),
+                      SizedBox(height: AppDs.space3.v),
+                      PrintLevelRail(progress: rider.levelProgress),
+                    ],
                   ),
                 ),
+                SizedBox(height: AppDs.space3.v),
+                _RiderFact('lbl_print_phone'.tr, rider.phone),
+                if (rider.nationalId != null)
+                  _RiderFact('lbl_print_national_id'.tr, rider.nationalId!),
+                if (rider.vehicle != null)
+                  _RiderFact('lbl_print_vehicle'.tr, rider.vehicle!),
+                if (rider.plate != null)
+                  _RiderFact('lbl_print_plate'.tr, rider.plate!),
+                if (rider.iban != null)
+                  _RiderFact('lbl_print_iban'.tr, rider.iban!),
+                if (rider.district != null)
+                  _RiderFact('lbl_print_district'.tr, rider.district!),
+                SizedBox(height: AppDs.space3.v),
+                PrintDocumentList(documents: rider.documents),
+                SizedBox(height: AppDs.space4.v),
+                PrintGoldButton(
+                  label: 'lbl_print_edit_profile'.tr,
+                  onPressed: () => _editProfileSheet(rider),
+                ),
+                SizedBox(height: AppDs.space2.v),
+                PrintGhostButton(
+                  label: 'lbl_print_upload_docs'.tr,
+                  icon: Icons.upload_file_outlined,
+                  onPressed: () => _uploadDocsSheet(rider),
+                ),
+              ],
             ],
-            if (_section == 2)
-              PrintOnlineStatusTile(
-                online: rider.online,
-                busy: _togglingOnline,
-                onChanged: _togglingOnline ? null : _toggleOnline,
-              ),
-            if (_section == 3) const PrintEarningsCard(kind: 'rider'),
-            if (_section == 4) ...[
-              if (rider.needsKycAction)
-                PrintKycStatusBanner(
-                  status: rider.status,
-                  reviewNote: rider.reviewNote,
-                  onFixDocs: () => _uploadDocsSheet(rider),
-                  onEdit: () => _editProfileSheet(rider),
-                ),
-              _RiderFact('lbl_print_owner_name'.tr, rider.name),
-              _RiderFact('lbl_print_phone'.tr, rider.phone),
-              if (rider.nationalId != null)
-                _RiderFact('lbl_print_national_id'.tr, rider.nationalId!),
-              if (rider.vehicle != null)
-                _RiderFact('lbl_print_vehicle'.tr, rider.vehicle!),
-              if (rider.plate != null)
-                _RiderFact('lbl_print_plate'.tr, rider.plate!),
-              if (rider.iban != null)
-                _RiderFact('lbl_print_iban'.tr, rider.iban!),
-              if (rider.district != null)
-                _RiderFact('lbl_print_district'.tr, rider.district!),
-              SizedBox(height: 12.v),
-              PrintDocumentList(documents: rider.documents),
-              SizedBox(height: 16.v),
-              PrintGoldButton(
-                label: 'lbl_print_edit_profile'.tr,
-                onPressed: () => _editProfileSheet(rider),
-              ),
-              SizedBox(height: 10.v),
-              OutlinedButton(
-                onPressed: () => _uploadDocsSheet(rider),
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size.fromHeight(48),
-                  side: const BorderSide(color: AppDs.printGold),
-                ),
-                child: Text(
-                  'lbl_print_upload_docs'.tr,
-                  style: const TextStyle(color: AppDs.printGold),
-                ),
-              ),
-            ],
-          ],
+          ),
         ),
-      ),
     );
   }
 
@@ -919,11 +1153,18 @@ class _PrintRiderRegisterScreenState extends State<PrintRiderRegisterScreen> {
   }
 }
 
+enum _RiderJobVariant { runBoard, slip }
+
 class _RiderJobCard extends StatefulWidget {
-  const _RiderJobCard({required this.job, required this.onChanged});
+  const _RiderJobCard({
+    required this.job,
+    required this.onChanged,
+    this.variant = _RiderJobVariant.slip,
+  });
 
   final PrintDeliveryInfo job;
   final VoidCallback onChanged;
+  final _RiderJobVariant variant;
 
   @override
   State<_RiderJobCard> createState() => _RiderJobCardState();
@@ -935,30 +1176,33 @@ class _RiderJobCardState extends State<_RiderJobCard> {
   bool _busy = false;
 
   @override
+  void initState() {
+    super.initState();
+    final pickup = widget.job.pickupCode?.trim();
+    if (pickup != null && pickup.isNotEmpty) {
+      _code.text = pickup;
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _RiderJobCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final pickup = widget.job.pickupCode?.trim();
+    if (pickup != null &&
+        pickup.isNotEmpty &&
+        _code.text.trim().isEmpty) {
+      _code.text = pickup;
+    }
+  }
+
+  @override
   void dispose() {
     _code.dispose();
     super.dispose();
   }
 
-  String? get _nextAction {
-    switch (widget.job.status) {
-      case 'requested':
-        return 'accept';
-      case 'assigned':
-        return 'going_to_shop';
-      case 'going_to_shop':
-        return widget.job.arrivedShopAt == null ? 'arrive_shop' : 'pickup';
-      case 'picked_up':
-        return 'on_route';
-      case 'on_route':
-        return widget.job.arrivedCustomerAt == null ? 'arrive_customer' : null;
-      default:
-        return null;
-    }
-  }
-
   Future<void> _run() async {
-    final action = _nextAction;
+    final action = riderNextAction(widget.job);
     if (action == null) return;
     setState(() => _busy = true);
     final PrintResult<PrintDeliveryInfo> result;
@@ -980,100 +1224,57 @@ class _RiderJobCardState extends State<_RiderJobCard> {
     widget.onChanged();
   }
 
+  VoidCallback? get _chat {
+    final orderId = widget.job.orderId;
+    if (orderId == null || widget.job.status == 'requested') return null;
+    return () => NavigatorService.pushNamed(
+          AppRoutes.printChatScreen,
+          arguments: {
+            'orderId': orderId,
+            'thread': 'shop_rider',
+            'viewer': 'rider',
+          },
+        );
+  }
+
+  VoidCallback? get _review {
+    final orderId = widget.job.orderId;
+    if (orderId == null || widget.job.status != 'delivered') return null;
+    return () async {
+      await showPrintReviewSheet(
+        context: context,
+        orderId: orderId,
+        target: 'customer',
+      );
+      widget.onChanged();
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     final job = widget.job;
-    final action = _nextAction;
-    return Container(
-      padding: EdgeInsets.all(14.h),
-      decoration: BoxDecoration(
-        color: AppDs.surfaceRaised,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            '#${job.orderId ?? job.id} · ${'lbl_print_status_${job.status}'.tr}',
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          if (job.shopName != null)
-            Text(job.shopName!, style: const TextStyle(color: Colors.white70)),
-          if (job.pickupCode != null)
-            Text('${'lbl_print_pickup_code'.tr}: ${job.pickupCode}'),
-          if (job.areaCode != null)
-            Text('${'lbl_print_area'.tr}: ${job.areaCode}'),
-          if (job.address != null)
-            Text(job.address!, style: const TextStyle(color: Colors.white70)),
-          Text(
-            '${'lbl_print_delivery_fee'.tr}: ${printSar(job.fee)} · ${job.distanceKm.toStringAsFixed(1)} km',
-            style: const TextStyle(color: Colors.white70),
-          ),
-          Text(
-            '${'lbl_print_expected_earning'.tr}: ${printSar(job.expectedEarning)}',
-            style: const TextStyle(color: AppDs.printGold),
-          ),
-          Text(
-            'msg_print_earning_not_paid'.tr,
-            style: const TextStyle(color: Colors.white54, fontSize: 12),
-          ),
-          if (action == 'pickup') ...[
-            SizedBox(height: 8.v),
-            TextField(
-              controller: _code,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                labelText: 'lbl_print_pickup_code'.tr,
-                labelStyle: const TextStyle(color: AppDs.textOnDarkSecondary),
-                filled: true,
-                fillColor: AppDs.surfaceBase,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-          ],
-          if (job.status != 'requested' && job.orderId != null)
-            TextButton(
-              onPressed: () => NavigatorService.pushNamed(
-                AppRoutes.printChatScreen,
-                arguments: {
-                  'orderId': job.orderId,
-                  'thread': 'shop_rider',
-                  'viewer': 'rider',
-                },
-              ),
-              child: Text('lbl_print_rider_chat'.tr),
-            ),
-          if (action != null)
-            Padding(
-              padding: EdgeInsets.only(top: 8.v),
-              child: PrintGoldButton(
-                label: 'lbl_print_rider_action_$action'.tr,
-                loading: _busy,
-                onPressed: _run,
-              ),
-            ),
-          if (job.status == 'delivered' && job.orderId != null)
-            Padding(
-              padding: EdgeInsets.only(top: 8.v),
-              child: PrintGoldButton(
-                label: 'lbl_print_review_customer'.tr,
-                onPressed: () async {
-                  await showPrintReviewSheet(
-                    context: context,
-                    orderId: job.orderId!,
-                    target: 'customer',
-                  );
-                  widget.onChanged();
-                },
-              ),
-            ),
-        ],
-      ),
+    final action = riderNextAction(job);
+    final needsCode = action == 'pickup';
+
+    if (widget.variant == _RiderJobVariant.runBoard) {
+      return RiderRunBoard(
+        job: job,
+        busy: _busy,
+        onAction: action == null ? null : _run,
+        pickupController: needsCode ? _code : null,
+        onChat: _chat,
+        onReview: _review,
+      );
+    }
+
+    return RiderDispatchSlip(
+      job: job,
+      busy: _busy,
+      onAction: action == null ? null : _run,
+      expanded: riderJobIsActive(job) || job.status == 'delivered',
+      pickupController: needsCode ? _code : null,
+      onChat: _chat,
+      onReview: _review,
     );
   }
 }

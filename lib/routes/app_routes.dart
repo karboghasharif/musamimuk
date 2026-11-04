@@ -40,6 +40,7 @@ import '../presentation/screen_contesttwo_screen/screen_contesttwo_screen.dart';
 import '../presentation/ai_studio/ai_studio_chat_screen.dart';
 import '../presentation/ai_studio/ai_studio_design_screen.dart';
 import '../presentation/ai_studio/ai_studio_image_screen.dart';
+import '../presentation/ai_studio/ai_studio_image_tools_screen.dart';
 import '../presentation/ai_studio/ai_studio_vision_screen.dart';
 import '../presentation/about_us_screen/about_us_screen.dart';
 import '../presentation/screen_twentythree_screen/screen_twentythree_screen.dart';
@@ -135,6 +136,7 @@ class AppRoutes {
   static const String aiStudioDesignScreen = '/ai_studio_design_screen';
   static const String aiStudioChatScreen = '/ai_studio_chat_screen';
   static const String aiStudioVisionScreen = '/ai_studio_vision_screen';
+  static const String aiStudioImageToolsScreen = '/ai_studio_image_tools_screen';
   static const String printSettingsScreen = '/print_settings_screen';
   static const String printShopsScreen = '/print_shops_screen';
   static const String printShopProfileScreen = '/print_shop_profile_screen';
@@ -207,6 +209,7 @@ class AppRoutes {
     aiStudioDesignScreen: AiStudioDesignScreen.builder,
     aiStudioChatScreen: AiStudioChatScreen.builder,
     aiStudioVisionScreen: AiStudioVisionScreen.builder,
+    aiStudioImageToolsScreen: AiStudioImageToolsScreen.builder,
     printSettingsScreen: PrintSettingsScreen.builder,
     printShopsScreen: PrintShopsScreen.builder,
     printShopProfileScreen: PrintShopProfileScreen.builder,

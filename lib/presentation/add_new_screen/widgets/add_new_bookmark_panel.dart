@@ -6,6 +6,7 @@ import '../../../data/models/asset_meta.dart';
 import '../../../data/repositories/asset_repository.dart';
 import '../models/gridgallery_pic_item_model.dart';
 import 'api_asset_bottom_sheet.dart';
+import 'design_pack/design_pack_browser_sheet.dart';
 import 'gridgallery_pic_item_widget.dart';
 import 'online_assets/online_assets_category_sheet.dart';
 
@@ -72,7 +73,12 @@ class _AddNewBookmarkPanelState extends State<AddNewBookmarkPanel> {
     final base = widget.baseGridItems;
     final result = List<GridgalleryPicItemModel>.from(base);
 
-    // Always expose Online Assets next to Add Text.
+    // Offline Design Pack + Online Assets next to Add Text.
+    final packTile = GridgalleryPicItemModel(
+      gallerypic: 'lbl_design_pack'.tr,
+      icon: Icons.inventory_2_outlined,
+      id: 'design_pack',
+    );
     final onlineTile = GridgalleryPicItemModel(
       gallerypic: 'lbl_online_assets'.tr,
       icon: Icons.travel_explore_rounded,
@@ -80,8 +86,9 @@ class _AddNewBookmarkPanelState extends State<AddNewBookmarkPanel> {
     );
     final insertAfterText =
         result.indexWhere((e) => e.gallerypic == 'Add Text');
-    final onlineAt = insertAfterText >= 0 ? insertAfterText + 1 : result.length;
-    result.insert(onlineAt, onlineTile);
+    final packAt = insertAfterText >= 0 ? insertAfterText + 1 : result.length;
+    result.insert(packAt, packTile);
+    result.insert(packAt + 1, onlineTile);
 
     if (_loadingTypes || _assetTypes.isEmpty) return result;
 
@@ -92,7 +99,7 @@ class _AddNewBookmarkPanelState extends State<AddNewBookmarkPanel> {
         id: 'asset_type:$type',
       );
     });
-    result.insertAll(onlineAt + 1, assetTiles);
+    result.insertAll(packAt + 2, assetTiles);
     return result;
   }
 
@@ -155,6 +162,14 @@ class _AddNewBookmarkPanelState extends State<AddNewBookmarkPanel> {
               model,
               onTapColumngallery: () async {
                 final id = model.id ?? '';
+                if (id == 'design_pack') {
+                  await showDesignPackBrowserSheet<void>(
+                    context: context,
+                    editorKey: widget.editorKey,
+                    onAssetAdded: widget.onAssetAdded,
+                  );
+                  return;
+                }
                 if (id == 'online_assets') {
                   await showOnlineAssetsCategorySheet<void>(
                     context: context,

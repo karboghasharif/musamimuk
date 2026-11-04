@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/app_export.dart';
 import '../../data/models/print_models.dart';
 import '../../data/repositories/print_repository.dart';
+import 'print_live.dart';
 import 'print_ui.dart';
 
 class PrintNoticesScreen extends StatefulWidget {
@@ -19,11 +22,29 @@ class _PrintNoticesScreenState extends State<PrintNoticesScreen> {
   List<PrintNotice> _notices = const [];
   bool _loading = true;
   String? _error;
+  Timer? _poll;
+  VoidCallback? _stopLive;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _poll = Timer.periodic(const Duration(seconds: 12), (_) => _softReload());
+    _stopLive = PrintLive.instance.listenNotifications(_softReload);
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    _stopLive?.call();
+    super.dispose();
+  }
+
+  Future<void> _softReload() async {
+    if (!mounted || _loading) return;
+    final result = await _repo.notices();
+    if (!mounted || result is! PrintSuccess<List<PrintNotice>>) return;
+    setState(() => _notices = result.data);
   }
 
   Future<void> _load() async {

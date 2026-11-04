@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:equatable/equatable.dart';
 import '../../../core/app_export.dart';
 import '../../../data/repositories/auth_repository.dart';
+import '../../notifications/notification_inbox_controller.dart';
 import '../../print/print_open_orders_sync.dart';
 import '../../subscription/push_auth_sync.dart';
 import '../../subscription/revenue_cat_auth_sync.dart';
@@ -115,6 +116,7 @@ class Screen0RegisterBloc
           await prefs.setWorkMode(PrefUtils.workModeNormal);
         }
         syncPrintOpenOrdersAfterAuth();
+        NotificationInboxController.instance.start();
         emit(state.copyWith(
           isLoading: false,
           registerError: null,

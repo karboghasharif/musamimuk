@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import '../../core/deeplink/app_link_config.dart';
 import '../../core/network/api_client.dart';
 import '../../core/network/api_utils.dart';
 import '../models/app_version_models.dart';
@@ -116,9 +117,6 @@ class AppVersionRepository {
   }
 
   String _defaultStoreUrl() {
-    if (_isIos) {
-      return '';
-    }
-    return 'https://play.google.com/store/apps/details?id=com.musamimuk.app';
+    return AppLinkConfig.storeUrl(isIos: _isIos);
   }
 }

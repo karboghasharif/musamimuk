@@ -26,6 +26,9 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<!-- Standard HTTPS / iOS crypto only — declare in App Store Connect if this changes. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>This app needs access to your photo library so you can add images to your designs.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
@@ -111,7 +114,7 @@
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>CFBundleURLName</key>
-			<string>com.musamimuk.app</string>
+			<string>com.musamimuk.ios.app</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>musamimuk</string>

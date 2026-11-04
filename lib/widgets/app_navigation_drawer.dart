@@ -3,14 +3,17 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:toastification/toastification.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 import '../core/app_export.dart';
+import '../core/deeplink/app_link_config.dart';
 import '../core/utils/app_toast.dart';
 import '../data/repositories/auth_repository.dart';
+import '../presentation/notifications/notification_inbox_controller.dart';
 import '../presentation/print/print_mode_switch.dart';
 import '../presentation/wallet/wallet_auth_sync.dart';
-
-const _kGooglePlayListingUrl =
-    'https://play.google.com/store/apps/details?id=com.musamimuk.app';
 
 const Color kAppNavigationDrawerBackground = Color(0xFF1E2128);
 
@@ -149,13 +152,23 @@ class AppNavigationDrawer extends StatelessWidget {
                       },
                     ),
                   if (!isGuest)
-                    _DrawerNavTile(
-                      icon: Icons.notifications_outlined,
-                      label: 'lbl_notifications'.tr,
-                      onTap: () {
-                        Navigator.pop(context);
-                        NavigatorService.pushNamed(
-                          AppRoutes.notificationsScreen,
+                    ListenableBuilder(
+                      listenable: NotificationInboxController.instance,
+                      builder: (context, _) {
+                        final unread =
+                            NotificationInboxController.instance.unreadCount;
+                        return _DrawerNavTile(
+                          icon: Icons.notifications_outlined,
+                          label: 'lbl_notifications'.tr,
+                          badge: unread > 0
+                              ? (unread > 99 ? '99+' : '$unread')
+                              : null,
+                          onTap: () {
+                            Navigator.pop(context);
+                            NavigatorService.pushNamed(
+                              AppRoutes.notificationsScreen,
+                            );
+                          },
                         );
                       },
                     ),
@@ -321,11 +334,13 @@ class _DrawerNavTile extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onTap,
+    this.badge,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+  final String? badge;
 
   @override
   Widget build(BuildContext context) {
@@ -353,6 +368,26 @@ class _DrawerNavTile extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (badge != null) ...[
+                  SizedBox(width: 8.h),
+                  Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 8.h,
+                      vertical: 2.v,
+                    ),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      badge!,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onPrimary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -462,7 +497,11 @@ Future<void> _showRateAppDialog(BuildContext context) async {
           TextButton(
             style: TextButton.styleFrom(foregroundColor: onPrimary),
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text('lbl_open_play_store'.tr),
+            child: Text(
+              (!kIsWeb && Platform.isIOS)
+                  ? 'lbl_open_app_store'.tr
+                  : 'lbl_open_play_store'.tr,
+            ),
           ),
         ],
       );
@@ -470,7 +509,9 @@ Future<void> _showRateAppDialog(BuildContext context) async {
   );
   if (shouldOpen != true || !context.mounted) return;
 
-  final uri = Uri.parse(_kGooglePlayListingUrl);
+  final uri = Uri.parse(
+    AppLinkConfig.storeUrl(isIos: !kIsWeb && Platform.isIOS),
+  );
   try {
     final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!ok && context.mounted) {

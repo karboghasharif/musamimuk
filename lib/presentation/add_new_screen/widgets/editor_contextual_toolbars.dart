@@ -106,6 +106,7 @@ class TextContextToolbar extends StatelessWidget {
     this.onToggleUnderline,
     this.onPickTextColor,
     this.onPickTextBackgroundColor,
+    this.onCurveText,
   });
 
   final ThemeData theme;
@@ -132,6 +133,8 @@ class TextContextToolbar extends StatelessWidget {
   final VoidCallback? onToggleUnderline;
   final VoidCallback? onPickTextColor;
   final VoidCallback? onPickTextBackgroundColor;
+  /// Opens Curve text sheet (convert [TextLayer] → curved WidgetLayer).
+  final VoidCallback? onCurveText;
 
   static const Color _onLightBar = Color(0xFF1A1A1A);
 
@@ -305,6 +308,13 @@ class TextContextToolbar extends StatelessWidget {
                                 label: 'Size',
                                 onTap: onSize,
                               ),
+                              if (onCurveText != null)
+                                _SecondaryBarTool(
+                                  theme: theme,
+                                  icon: Icons.waves_rounded,
+                                  label: 'lbl_curve_text'.tr,
+                                  onTap: onCurveText!,
+                                ),
                             ],
                           ),
                   ),
@@ -674,6 +684,12 @@ class ImageContextToolbar extends StatelessWidget {
     this.clippingMaskActive = false,
     this.secondaryPanel = 'default',
     this.adjustPanel = const SizedBox.shrink(),
+    this.onEditCurve,
+    this.onEditCurvedText,
+    this.isCurvedTextLayer = false,
+    this.onPerspectiveWarp,
+    this.onAiUpscale,
+    this.onAiInpaint,
   });
 
   final ThemeData theme;
@@ -698,6 +714,17 @@ class ImageContextToolbar extends StatelessWidget {
   final String secondaryPanel;
   final Widget adjustPanel;
 
+  /// Curved-text WidgetLayer actions (shown instead of Replace/AI/Color/Adjust).
+  final VoidCallback? onEditCurve;
+  final VoidCallback? onEditCurvedText;
+  final bool isCurvedTextLayer;
+
+  /// Perspective quad warp for raster image layers.
+  final VoidCallback? onPerspectiveWarp;
+
+  /// AI upscale / inpaint (raster image layers only).
+  final VoidCallback? onAiUpscale;
+  final VoidCallback? onAiInpaint;
   @override
   Widget build(BuildContext context) {
     final cs = theme.colorScheme;
@@ -764,6 +791,24 @@ class ImageContextToolbar extends StatelessWidget {
                             ? 'lbl_release_mask'.tr
                             : 'lbl_clipping_mask'.tr,
                         onTap: onClippingMask!,
+                      ),
+                    if (onPerspectiveWarp != null)
+                      _PrimaryBarTool(
+                        icon: Icons.open_with_rounded,
+                        label: 'lbl_perspective_warp'.tr,
+                        onTap: onPerspectiveWarp!,
+                      ),
+                    if (onAiUpscale != null)
+                      _PrimaryBarTool(
+                        icon: Icons.hd_outlined,
+                        label: 'lbl_ai_upscale'.tr,
+                        onTap: onAiUpscale!,
+                      ),
+                    if (onAiInpaint != null)
+                      _PrimaryBarTool(
+                        icon: Icons.brush_outlined,
+                        label: 'lbl_ai_inpaint'.tr,
+                        onTap: onAiInpaint!,
                       ),
                   ],
                 ),
@@ -850,31 +895,48 @@ class ImageContextToolbar extends StatelessWidget {
                             ),
                             child: Row(
                               children: [
-                                _SecondaryBarTool(
-                                  theme: theme,
-                                  icon: Icons.add_photo_alternate_outlined,
-                                  label: 'Replace',
-                                  onTap: onReplace,
-                                ),
-                                _SecondaryBarTool(
-                                  theme: theme,
-                                  icon: Icons.auto_fix_high_rounded,
-                                  label: 'msg_remove_background'.tr,
-                                  onTap: onAiRemoveBg,
-                                ),
-                                _SecondaryBarTool(
-                                  theme: theme,
-                                  icon: Icons.palette_outlined,
-                                  label: 'Color',
-                                  onTap: onColor,
-                                ),
-                                _SecondaryBarTool(
-                                  theme: theme,
-                                  icon: Icons.tune_rounded,
-                                  label: 'Adjust',
-                                  selected: isAdjust,
-                                  onTap: onAdjust,
-                                ),
+                                if (isCurvedTextLayer) ...[
+                                  if (onEditCurve != null)
+                                    _SecondaryBarTool(
+                                      theme: theme,
+                                      icon: Icons.waves_rounded,
+                                      label: 'lbl_edit_curve'.tr,
+                                      onTap: onEditCurve!,
+                                    ),
+                                  if (onEditCurvedText != null)
+                                    _SecondaryBarTool(
+                                      theme: theme,
+                                      icon: Icons.edit_outlined,
+                                      label: 'lbl_curved_text_content'.tr,
+                                      onTap: onEditCurvedText!,
+                                    ),
+                                ] else ...[
+                                  _SecondaryBarTool(
+                                    theme: theme,
+                                    icon: Icons.add_photo_alternate_outlined,
+                                    label: 'Replace',
+                                    onTap: onReplace,
+                                  ),
+                                  _SecondaryBarTool(
+                                    theme: theme,
+                                    icon: Icons.auto_fix_high_rounded,
+                                    label: 'msg_remove_background'.tr,
+                                    onTap: onAiRemoveBg,
+                                  ),
+                                  _SecondaryBarTool(
+                                    theme: theme,
+                                    icon: Icons.palette_outlined,
+                                    label: 'Color',
+                                    onTap: onColor,
+                                  ),
+                                  _SecondaryBarTool(
+                                    theme: theme,
+                                    icon: Icons.tune_rounded,
+                                    label: 'Adjust',
+                                    selected: isAdjust,
+                                    onTap: onAdjust,
+                                  ),
+                                ],
                               ],
                             ),
                           ),

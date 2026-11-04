@@ -165,10 +165,22 @@ class PushNotificationService {
 
   /// Re-register after login so the backend can target this user.
   Future<void> syncTokenAfterAuth() async {
-    if (!_initialized) return;
-    final token = _fcmToken ?? await _refreshAndStoreToken();
+    if (!_initialized) {
+      // main() init may still be racing; retry shortly.
+      Future<void>.delayed(const Duration(seconds: 2), () {
+        if (_initialized) unawaited(syncTokenAfterAuth());
+      });
+      return;
+    }
+    var token = _fcmToken ?? await _refreshAndStoreToken();
+    if (token == null) {
+      await Future<void>.delayed(const Duration(seconds: 3));
+      token = await _refreshAndStoreToken();
+    }
     if (token != null) {
       await _registerTokenWithBackend(token);
+    } else if (kDebugMode) {
+      debugPrint('FCM syncTokenAfterAuth: no token available');
     }
   }
 
@@ -187,7 +199,11 @@ class PushNotificationService {
           'device_id': deviceId,
         },
       );
-      if (kDebugMode) debugPrint('FCM token registered with backend');
+      if (kDebugMode) {
+        debugPrint(
+          'FCM token registered with backend (device=$deviceId)',
+        );
+      }
     } catch (e) {
       if (kDebugMode) {
         debugPrint('FCM token backend register skipped/failed: $e');
@@ -195,27 +211,53 @@ class PushNotificationService {
     }
   }
 
-  Future<void> _onForegroundMessage(RemoteMessage message) async {
-    final notification = message.notification;
-    if (notification == null) return;
+  /// Show a local tray notification (used for FCM foreground + Reverb pings).
+  Future<void> showLocal({
+    required String title,
+    required String body,
+    Map<String, dynamic>? data,
+  }) async {
+    if (!_initialized) return;
+    final trimmedTitle = title.trim();
+    final trimmedBody = body.trim();
+    if (trimmedTitle.isEmpty && trimmedBody.isEmpty) return;
 
-    final android = notification.android;
     await _local.show(
-      id: notification.hashCode,
-      title: notification.title,
-      body: notification.body,
-      notificationDetails: NotificationDetails(
+      id: Object.hash(trimmedTitle, trimmedBody, DateTime.now().second),
+      title: trimmedTitle.isEmpty ? 'Musamimuk' : trimmedTitle,
+      body: trimmedBody,
+      notificationDetails: const NotificationDetails(
         android: AndroidNotificationDetails(
           kMusamimukPushChannelId,
           kMusamimukPushChannelName,
           channelDescription: kMusamimukPushChannelDesc,
           importance: Importance.high,
           priority: Priority.high,
-          icon: android?.smallIcon ?? '@mipmap/ic_launcher',
+          icon: '@mipmap/ic_launcher',
         ),
-        iOS: const DarwinNotificationDetails(),
+        iOS: DarwinNotificationDetails(),
       ),
-      payload: jsonEncode(message.data),
+      payload: jsonEncode(data ?? const <String, dynamic>{'type': 'print'}),
+    );
+  }
+
+  Future<void> _onForegroundMessage(RemoteMessage message) async {
+    final notification = message.notification;
+    final title = (notification?.title ?? message.data['title'] ?? '')
+        .toString()
+        .trim();
+    final body = (notification?.body ??
+            message.data['message'] ??
+            message.data['body'] ??
+            '')
+        .toString()
+        .trim();
+    if (title.isEmpty && body.isEmpty) return;
+
+    await showLocal(
+      title: title,
+      body: body,
+      data: message.data,
     );
   }
 
