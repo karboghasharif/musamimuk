@@ -32,6 +32,9 @@ Future<void> showPrintModeSheet(BuildContext context) async {
   }
 
   if (!host.mounted) return;
+  // Nothing to switch when the account only has Design (or one mode).
+  if (available.length <= 1) return;
+
   final selected = await showWorkModePicker(
     host,
     available: available,
@@ -102,6 +105,8 @@ Future<Set<String>> resolveAvailableWorkModes({
 }
 
 /// Dialog / sheet to pick Design, Shop, or Rider (only listed [available] modes).
+///
+/// Skips the dialog when there is at most one mode — returns that mode (or null).
 Future<String?> showWorkModePicker(
   BuildContext context, {
   required Set<String> available,
@@ -114,6 +119,10 @@ Future<String?> showWorkModePicker(
     PrefUtils.workModeShop,
     PrefUtils.workModeRider,
   ].where(available.contains).toList(growable: false);
+
+  if (ordered.length <= 1) {
+    return Future<String?>.value(ordered.isEmpty ? null : ordered.first);
+  }
 
   return showDialog<String>(
     context: context,
@@ -243,6 +252,9 @@ class PrintModeButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (cachedAvailableWorkModes().length <= 1) {
+      return const SizedBox.shrink();
+    }
     return IconButton(
       tooltip: 'lbl_switch_mode'.tr,
       onPressed: () => showPrintModeSheet(context),

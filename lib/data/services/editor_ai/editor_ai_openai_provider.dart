@@ -10,6 +10,7 @@ import 'package:pro_image_editor/pro_image_editor.dart';
 import '../../../core/config/editor_ai_config.dart';
 import '../../../core/network/authenticated_image.dart';
 import '../../../core/utils/design_state_history.dart';
+import '../../../presentation/add_new_screen/utils/musami_image_fit.dart';
 import '../../models/editor_ai_api_models.dart';
 import 'editor_ai_api_service.dart';
 import 'editor_ai_asset_registry.dart';
@@ -225,7 +226,14 @@ class EditorAiOpenAiProvider extends EditorAiMessageBase {
         fileUrl: fallbackFile?.path,
         meta: exportMeta,
       ),
-      meta: {...exportMeta, 'musamiAspect': layerHeight / layerWidth},
+      meta: {
+        ...exportMeta,
+        ...musamiPhotoInsertMeta(
+          layerKind: 'ai-image',
+          width: layerWidth,
+          height: layerHeight,
+        ),
+      },
       widget: SizedBox(
         width: layerWidth,
         height: layerHeight,

@@ -38,6 +38,7 @@ import 'widgets/canvas_resize_size_panel.dart';
 import 'widgets/design_save_form_dialog.dart';
 import 'widgets/design_save_success_sheet.dart';
 import 'widgets/musami_text_layer_transform_overlay.dart';
+import 'widgets/musami_app_color_picker.dart';
 import 'widgets/musami_text_editor_widgets.dart';
 import 'widgets/musami_text_layer_style_sheet.dart';
 import 'widgets/editor_align_arrange_sheet.dart';
@@ -74,6 +75,7 @@ import '../../core/utils/design_state_history.dart';
 import 'utils/musami_ai_image_tools_apply.dart';
 import 'utils/musami_design_pack_border_frame.dart';
 import 'utils/musami_document_controller.dart';
+import 'utils/musami_image_fit.dart';
 import 'utils/musami_layer_raster_utils.dart';
 import 'widgets/musami_ai_inpaint_sheet.dart';
 import 'widgets/musami_ai_upscale_sheet.dart';
@@ -533,6 +535,11 @@ WidgetLayer musamiRebuildWidgetLayerVisuals(
         )
       : current.interaction;
 
+  // Keep exportConfigs.meta aligned with layer.meta so widgetLoader + redesign
+  // restore fit / aspect lock / clip keys (same pattern as canvas borders).
+  final exportMeta = Map<String, dynamic>.from(meta);
+  final exportConfigs = current.exportConfigs.copyWith(meta: exportMeta);
+
   return WidgetLayer(
     id: current.id,
     key: current.key,
@@ -544,7 +551,7 @@ WidgetLayer musamiRebuildWidgetLayerVisuals(
     flipX: current.flipX,
     flipY: current.flipY,
     interaction: interaction,
-    exportConfigs: current.exportConfigs,
+    exportConfigs: exportConfigs,
     meta: meta,
     boxConstraints: current.boxConstraints,
     groupId: current.groupId,
@@ -668,15 +675,18 @@ Widget musamiUnwrapLayerFrameBox(Widget bare) {
 
 /// Wraps [content] in a frame box of `width` × `width * aspect`.
 ///
-/// The frame is the box the user drags; [content] keeps its own intrinsic size
-/// and proportions. `BoxFit.cover` + `ClipRect` scale the content up until it
-/// covers the frame and crop whatever falls outside, so a frame of any ratio
-/// never stretches a single pixel of the source image.
+/// The frame is the box the user drags; [content] keeps its own intrinsic size.
+///
+/// - [BoxFit.cover] (default / Crop mode): scale uniformly and clip — pixels
+///   keep aspect; changing the frame crops.
+/// - [BoxFit.fill] (Stretch mode): non-uniform scale so content fills the
+///   frame — pixels distort when frame aspect ≠ image aspect.
 Widget musamiFrameWidgetLayerCore(
   Widget content, {
   required double width,
   required double aspect,
   Alignment cropAlignment = Alignment.center,
+  BoxFit fit = BoxFit.cover,
 }) {
   final frameWidth = musamiSanitizedLayerWidth(width);
   final frameHeight = musamiSanitizedLayerWidth(
@@ -688,8 +698,8 @@ Widget musamiFrameWidgetLayerCore(
     height: frameHeight,
     child: ClipRect(
       child: FittedBox(
-        fit: BoxFit.cover,
-        alignment: cropAlignment,
+        fit: fit,
+        alignment: fit == BoxFit.fill ? Alignment.center : cropAlignment,
         clipBehavior: Clip.hardEdge,
         child: content,
       ),
@@ -699,13 +709,14 @@ Widget musamiFrameWidgetLayerCore(
 
 /// Re-frames a wrapped layer core to a new FRAME size.
 ///
-/// [width] / [aspect] describe the frame only. The image content inside is
-/// untouched, so repeated resizes never accumulate distortion.
+/// [width] / [aspect] describe the frame only. In Crop mode the image content
+/// keeps its proportions; in Stretch mode it is redrawn with [BoxFit.fill].
 Widget musamiResizeWidgetLayerCore(
   Widget wrappedWidget, {
   required double width,
   required double aspect,
   Alignment cropAlignment = Alignment.center,
+  BoxFit fit = BoxFit.cover,
 }) {
   final bare = _unwrapMusamiWidgetLayerBareCore(wrappedWidget);
   return musamiFrameWidgetLayerCore(
@@ -713,6 +724,7 @@ Widget musamiResizeWidgetLayerCore(
     width: width,
     aspect: aspect,
     cropAlignment: cropAlignment,
+    fit: fit,
   );
 }
 
@@ -760,8 +772,8 @@ Alignment musamiLayerCropAlignment(Map<String, dynamic>? meta) {
 /// Applies FRAME width / aspect plus scale / offset to a widget layer in place.
 ///
 /// Only frame geometry changes here — [kMusamiImageAspectMetaKey] is carried
-/// through untouched so the image keeps its own proportions and is re-cropped
-/// to the new frame instead of being stretched into it.
+/// through untouched. Crop mode re-covers into the new frame; Stretch mode
+/// redraws with [BoxFit.fill] so side/corner drags warp pixels.
 void musamiMutateWidgetLayerGeometry(
   ProImageEditorState editor,
   WidgetLayer layer, {
@@ -786,6 +798,8 @@ void musamiMutateWidgetLayerGeometry(
       : Map<String, dynamic>.from(layer.meta!);
   meta[kMusamiFrameAspectMetaKey] = safeFrameAspect;
   meta[kMusamiImageAspectMetaKey] = imageAspect;
+  // Do not rewrite fit mode here — crop vs stretch is an explicit user choice
+  // (and legacy imports without a key stay crop).
 
   // Canvas border frames must rebuild the full edge/corner layout — do not
   // wrap them in a photo FittedBox crop shell.
@@ -821,6 +835,7 @@ void musamiMutateWidgetLayerGeometry(
     width: safeWidth,
     aspect: safeFrameAspect,
     cropAlignment: musamiLayerCropAlignment(meta),
+    fit: musamiImageFitBoxFit(meta),
   );
   final preliminary = layer.copyWith(
     widget: core,
@@ -1578,18 +1593,18 @@ class _AddNewScreenState extends State<AddNewScreen>
     required WidgetLayer existing,
     required WidgetLayer picked,
   }) {
-    final opacity =
-        (existing.meta?['musamiOpacity'] as num?)?.toDouble() ?? 1.0;
-    final meta = Map<String, dynamic>.from(picked.meta ?? {});
-    meta.removeWhere((k, _) => musamiIsCropMetaKey(k));
-    meta['musamiOpacity'] = opacity;
-    final kind = picked.meta?['musamiLayerKind'] as String?;
-    meta['musamiLayerKind'] = (kind != null && kind.isNotEmpty)
-        ? kind
-        : 'gallery';
-    final ex = existing.meta;
-    if (ex != null) {
-      for (final k in const [
+    // Frame size/ratio stay; new image aspect comes from the replacement.
+    final frameWidth =
+        existing.width ??
+        picked.width ??
+        editor.configs.stickerEditor.initWidth;
+    final frameAspect = musamiWidgetLayerAspect(existing);
+    final meta = musamiBuildReplaceImageMeta(
+      existing: existing.meta,
+      picked: picked.meta,
+      frameAspect: frameAspect,
+      imageAspect: musamiWidgetLayerImageAspect(picked),
+      extraPreserveKeys: const [
         'musamiBorderW',
         'musamiBorderArgb',
         'musamiShadowBlur',
@@ -1597,20 +1612,10 @@ class _AddNewScreenState extends State<AddNewScreen>
         'musamiShadowDy',
         'musamiShadowStrength',
         kMusamiImageTintArgbMetaKey,
-      ]) {
-        if (ex.containsKey(k)) meta[k] = ex[k];
-      }
-    }
-
-    // Replacing swaps the image inside the existing frame: the frame keeps its
-    // size and ratio, the new image keeps its own and is cropped to fit.
-    final frameWidth =
-        existing.width ??
-        picked.width ??
-        editor.configs.stickerEditor.initWidth;
-    final frameAspect = musamiWidgetLayerAspect(existing);
-    meta[kMusamiFrameAspectMetaKey] = frameAspect;
-    meta[kMusamiImageAspectMetaKey] = musamiWidgetLayerImageAspect(picked);
+      ],
+    );
+    final opacity =
+        (meta['musamiOpacity'] as num?)?.toDouble().clamp(0.0, 1.0) ?? 1.0;
 
     final core = musamiFrameWidgetLayerCore(
       musamiUnwrapLayerFrameBox(
@@ -1619,8 +1624,12 @@ class _AddNewScreenState extends State<AddNewScreen>
       width: frameWidth,
       aspect: frameAspect,
       cropAlignment: musamiLayerCropAlignment(meta),
+      fit: musamiImageFitBoxFit(meta),
     );
     final styled = musamiComposeImageLayerVisualCore(core, meta);
+    final baseExport = picked.exportConfigs.hasParameter
+        ? picked.exportConfigs
+        : existing.exportConfigs;
     final updated = WidgetLayer(
       id: existing.id,
       key: existing.key,
@@ -1632,9 +1641,7 @@ class _AddNewScreenState extends State<AddNewScreen>
       flipX: existing.flipX,
       flipY: existing.flipY,
       interaction: existing.interaction,
-      exportConfigs: picked.exportConfigs.hasParameter
-          ? picked.exportConfigs
-          : existing.exportConfigs,
+      exportConfigs: baseExport.copyWith(meta: Map<String, dynamic>.from(meta)),
       meta: meta,
       boxConstraints: existing.boxConstraints,
       groupId: existing.groupId,
@@ -3299,6 +3306,111 @@ class _AddNewScreenState extends State<AddNewScreen>
     );
   }
 
+  /// Rebuilds a photo layer after fit / aspect-lock meta changes.
+  void _commitWidgetLayerMetaVisuals(
+    ProImageEditorState editor,
+    WidgetLayer layer,
+    Map<String, dynamic> meta,
+  ) {
+    final width =
+        layer.width ?? editor.configs.stickerEditor.initWidth.toDouble();
+    final aspect = musamiWidgetLayerAspect(layer);
+    meta[kMusamiFrameAspectMetaKey] = musamiSanitizedLayerAspect(aspect);
+    meta[kMusamiImageAspectMetaKey] = musamiWidgetLayerImageAspect(layer);
+
+    final core = musamiResizeWidgetLayerCore(
+      layer.widget,
+      width: width,
+      aspect: aspect,
+      cropAlignment: musamiLayerCropAlignment(meta),
+      fit: musamiImageFitBoxFit(meta),
+    );
+    final preliminary = layer.copyWith(
+      widget: core,
+      width: musamiSanitizedLayerWidth(width),
+      meta: meta,
+    );
+    final updated = musamiRebuildWidgetLayerVisuals(
+      preliminary,
+      meta,
+      tuneAdjustmentItems: musamiTuneItemsFromEditor(editor),
+    );
+    final idx = editor.activeLayers.indexWhere((l) => l.id == layer.id);
+    if (idx < 0) return;
+    editor.replaceLayer(index: idx, layer: updated);
+    editor.layerInteractionManager.selectedLayerId = updated.id;
+    editor.setState(() {});
+  }
+
+  /// Toggles Crop (cover) ↔ Stretch (fill) for a photo-like widget layer.
+  void _toggleImageFitMode(
+    BuildContext context,
+    ProImageEditorState editor,
+    WidgetLayer layer,
+  ) {
+    if (_editorLayerInteractionBlocked(layer)) {
+      showAppToast('msg_layer_locked_action'.tr);
+      return;
+    }
+    if (!musamiLayerSupportsImageFitMode(layer.meta)) {
+      showAppToast(
+        'msg_image_fit_unsupported'.tr,
+        type: ToastificationType.warning,
+      );
+      return;
+    }
+
+    final meta = layer.meta == null
+        ? <String, dynamic>{}
+        : Map<String, dynamic>.from(layer.meta!);
+    final next = musamiImageFitIsStretch(meta)
+        ? kMusamiImageFitCrop
+        : kMusamiImageFitStretch;
+    meta[kMusamiImageFitModeMetaKey] = next;
+    if (next == kMusamiImageFitStretch) {
+      meta[kMusamiMaintainAspectMetaKey] = false;
+    }
+    _commitWidgetLayerMetaVisuals(editor, layer, meta);
+    showAppToast(
+      next == kMusamiImageFitStretch
+          ? 'msg_image_fit_stretch_on'.tr
+          : 'msg_image_fit_crop_on'.tr,
+    );
+  }
+
+  /// Toggles proportional resize (aspect lock) for a photo-like layer.
+  void _toggleImageAspectLock(
+    BuildContext context,
+    ProImageEditorState editor,
+    WidgetLayer layer,
+  ) {
+    if (_editorLayerInteractionBlocked(layer)) {
+      showAppToast('msg_layer_locked_action'.tr);
+      return;
+    }
+    if (!musamiLayerSupportsImageFitMode(layer.meta)) {
+      showAppToast(
+        'msg_image_fit_unsupported'.tr,
+        type: ToastificationType.warning,
+      );
+      return;
+    }
+
+    final meta = layer.meta == null
+        ? <String, dynamic>{}
+        : Map<String, dynamic>.from(layer.meta!);
+    final locked = !musamiMaintainAspectFromMeta(meta);
+    meta[kMusamiMaintainAspectMetaKey] = locked;
+    // Aspect lock is independent of Crop/Stretch fill mode — do not rewrite
+    // musamiImageFitMode when unlocking (preserves intentional crop).
+    _commitWidgetLayerMetaVisuals(editor, layer, meta);
+    showAppToast(
+      locked
+          ? 'msg_image_aspect_lock_on'.tr
+          : 'msg_image_aspect_lock_off'.tr,
+    );
+  }
+
   Future<void> _openPerspectiveWarp(
     BuildContext context,
     ProImageEditorState editor,
@@ -3686,6 +3798,7 @@ class _AddNewScreenState extends State<AddNewScreen>
       width: displayWidth,
       aspect: frameAspect,
       cropAlignment: musamiLayerCropAlignment(meta),
+      fit: musamiImageFitBoxFit(meta),
     );
 
     final preliminary = layer.copyWith(
@@ -3787,10 +3900,12 @@ class _AddNewScreenState extends State<AddNewScreen>
     required BuildContext screenContext,
     required GlobalKey<ProImageEditorState> editorKey,
     required Layer layer,
+    VoidCallback? onReplace,
   }) {
     return MusamiLayerQuickBarActions(
       isLocked: _editorLayerTransformLocked(layer),
       onComment: _comingSoon,
+      onReplace: onReplace,
       onLockToggle: () {
         final editor = editorKey.currentState;
         if (editor == null) return;
@@ -3819,12 +3934,103 @@ class _AddNewScreenState extends State<AddNewScreen>
     );
   }
 
+  /// Replace image content for [layer] (gallery / sticker / API asset).
+  Future<void> _replaceWidgetLayerContent({
+    required BuildContext context,
+    required ProImageEditorState editor,
+    required WidgetLayer layer,
+    GlobalKey<ProImageEditorState>? editorKey,
+  }) async {
+    if (_editorLayerInteractionBlocked(layer)) {
+      showAppToast('msg_layer_locked_action'.tr);
+      return;
+    }
+
+    Future<void> applyPicked(WidgetLayer picked) async {
+      if (!context.mounted) return;
+      _applyReplacingWidgetLayer(
+        editor: editor,
+        existing: layer,
+        picked: picked,
+      );
+    }
+
+    final kind = _musamiImageLayerKind(layer);
+    switch (kind) {
+      case 'sticker':
+        final picked = await _showStickerPickerForReplace(context, editor);
+        if (picked != null) await applyPicked(picked);
+        break;
+      case 'png':
+        final picked = await _showApiAssetPickSheet(
+          context,
+          editorKey,
+          MediaType.png,
+        );
+        if (picked != null) await applyPicked(picked);
+        break;
+      case 'logo':
+        final picked = await _showApiAssetPickSheet(
+          context,
+          editorKey,
+          MediaType.logo,
+        );
+        if (picked != null) await applyPicked(picked);
+        break;
+      case 'shape':
+        final picked = await _showApiAssetPickSheet(
+          context,
+          editorKey,
+          MediaType.shape,
+        );
+        if (picked != null) await applyPicked(picked);
+        break;
+      case 'gallery':
+      default:
+        final picker = ImagePicker();
+        final XFile? image = await picker.pickImage(
+          source: ImageSource.gallery,
+          maxWidth: 1920,
+          maxHeight: 1920,
+        );
+        if (image == null || !context.mounted) return;
+        final bytes = await image.readAsBytes();
+        if (!context.mounted) return;
+        final imageProvider = MemoryImage(bytes);
+        await precacheImage(imageProvider, context);
+        if (!context.mounted) return;
+        final decodedSize = await _decodeImageSize(bytes);
+        if (!context.mounted) return;
+        await applyPicked(
+          WidgetLayer(
+            width: decodedSize.width,
+            scale: layer.scale,
+            widget: _buildGalleryStickerWidget(
+              context,
+              image: imageProvider,
+              width: decodedSize.width,
+              height: decodedSize.height,
+            ),
+            meta: musamiPhotoInsertMeta(
+              layerKind: 'gallery',
+              width: decodedSize.width,
+              height: decodedSize.height,
+            ),
+          ),
+        );
+        break;
+    }
+  }
+
   Widget _wrapLayerSelectionChrome({
     required OverlayChildLayoutInfo info,
     required Layer layer,
     required Size canvasBodySize,
     required MusamiLayerQuickBarActions actions,
     required Widget selectionOverlay,
+    required GlobalKey<ProImageEditorState> editorKey,
+    double appBarHeight = 0,
+    double minAppBarHeight = 0,
   }) {
     return MusamiLayerSelectionChrome(
       info: info,
@@ -3832,6 +4038,9 @@ class _AddNewScreenState extends State<AddNewScreen>
       canvasBodySize: canvasBodySize,
       actions: actions,
       selectionOverlay: selectionOverlay,
+      appBarHeight: appBarHeight,
+      minAppBarHeight: minAppBarHeight,
+      editorKey: editorKey,
     );
   }
 
@@ -4588,111 +4797,23 @@ class _AddNewScreenState extends State<AddNewScreen>
     void duplicate() {
       final layer = selectedWidgetLayer();
       if (layer == null) return;
-      final copy = WidgetLayer(
-        widget: layer.widget,
-        width: layer.width,
-        offset: layer.offset + const Offset(12, 12),
-        rotation: layer.rotation,
-        scale: layer.scale,
-        flipX: layer.flipX,
-        flipY: layer.flipY,
-        interaction: layer.interaction,
-        exportConfigs: layer.exportConfigs,
-        meta: layer.meta == null
-            ? null
-            : Map<String, dynamic>.from(layer.meta!),
-        boxConstraints: layer.boxConstraints,
-        groupId: layer.groupId,
-        startTime: layer.startTime,
-        endTime: layer.endTime,
-        enterDuration: layer.enterDuration,
-        exitDuration: layer.exitDuration,
-        enterCurve: layer.enterCurve,
-        exitCurve: layer.exitCurve,
-        transitionBuilder: layer.transitionBuilder,
+      final copy = musamiCloneLayer(
+        layer,
+        nudge: kMusamiLayerDuplicateNudge,
       );
+      if (copy == null) return;
       editor.addLayer(copy);
     }
 
     Future<void> replace() async {
       final layer = selectedWidgetLayer();
       if (layer == null) return;
-
-      Future<void> applyPicked(WidgetLayer picked) async {
-        if (!context.mounted) return;
-        _applyReplacingWidgetLayer(
-          editor: editor,
-          existing: layer,
-          picked: picked,
-        );
-      }
-
-      final kind = _musamiImageLayerKind(layer);
-
-      switch (kind) {
-        case 'sticker':
-          final picked = await _showStickerPickerForReplace(context, editor);
-          if (picked != null) await applyPicked(picked);
-          break;
-        case 'png':
-          final picked = await _showApiAssetPickSheet(
-            context,
-            state.editorKey,
-            MediaType.png,
-          );
-          if (picked != null) await applyPicked(picked);
-          break;
-        case 'logo':
-          final picked = await _showApiAssetPickSheet(
-            context,
-            state.editorKey,
-            MediaType.logo,
-          );
-          if (picked != null) await applyPicked(picked);
-          break;
-        case 'shape':
-          final picked = await _showApiAssetPickSheet(
-            context,
-            state.editorKey,
-            MediaType.shape,
-          );
-          if (picked != null) await applyPicked(picked);
-          break;
-        case 'gallery':
-        default:
-          final picker = ImagePicker();
-          final XFile? image = await picker.pickImage(
-            source: ImageSource.gallery,
-            maxWidth: 1920,
-            maxHeight: 1920,
-          );
-          if (image == null || !context.mounted) return;
-          final bytes = await image.readAsBytes();
-          if (!context.mounted) return;
-          final imageProvider = MemoryImage(bytes);
-          await precacheImage(imageProvider, context);
-          if (!context.mounted) return;
-          final decodedSize = await _decodeImageSize(bytes);
-          if (!context.mounted) return;
-          await applyPicked(
-            WidgetLayer(
-              width: decodedSize.width,
-              scale: layer.scale,
-              widget: _buildGalleryStickerWidget(
-                context,
-                image: imageProvider,
-                width: decodedSize.width,
-                height: decodedSize.height,
-              ),
-              meta: <String, dynamic>{
-                'musamiLayerKind': 'gallery',
-                if (decodedSize.width > 0)
-                  'musamiAspect': decodedSize.height / decodedSize.width,
-              },
-            ),
-          );
-          break;
-      }
+      await _replaceWidgetLayerContent(
+        context: context,
+        editor: editor,
+        layer: layer,
+        editorKey: state.editorKey,
+      );
     }
 
     void showOpacitySheet() {
@@ -5042,91 +5163,93 @@ class _AddNewScreenState extends State<AddNewScreen>
                     }
                   }
 
-                  return Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Shadow',
-                        style: AppDs.sheetTitle(
-                          sheetTheme,
-                          color: Colors.white,
+                  return SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Shadow',
+                          style: AppDs.sheetTitle(
+                            sheetTheme,
+                            color: Colors.white,
+                          ),
                         ),
-                      ),
-                      Text(
-                        'Blur',
-                        style: sheetTheme.textTheme.bodySmall?.copyWith(
-                          color: Colors.white70,
+                        Text(
+                          'Blur',
+                          style: sheetTheme.textTheme.bodySmall?.copyWith(
+                            color: Colors.white70,
+                          ),
                         ),
-                      ),
-                      Slider(
-                        value: blur.clamp(0, 48),
-                        min: 0,
-                        max: 48,
-                        divisions: 48,
-                        label: blur <= 0.05
-                            ? 'Off'
-                            : '${blur.toStringAsFixed(0)} px',
-                        onChanged: (nv) {
-                          setState(() => blur = nv);
-                          applyToEditor();
-                        },
-                      ),
-                      Text(
-                        'lbl_shadow_offset_x'.tr,
-                        style: sheetTheme.textTheme.bodySmall?.copyWith(
-                          color: Colors.white70,
+                        Slider(
+                          value: blur.clamp(0, 48),
+                          min: 0,
+                          max: 48,
+                          divisions: 48,
+                          label: blur <= 0.05
+                              ? 'Off'
+                              : '${blur.toStringAsFixed(0)} px',
+                          onChanged: (nv) {
+                            setState(() => blur = nv);
+                            applyToEditor();
+                          },
                         ),
-                      ),
-                      Slider(
-                        value: dx.clamp(-32, 32),
-                        min: -32,
-                        max: 32,
-                        divisions: 64,
-                        label: '${dx.toStringAsFixed(0)} px',
-                        onChanged: (nv) {
-                          setState(() => dx = nv);
-                          applyToEditor();
-                        },
-                      ),
-                      Text(
-                        'lbl_shadow_offset_y'.tr,
-                        style: sheetTheme.textTheme.bodySmall?.copyWith(
-                          color: Colors.white70,
+                        Text(
+                          'lbl_shadow_offset_x'.tr,
+                          style: sheetTheme.textTheme.bodySmall?.copyWith(
+                            color: Colors.white70,
+                          ),
                         ),
-                      ),
-                      Slider(
-                        value: dy.clamp(-32, 32),
-                        min: -32,
-                        max: 32,
-                        divisions: 64,
-                        label: '${dy.toStringAsFixed(0)} px',
-                        onChanged: (nv) {
-                          setState(() => dy = nv);
-                          applyToEditor();
-                        },
-                      ),
-                      Text(
-                        'Strength',
-                        style: sheetTheme.textTheme.bodySmall?.copyWith(
-                          color: Colors.white70,
+                        Slider(
+                          value: dx.clamp(-32, 32),
+                          min: -32,
+                          max: 32,
+                          divisions: 64,
+                          label: '${dx.toStringAsFixed(0)} px',
+                          onChanged: (nv) {
+                            setState(() => dx = nv);
+                            applyToEditor();
+                          },
                         ),
-                      ),
-                      Slider(
-                        value: strength,
-                        min: 0.05,
-                        max: 1,
-                        divisions: 19,
-                        onChanged: (nv) {
-                          setState(() => strength = nv);
-                          applyToEditor();
-                        },
-                      ),
-                      SizedBox(height: AppDs.space2.v),
-                      AppSecondaryButton(
-                        label: 'lbl_apply'.tr,
-                        onPressed: () => Navigator.pop(ctx),
-                      ),
-                    ],
+                        Text(
+                          'lbl_shadow_offset_y'.tr,
+                          style: sheetTheme.textTheme.bodySmall?.copyWith(
+                            color: Colors.white70,
+                          ),
+                        ),
+                        Slider(
+                          value: dy.clamp(-32, 32),
+                          min: -32,
+                          max: 32,
+                          divisions: 64,
+                          label: '${dy.toStringAsFixed(0)} px',
+                          onChanged: (nv) {
+                            setState(() => dy = nv);
+                            applyToEditor();
+                          },
+                        ),
+                        Text(
+                          'Strength',
+                          style: sheetTheme.textTheme.bodySmall?.copyWith(
+                            color: Colors.white70,
+                          ),
+                        ),
+                        Slider(
+                          value: strength,
+                          min: 0.05,
+                          max: 1,
+                          divisions: 19,
+                          onChanged: (nv) {
+                            setState(() => strength = nv);
+                            applyToEditor();
+                          },
+                        ),
+                        SizedBox(height: AppDs.space2.v),
+                        AppSecondaryButton(
+                          label: 'lbl_apply'.tr,
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ],
+                    ),
                   );
                 },
               ),
@@ -5338,6 +5461,20 @@ class _AddNewScreenState extends State<AddNewScreen>
               ? () =>
                     _openWidgetLayerCropRaster(context, editor, selectedForCrop)
               : null),
+      onFitMode: isCurvedText ||
+              selectedForCrop == null ||
+              !musamiLayerSupportsImageFitMode(selectedForCrop.meta)
+          ? null
+          : () => _toggleImageFitMode(context, editor, selectedForCrop),
+      fitModeIsStretch: selectedForCrop != null &&
+          musamiImageFitIsStretch(selectedForCrop.meta),
+      onAspectLock: isCurvedText ||
+              selectedForCrop == null ||
+              !musamiLayerSupportsImageFitMode(selectedForCrop.meta)
+          ? null
+          : () => _toggleImageAspectLock(context, editor, selectedForCrop),
+      aspectLocked: selectedForCrop != null &&
+          musamiMaintainAspectFromMeta(selectedForCrop.meta),
       onPerspectiveWarp: isCurvedText
           ? null
           : () => _openPerspectiveWarp(context, editor, selectedForCrop),
@@ -5585,6 +5722,7 @@ class _AddNewScreenState extends State<AddNewScreen>
           width: layer.width ?? editor.configs.stickerEditor.initWidth,
           aspect: frameAspect,
           cropAlignment: musamiLayerCropAlignment(meta),
+          fit: musamiImageFitBoxFit(meta),
         );
       }
 
@@ -5767,9 +5905,10 @@ class _AddNewScreenState extends State<AddNewScreen>
         enableMobilePinchRotate: false,
         style: LayerInteractionStyle(
           borderColor: theme.colorScheme.primary,
-          strokeWidth: 1.5,
-          // Slight padding improves grab / drag for small stickers & shapes.
-          overlayPadding: const EdgeInsets.all(12),
+          strokeWidth: 2,
+          // Tight padding so selection hugs content (Canva-like). Image overlay
+          // also insets chrome by this amount so the border matches pixels.
+          overlayPadding: const EdgeInsets.all(4),
         ),
         widgets: LayerInteractionWidgets(
           // Disable the built-in edit button so single-tap won't open edit.
@@ -5785,26 +5924,58 @@ class _AddNewScreenState extends State<AddNewScreen>
                     builder: (_) => const SizedBox.shrink(),
                   ),
           overlayChildBuilder: (rebuildStream, info, layer, interactions) {
-            final strokeColor = theme.colorScheme.primary;
             final editorKey = state.editorKey!;
-            final editor = editorKey.currentState;
-            final canvasBodySize = editor?.sizesManager.bodySize ?? Size.zero;
+            // Brand yellow for all selections.
+            final strokeColor = theme.colorScheme.primary;
             final quickBarActions = _buildLayerQuickBarActions(
               screenContext: context,
               editorKey: editorKey,
               layer: layer,
+              onReplace: layer is WidgetLayer &&
+                      !musamiMetaIsCurvedText(layer.meta) &&
+                      !musamiMetaIsCanvasBorderFrame(layer.meta)
+                  ? () {
+                      final ed = editorKey.currentState;
+                      if (ed == null) return;
+                      _replaceWidgetLayerContent(
+                        context: context,
+                        editor: ed,
+                        layer: layer,
+                        editorKey: editorKey,
+                      );
+                    }
+                  : null,
             );
+
+            // Resolve chrome clip insets on every rebuild — sizesManager can be
+            // 0 on first OverlayPortal layout, which previously skipped clipping
+            // and left selection borders painted over the app bar.
+            Widget wrapChrome(BuildContext chromeContext, Widget selectionOverlay) {
+              final ed = editorKey.currentState;
+              final topPad = MediaQuery.paddingOf(chromeContext).top;
+              final minAppBar = musamiEditorAppBarHeight(topPad);
+              final liveAppBar = ed?.sizesManager.appBarHeight ?? 0;
+              final body = ed?.sizesManager.bodySize ?? Size.zero;
+              return _wrapLayerSelectionChrome(
+                info: info,
+                layer: layer,
+                canvasBodySize: body,
+                editorKey: editorKey,
+                appBarHeight: liveAppBar,
+                minAppBarHeight: minAppBar,
+                actions: quickBarActions,
+                selectionOverlay: selectionOverlay,
+              );
+            }
+
             if (layer is TextLayer &&
                 layer.interaction.enableScale &&
                 layer.meta?[kMusamiLayerLockedMetaKey] != true) {
               return ReactiveWidget(
                 stream: rebuildStream,
-                builder: (_) => _wrapLayerSelectionChrome(
-                  info: info,
-                  layer: layer,
-                  canvasBodySize: canvasBodySize,
-                  actions: quickBarActions,
-                  selectionOverlay: MusamiTextLayerTransformOverlay(
+                builder: (ctx) => wrapChrome(
+                  ctx,
+                  MusamiTextLayerTransformOverlay(
                     info: info,
                     layer: layer,
                     editorKey: editorKey,
@@ -5818,17 +5989,15 @@ class _AddNewScreenState extends State<AddNewScreen>
                 layer.meta?[kMusamiLayerLockedMetaKey] != true) {
               return ReactiveWidget(
                 stream: rebuildStream,
-                builder: (_) => _wrapLayerSelectionChrome(
-                  info: info,
-                  layer: layer,
-                  canvasBodySize: canvasBodySize,
-                  actions: quickBarActions,
-                  selectionOverlay: MusamiWidgetLayerTransformOverlay(
+                builder: (ctx) => wrapChrome(
+                  ctx,
+                  MusamiWidgetLayerTransformOverlay(
                     key: ValueKey(layer.id),
                     info: info,
                     layer: layer,
                     editorKey: editorKey,
                     strokeColor: strokeColor,
+                    strokeWidth: 2,
                     onApplyGeometry:
                         (
                           updatedLayer, {
@@ -5854,12 +6023,9 @@ class _AddNewScreenState extends State<AddNewScreen>
             }
             return ReactiveWidget(
               stream: rebuildStream,
-              builder: (_) => _wrapLayerSelectionChrome(
-                info: info,
-                layer: layer,
-                canvasBodySize: canvasBodySize,
-                actions: quickBarActions,
-                selectionOverlay: MusamiDefaultLayerTransformOverlay(
+              builder: (ctx) => wrapChrome(
+                ctx,
+                MusamiDefaultLayerTransformOverlay(
                   info: info,
                   layer: layer,
                   interactions: interactions,
@@ -7506,12 +7672,11 @@ class _AddNewScreenState extends State<AddNewScreen>
               width: layerW,
               height: layerH,
             ),
-            meta: <String, dynamic>{
-              'musamiLayerKind': 'gallery',
-              // Frame and image start identical; only the frame changes later.
-              if (layerW > 0) kMusamiFrameAspectMetaKey: layerH / layerW,
-              if (layerW > 0) kMusamiImageAspectMetaKey: layerH / layerW,
-            },
+            meta: musamiPhotoInsertMeta(
+              layerKind: 'gallery',
+              width: layerW,
+              height: layerH,
+            ),
           ),
         );
         editor.layerInteractionManager.selectedLayerId =
@@ -7685,12 +7850,11 @@ class _FullScreenStickerSelectorState
                         offset: Offset.zero,
                         boxConstraints: kMusamiWidgetLayerBoxConstraints,
                         interaction: LayerInteraction(enableEdit: false),
-                        meta: <String, dynamic>{
-                          'musamiLayerKind': 'gallery',
-                          if (decodedSize.width > 0)
-                            'musamiAspect':
-                                decodedSize.height / decodedSize.width,
-                        },
+                        meta: musamiPhotoInsertMeta(
+                          layerKind: 'gallery',
+                          width: decodedSize.width,
+                          height: decodedSize.height,
+                        ),
                         widget: SizedBox(
                           width: decodedSize.width,
                           height: decodedSize.height,
@@ -7844,9 +8008,7 @@ class _FullScreenStickerSelectorState
                       exportConfigs: WidgetLayerExportConfigs(
                         id: musamiStickerExportId(stickerType, stickerIndex),
                       ),
-                      meta: const <String, dynamic>{
-                        'musamiLayerKind': 'sticker',
-                      },
+                      meta: musamiPhotoInsertMeta(layerKind: 'sticker'),
                       widget: _buildStickerWidget(stickerType, stickerIndex),
                     ),
                   );
@@ -8110,200 +8272,21 @@ class _ScreenColorPickerContent extends StatelessWidget {
 }
 
 /// Wheel mode: saturation/value gradient, hue slider, transparency slider, hex + opacity (ref 1).
-class _WheelColorPickerContent extends StatefulWidget {
+class _WheelColorPickerContent extends StatelessWidget {
   const _WheelColorPickerContent({required this.state});
   final AddNewState state;
 
   @override
-  State<_WheelColorPickerContent> createState() =>
-      _WheelColorPickerContentState();
-}
-
-class _WheelColorPickerContentState extends State<_WheelColorPickerContent> {
-  late double _hue;
-  late double _saturation;
-  late double _value;
-  late double _alpha;
-
-  @override
-  void initState() {
-    super.initState();
-    _initFromColor(widget.state.selectedBgColor ?? Colors.red);
-  }
-
-  @override
-  void didUpdateWidget(covariant _WheelColorPickerContent oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.state.selectedBgColor != widget.state.selectedBgColor) {
-      _initFromColor(widget.state.selectedBgColor ?? Colors.red);
-    }
-  }
-
-  void _initFromColor(Color c) {
-    final hsv = HSVColor.fromColor(c);
-    _hue = hsv.hue;
-    _saturation = hsv.saturation;
-    _value = hsv.value;
-    _alpha = c.a.clamp(0.0, 1.0);
-  }
-
-  void _applyColor() {
-    final c = HSVColor.fromAHSV(_alpha, _hue, _saturation, _value).toColor();
-    BlocProvider.of<AddNewBloc>(context).add(SetBgColorEvent(color: c));
-  }
-
-  static String _toHex(Color c) {
-    return '#${c.red.toRadixString(16).padLeft(2, '0')}'
-        '${c.green.toRadixString(16).padLeft(2, '0')}'
-        '${c.blue.toRadixString(16).padLeft(2, '0')}';
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final color = HSVColor.fromAHSV(
-      _alpha,
-      _hue,
-      _saturation,
-      _value,
-    ).toColor();
-    final hex = _toHex(color);
-    final opacityPercent = (_alpha * 100).round();
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        SizedBox(
-          height: 140.v,
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              return GestureDetector(
-                onPanUpdate: (d) {
-                  final x = d.localPosition.dx.clamp(0.0, constraints.maxWidth);
-                  final y = d.localPosition.dy.clamp(
-                    0.0,
-                    constraints.maxHeight,
-                  );
-                  setState(() {
-                    _saturation = (x / constraints.maxWidth).clamp(0.0, 1.0);
-                    _value = 1.0 - (y / constraints.maxHeight).clamp(0.0, 1.0);
-                  });
-                  _applyColor();
-                },
-                child: Stack(
-                  children: [
-                    DecoratedBox(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12.adaptSize),
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            Colors.white,
-                            HSVColor.fromAHSV(1, _hue, 1, 1).toColor(),
-                          ],
-                        ),
-                      ),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12.adaptSize),
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [Colors.transparent, Colors.black],
-                          ),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      left: (_saturation * constraints.maxWidth - 12).clamp(
-                        0.0,
-                        constraints.maxWidth - 24,
-                      ),
-                      top: ((1 - _value) * constraints.maxHeight - 12).clamp(
-                        0.0,
-                        constraints.maxHeight - 24,
-                      ),
-                      child: Container(
-                        width: 24.0,
-                        height: 24.0,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
-                          color: color,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ),
-        SizedBox(height: 10.v),
-        SliderTheme(
-          data: SliderThemeData(
-            trackShape: const RoundedRectSliderTrackShape(),
-            overlayShape: const RoundSliderOverlayShape(),
-            activeTrackColor: appTheme.blueGray90004,
-            inactiveTrackColor: Colors.black26,
-            thumbColor: appTheme.blueGray90004,
-          ),
-          child: Slider(
-            value: _hue.clamp(0.0, 360.0),
-            min: 0,
-            max: 360,
-            onChanged: (v) {
-              setState(() => _hue = v);
-              _applyColor();
-            },
-          ),
-        ),
-        SliderTheme(
-          data: SliderThemeData(
-            trackShape: const RoundedRectSliderTrackShape(),
-            overlayShape: const RoundSliderOverlayShape(),
-            activeTrackColor: appTheme.blueGray90004,
-            inactiveTrackColor: Colors.black26,
-            thumbColor: appTheme.blueGray90004,
-          ),
-          child: Slider(
-            value: _alpha,
-            min: 0,
-            max: 1,
-            onChanged: (v) {
-              setState(() => _alpha = v);
-              _applyColor();
-            },
-          ),
-        ),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            Container(
-              padding: EdgeInsets.symmetric(horizontal: 12.h, vertical: 6.v),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade800,
-                borderRadius: BorderRadius.circular(8.adaptSize),
-              ),
-              child: Text(
-                hex,
-                style: const TextStyle(color: Colors.white, fontSize: 12),
-              ),
-            ),
-            Container(
-              padding: EdgeInsets.symmetric(horizontal: 12.h, vertical: 6.v),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade800,
-                borderRadius: BorderRadius.circular(8.adaptSize),
-              ),
-              child: Text(
-                '$opacityPercent',
-                style: const TextStyle(color: Colors.white, fontSize: 12),
-              ),
-            ),
-          ],
-        ),
-      ],
+    final color = state.selectedBgColor ?? Colors.red;
+    return Center(
+      child: MusamiAppColorPickerPanel(
+        pickerColor: color,
+        enableAlpha: true,
+        onColorChanged: (c) {
+          BlocProvider.of<AddNewBloc>(context).add(SetBgColorEvent(color: c));
+        },
+      ),
     );
   }
 }

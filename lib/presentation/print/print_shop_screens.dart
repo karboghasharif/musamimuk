@@ -6,6 +6,7 @@ import 'package:toastification/toastification.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/app_export.dart';
+import '../../core/network/authenticated_image.dart';
 import '../../core/utils/app_toast.dart';
 import '../../data/models/print_models.dart';
 import '../../data/repositories/print_repository.dart';
@@ -886,8 +887,10 @@ class _PrintShopHomeScreenState extends State<PrintShopHomeScreen> {
                                       height: 88,
                                       color: Colors.white12,
                                     )
-                                  : Image.network(
-                                      item.imageUrl!,
+                                  : Image(
+                                      image: musamiAuthenticatedNetworkImage(
+                                        item.imageUrl!,
+                                      ),
                                       width: 88,
                                       height: 88,
                                       fit: BoxFit.cover,
@@ -1582,8 +1585,8 @@ class _PrintShopOrderPanelState extends State<PrintShopOrderPanel> {
                       final url = order.dispute!.evidenceImages[index];
                       return ClipRRect(
                         borderRadius: BorderRadius.circular(AppDs.radiusSm),
-                        child: Image.network(
-                          url,
+                        child: Image(
+                          image: musamiAuthenticatedNetworkImage(url),
                           width: 64.adaptSize,
                           height: 64.adaptSize,
                           fit: BoxFit.cover,

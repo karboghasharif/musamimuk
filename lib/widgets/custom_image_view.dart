@@ -122,6 +122,7 @@ class CustomImageView extends StatelessWidget {
             fit: fit,
             imageUrl: path,
             httpHeaders: musamiAuthenticatedHeadersForUrl(path),
+            cacheManager: MusamiImageCache.instance,
             color: color,
             fadeInDuration: AppDs.motionNormal,
             fadeOutDuration: AppDs.motionFast,

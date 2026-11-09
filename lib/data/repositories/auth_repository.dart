@@ -183,6 +183,7 @@ class AuthRepository {
     required String passwordConfirmation,
     String country = '',
     String? imagePath,
+    String? referralCode,
   }) async {
     try {
       final formData = FormData();
@@ -193,6 +194,11 @@ class AuthRepository {
         MapEntry('password_confirmation', passwordConfirmation),
         if (country.isNotEmpty) MapEntry('country', country),
       ]);
+      final code =
+          (referralCode ?? PrefUtils().getPendingReferralCode())?.trim();
+      if (code != null && code.isNotEmpty) {
+        formData.fields.add(MapEntry('referral_code', code));
+      }
       if (imagePath != null && imagePath.isNotEmpty) {
         formData.files.add(MapEntry(
           'image',
@@ -212,6 +218,7 @@ class AuthRepository {
       if (status >= 200 && status < 300 && data != null) {
         final reg = RegisterResponse.fromJson(data);
         if (reg.data != null && reg.data!.token.isNotEmpty) {
+          await PrefUtils().clearPendingReferralCode();
           return RegisterSuccess(reg);
         }
         return RegisterFailure(

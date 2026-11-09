@@ -30,16 +30,19 @@ class RegisterSubmitEvent extends Screen0RegisterEvent {
     required this.email,
     required this.password,
     required this.passwordConfirmation,
+    this.referralCode,
   });
   final String name;
   final String email;
   final String password;
   final String passwordConfirmation;
+  final String? referralCode;
   @override
   List<Object?> get props => [
         name,
         email,
         password,
         passwordConfirmation,
+        referralCode,
       ];
 }

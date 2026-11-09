@@ -551,23 +551,30 @@ class _PrimaryBarTool extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onTap,
+    this.selected = false,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+  final bool selected;
 
-  static double get _minW => 56.h;
+  static double get _minW => 60.h;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final fg = selected ? Colors.white : Colors.black;
     return SizedBox(
       width: _minW,
       child: Material(
-        color: Colors.transparent,
+        color: selected
+            ? Colors.black.withValues(alpha: 0.22)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(AppDs.radiusSm.adaptSize),
         child: InkWell(
           onTap: onTap,
+          borderRadius: BorderRadius.circular(AppDs.radiusSm.adaptSize),
           splashColor: Colors.white.withValues(alpha: 0.15),
           highlightColor: Colors.white.withValues(alpha: 0.08),
           child: Padding(
@@ -578,7 +585,7 @@ class _PrimaryBarTool extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(icon, color: Colors.black, size: 22.adaptSize),
+                Icon(icon, color: fg, size: 22.adaptSize),
                 SizedBox(height: AppDs.space1.v),
                 Text(
                   label,
@@ -586,8 +593,8 @@ class _PrimaryBarTool extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
                   style: theme.textTheme.labelSmall?.copyWith(
-                    color: Colors.black,
-                    fontWeight: FontWeight.w600,
+                    color: fg,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
                     fontSize: 10.fSize,
                     height: 1.1,
                   ),
@@ -671,6 +678,10 @@ class ImageContextToolbar extends StatelessWidget {
     required this.onDelete,
     required this.onResize,
     this.onCrop,
+    this.onFitMode,
+    this.fitModeIsStretch = false,
+    this.onAspectLock,
+    this.aspectLocked = false,
     required this.onBorder,
     required this.onShadow,
     required this.onDuplicate,
@@ -697,6 +708,14 @@ class ImageContextToolbar extends StatelessWidget {
   final VoidCallback onResize;
   /// When null, the Crop tool is hidden (e.g. vector stickers or network-only assets).
   final VoidCallback? onCrop;
+  /// Toggle Crop ↔ Stretch fill mode for photo-like layers.
+  final VoidCallback? onFitMode;
+  /// True when the selected layer is currently in Stretch mode.
+  final bool fitModeIsStretch;
+  /// Toggle proportional resize (aspect lock).
+  final VoidCallback? onAspectLock;
+  /// True when resize preserves aspect ratio.
+  final bool aspectLocked;
   final VoidCallback onBorder;
   final VoidCallback onShadow;
   final VoidCallback onDuplicate;
@@ -761,6 +780,30 @@ class ImageContextToolbar extends StatelessWidget {
                       label: 'Resize',
                       onTap: onResize,
                     ),
+                    // Fit mode (Crop vs Stretch) — independent of aspect lock.
+                    if (onFitMode != null)
+                      _PrimaryBarTool(
+                        icon: fitModeIsStretch
+                            ? Icons.open_with_rounded
+                            : Icons.crop_landscape_rounded,
+                        label: fitModeIsStretch
+                            ? 'lbl_image_fit_stretch'.tr
+                            : 'lbl_image_fit_crop'.tr,
+                        onTap: onFitMode!,
+                        selected: fitModeIsStretch,
+                      ),
+                    // Aspect lock — independent of fill mode.
+                    if (onAspectLock != null)
+                      _PrimaryBarTool(
+                        icon: aspectLocked
+                            ? Icons.link_rounded
+                            : Icons.link_off_rounded,
+                        label: aspectLocked
+                            ? 'lbl_image_aspect_locked'.tr
+                            : 'lbl_image_aspect_free'.tr,
+                        onTap: onAspectLock!,
+                        selected: aspectLocked,
+                      ),
                     if (onCrop != null)
                       _PrimaryBarTool(
                         icon: Icons.crop_rounded,
@@ -791,6 +834,7 @@ class ImageContextToolbar extends StatelessWidget {
                             ? 'lbl_release_mask'.tr
                             : 'lbl_clipping_mask'.tr,
                         onTap: onClippingMask!,
+                        selected: clippingMaskActive,
                       ),
                     if (onPerspectiveWarp != null)
                       _PrimaryBarTool(

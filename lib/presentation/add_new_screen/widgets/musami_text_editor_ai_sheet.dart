@@ -11,6 +11,7 @@ import '../../../data/services/editor_ai/editor_ai_text_writing.dart';
 import '../../../data/services/editor_ai/editor_ai_text_writing_service.dart';
 import '../../ai_studio/ai_studio_shared.dart';
 import '../../wallet/wallet_cost_guard.dart';
+import 'musami_ai_chrome.dart';
 import 'musami_text_editor_script.dart';
 
 /// Opens the AI writing-assistance sheet for the inline text editor.
@@ -249,41 +250,34 @@ class _MusamiTextEditorAiSheetState extends State<_MusamiTextEditorAiSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                Icon(Icons.auto_awesome, color: theme.colorScheme.primary),
-                SizedBox(width: AppDs.space2.h),
-                Expanded(
-                  child: Text(
-                    'lbl_text_editor_ai_assist'.tr,
-                    style: AppDs.sheetTitle(theme, color: Colors.white),
+            MusamiAiSheetHeader(
+              title: 'lbl_text_editor_ai_assist'.tr,
+              subtitle: 'msg_ai_write_selection_hint'.tr,
+              icon: Icons.auto_awesome_rounded,
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AiStudioProviderPicker(
+                    value: _providerKind,
+                    onChanged: (kind) {
+                      setState(() {
+                        _providerKind = kind;
+                        _service = EditorAiTextWritingService(provider: kind);
+                      });
+                    },
                   ),
-                ),
-                AiStudioProviderPicker(
-                  value: _providerKind,
-                  onChanged: (kind) {
-                    setState(() {
-                      _providerKind = kind;
-                      _service = EditorAiTextWritingService(provider: kind);
-                    });
-                  },
-                ),
-                if (_isProcessing)
-                  SizedBox.square(
-                    dimension: 22.adaptSize,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: theme.colorScheme.primary,
+                  if (_isProcessing)
+                    const Padding(
+                      padding: EdgeInsets.only(left: 8),
+                      child: SizedBox.square(
+                        dimension: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.2,
+                          color: MusamiAiChrome.accent,
+                        ),
+                      ),
                     ),
-                  ),
-              ],
-            ),
-            SizedBox(height: AppDs.space2.v),
-            Text(
-              'msg_ai_write_selection_hint'.tr,
-              style: AppDs.sheetCaption(
-                theme,
-                color: Colors.white.withValues(alpha: 0.65),
+                ],
               ),
             ),
             SizedBox(height: AppDs.space3.v),
@@ -295,35 +289,43 @@ class _MusamiTextEditorAiSheetState extends State<_MusamiTextEditorAiSheet> {
                 minLines: 2,
                 maxLines: 4,
                 textCapitalization: TextCapitalization.sentences,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  filled: true,
-                  fillColor: Colors.white.withValues(alpha: 0.08),
-                  hintText: 'lbl_ai_write_prompt_hint'.tr,
-                  hintStyle: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.45),
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppDs.radiusMd.h),
-                  ),
+                style: const TextStyle(
+                  color: AppDs.textOnDarkPrimary,
+                  fontSize: 15,
+                  height: 1.35,
+                ),
+                decoration: MusamiAiChrome.fieldDecoration(
+                  hint: 'lbl_ai_write_prompt_hint'.tr,
                 ),
               ),
               SizedBox(height: AppDs.space3.v),
               Row(
                 children: [
                   Expanded(
-                    child: OutlinedButton(
-                      onPressed: _isProcessing
-                          ? null
-                          : () => setState(() => _promptAction = null),
-                      child: Text('lbl_cancel'.tr),
+                    child: SizedBox(
+                      height: AppDs.buttonHeight,
+                      child: OutlinedButton(
+                        onPressed: _isProcessing
+                            ? null
+                            : () => setState(() => _promptAction = null),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppDs.textOnDarkPrimary,
+                          side: const BorderSide(color: MusamiAiChrome.hairline),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(AppDs.radiusMd),
+                          ),
+                        ),
+                        child: Text('lbl_cancel'.tr),
+                      ),
                     ),
                   ),
                   SizedBox(width: AppDs.space2.h),
                   Expanded(
-                    child: FilledButton(
-                      onPressed: _isProcessing ? null : _submitGenerate,
-                      child: Text('lbl_ai_write_generate_action'.tr),
+                    child: MusamiAiPrimaryButton(
+                      label: 'lbl_ai_write_generate_action'.tr,
+                      icon: Icons.auto_awesome_rounded,
+                      busy: _isProcessing,
+                      onPressed: _submitGenerate,
                     ),
                   ),
                 ],
@@ -334,17 +336,63 @@ class _MusamiTextEditorAiSheetState extends State<_MusamiTextEditorAiSheet> {
               child: ListView.separated(
                 shrinkWrap: true,
                 itemCount: _actions.length,
-                separatorBuilder: (_, _) => Divider(
-                  height: 1,
-                  color: Colors.white.withValues(alpha: 0.1),
-                ),
+                separatorBuilder: (_, _) => SizedBox(height: AppDs.space2.v),
                 itemBuilder: (context, index) {
                   final item = _actions[index];
-                  return ListTile(
-                    enabled: !_isProcessing,
-                    leading: Icon(item.icon),
-                    title: Text(_labelFor(item.action)),
-                    onTap: _isProcessing ? null : () => _onAction(item.action),
+                  final enabled = !_isProcessing;
+                  return Material(
+                    color: MusamiAiChrome.panelDeep,
+                    borderRadius: BorderRadius.circular(AppDs.radiusMd),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(AppDs.radiusMd),
+                      onTap: enabled ? () => _onAction(item.action) : null,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: MusamiAiChrome.accent
+                                    .withValues(alpha: 0.14),
+                                borderRadius:
+                                    BorderRadius.circular(AppDs.radiusSm),
+                              ),
+                              child: Icon(
+                                item.icon,
+                                size: 18,
+                                color: enabled
+                                    ? MusamiAiChrome.accent
+                                    : AppDs.textOnDarkSecondary,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                _labelFor(item.action),
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: enabled
+                                      ? AppDs.textOnDarkPrimary
+                                      : AppDs.textOnDarkSecondary,
+                                  fontWeight: FontWeight.w600,
+                                  height: 1.3,
+                                ),
+                              ),
+                            ),
+                            Icon(
+                              Icons.chevron_right_rounded,
+                              color: enabled
+                                  ? AppDs.textOnDarkSecondary
+                                  : Colors.white24,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   );
                 },
               ),

@@ -199,7 +199,7 @@ class AppNavigationDrawer extends StatelessWidget {
                         NavigatorService.pushNamed(AppRoutes.referralScreen);
                       },
                     ),
-                  if (!isGuest)
+                  if (!isGuest && cachedAvailableWorkModes().length > 1)
                     _DrawerNavTile(
                       icon: Icons.swap_horiz,
                       label: 'lbl_switch_mode'.tr,

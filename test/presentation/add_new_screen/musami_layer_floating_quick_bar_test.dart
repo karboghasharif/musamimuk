@@ -11,6 +11,39 @@ Layer _layerAt({required double offsetY}) {
 }
 
 void main() {
+  group('musamiSelectionOverlayClipInsets', () {
+    test('reserves app bar and residual bottom chrome', () {
+      final insets = musamiSelectionOverlayClipInsets(
+        screenSize: const Size(360, 800),
+        appBarHeight: 80,
+        canvasBodySize: const Size(360, 520),
+      );
+      expect(insets.top, 80);
+      expect(insets.bottom, closeTo(200, 0.001));
+    });
+
+    test('minTop wins when live appBarHeight is still zero', () {
+      final insets = musamiSelectionOverlayClipInsets(
+        screenSize: const Size(360, 800),
+        appBarHeight: 0,
+        canvasBodySize: const Size(360, 600),
+        minTop: 59,
+      );
+      expect(insets.top, 59);
+      expect(insets.bottom, closeTo(141, 0.001));
+    });
+
+    test('zero body skips bottom clip', () {
+      final insets = musamiSelectionOverlayClipInsets(
+        screenSize: const Size(360, 800),
+        appBarHeight: 59,
+        canvasBodySize: Size.zero,
+      );
+      expect(insets.top, 59);
+      expect(insets.bottom, 0);
+    });
+  });
+
   group('musamiLayerQuickBarPlacement', () {
     const canvas = Size(400, 800);
 
@@ -56,6 +89,28 @@ void main() {
       );
       expect(anchor.dx, 50);
       expect(anchor.dy, -kMusamiLayerQuickBarGap - kMusamiLayerQuickBarHeight);
+    });
+  });
+
+  group('musamiLayerQuickBarClampedCenterX', () {
+    test('keeps bar on-screen near left edge', () {
+      final x = musamiLayerQuickBarClampedCenterX(
+        centerX: 10,
+        barWidth: 160,
+        viewportWidth: 360,
+      );
+      expect(x, greaterThan(10));
+      expect(x, closeTo(8 + 80, 0.001));
+    });
+
+    test('keeps bar on-screen near right edge', () {
+      final x = musamiLayerQuickBarClampedCenterX(
+        centerX: 350,
+        barWidth: 160,
+        viewportWidth: 360,
+      );
+      expect(x, lessThan(350));
+      expect(x, closeTo(360 - 8 - 80, 0.001));
     });
   });
 

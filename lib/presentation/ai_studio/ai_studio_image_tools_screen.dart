@@ -10,6 +10,7 @@ import '../../core/utils/app_toast.dart';
 import '../../data/models/editor_ai_api_models.dart';
 import '../../data/models/wallet_models.dart';
 import '../../data/services/editor_ai/editor_ai_api_service.dart';
+import '../add_new_screen/widgets/musami_ai_chrome.dart';
 import '../add_new_screen/widgets/musami_ai_inpaint_sheet.dart';
 import '../add_new_screen/widgets/musami_ai_upscale_sheet.dart';
 import '../wallet/wallet_cost_guard.dart';
@@ -175,42 +176,97 @@ class _AiStudioImageToolsScreenState extends State<AiStudioImageToolsScreen> {
             style: TextStyle(
               color: AppDs.textOnDarkSecondary,
               fontSize: 13.fSize,
+              height: 1.4,
             ),
           ),
           SizedBox(height: AppDs.space4.v),
-          OutlinedButton.icon(
-            onPressed: _busy ? null : _pick,
-            icon: const Icon(Icons.photo_library_outlined),
-            label: Text('lbl_ai_pick_image'.tr),
+          SizedBox(
+            height: AppDs.buttonHeight,
+            child: OutlinedButton.icon(
+              onPressed: _busy ? null : _pick,
+              icon: const Icon(Icons.photo_library_outlined),
+              label: Text('lbl_ai_pick_image'.tr),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppDs.textOnDarkPrimary,
+                side: const BorderSide(color: MusamiAiChrome.hairline),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppDs.radiusMd),
+                ),
+              ),
+            ),
           ),
           if (_source != null) ...[
             SizedBox(height: AppDs.space3.v),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(AppDs.radiusMd),
-              child: Image.memory(_source!, height: 180, fit: BoxFit.contain),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: MusamiAiChrome.panelDeep,
+                borderRadius: BorderRadius.circular(AppDs.radiusMd),
+                border: Border.all(color: MusamiAiChrome.hairline),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(AppDs.radiusMd),
+                child: Image.memory(
+                  _source!,
+                  height: 180,
+                  width: double.infinity,
+                  fit: BoxFit.contain,
+                ),
+              ),
             ),
           ],
-          SizedBox(height: AppDs.space3.v),
-          FilledButton(
-            onPressed: _busy ? null : _run,
-            child: _busy
-                ? const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Text(_isUpscale ? 'lbl_ai_upscale'.tr : 'lbl_ai_inpaint'.tr),
+          SizedBox(height: AppDs.space4.v),
+          MusamiAiPrimaryButton(
+            label: _isUpscale ? 'lbl_ai_upscale'.tr : 'lbl_ai_inpaint'.tr,
+            icon: _isUpscale
+                ? Icons.high_quality_rounded
+                : Icons.format_paint_rounded,
+            busy: _busy,
+            onPressed: _run,
           ),
           if (_result != null) ...[
-            SizedBox(height: AppDs.space4.v),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(AppDs.radiusMd),
-              child: Image.memory(_result!, height: 220, fit: BoxFit.contain),
+            SizedBox(height: AppDs.space5.v),
+            Text(
+              'lbl_results'.tr,
+              style: TextStyle(
+                color: AppDs.textOnDarkPrimary,
+                fontSize: 14.fSize,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            SizedBox(height: AppDs.space2.v),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: MusamiAiChrome.panelDeep,
+                borderRadius: BorderRadius.circular(AppDs.radiusMd),
+                border: Border.all(color: MusamiAiChrome.hairline),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(AppDs.radiusMd),
+                child: Image.memory(
+                  _result!,
+                  height: 220,
+                  width: double.infinity,
+                  fit: BoxFit.contain,
+                ),
+              ),
             ),
             SizedBox(height: AppDs.space3.v),
-            FilledButton.tonal(
-              onPressed: _openInEditor,
-              child: Text('lbl_ai_use_in_design'.tr),
+            SizedBox(
+              height: AppDs.buttonHeight,
+              child: OutlinedButton.icon(
+                onPressed: _openInEditor,
+                icon: const Icon(Icons.design_services_outlined),
+                label: Text('lbl_ai_use_in_design'.tr),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: MusamiAiChrome.accent,
+                  side: BorderSide(
+                    color: MusamiAiChrome.accent.withValues(alpha: 0.55),
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppDs.radiusMd),
+                  ),
+                ),
+              ),
             ),
           ],
         ],

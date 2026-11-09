@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:toastification/toastification.dart';
 
 import '../../../core/app_export.dart';
@@ -8,7 +7,7 @@ import '../../ai_studio/ai_studio_image_tools_screen.dart';
 import '../../wallet/bloc/wallet_bloc.dart';
 import '../../wallet/wallet_cost_guard.dart';
 
-/// Home “AI Studio” grid — ChatGPT-powered tools via Musamimuk backend.
+/// Home “AI Studio” grid — brand-aligned dark + yellow tool entry points.
 class HomeAiStudioSection extends StatelessWidget {
   const HomeAiStudioSection({
     super.key,
@@ -33,32 +32,27 @@ class HomeAiStudioSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final primary = theme.colorScheme.primary;
     final isGuest = PrefUtils().isGuestAccount();
 
     final actions = <_AiStudioAction>[
       _AiStudioAction(
         label: 'lbl_ai_generate_images'.tr,
         icon: Icons.auto_awesome_outlined,
-        colors: const [Color(0xFF1FA97A), Color(0xFF12805C)],
         onTap: () => _openAiTool(AppRoutes.aiStudioImageScreen),
       ),
       _AiStudioAction(
         label: 'lbl_ai_generate_designs'.tr,
         icon: Icons.brush_outlined,
-        colors: const [Color(0xFF7B5CFF), Color(0xFF5A3FD6)],
         onTap: () => _openAiTool(AppRoutes.aiStudioDesignScreen),
       ),
       _AiStudioAction(
         label: 'lbl_ai_generate_videos'.tr,
         icon: Icons.play_circle_outline_rounded,
-        colors: const [Color(0xFFFF7A45), Color(0xFFE24B2D)],
         onTap: () => _comingSoonVideo(context),
       ),
       _AiStudioAction(
         label: 'lbl_ai_upscale'.tr,
         icon: Icons.high_quality_outlined,
-        colors: const [Color(0xFF12B886), Color(0xFF0B7285)],
         onTap: () => _openAiTool(
           AppRoutes.aiStudioImageToolsScreen,
           arguments: AiStudioImageToolMode.upscale,
@@ -67,7 +61,6 @@ class HomeAiStudioSection extends StatelessWidget {
       _AiStudioAction(
         label: 'lbl_ai_inpaint'.tr,
         icon: Icons.format_paint_outlined,
-        colors: const [Color(0xFFFD7E14), Color(0xFFE8590C)],
         onTap: () => _openAiTool(
           AppRoutes.aiStudioImageToolsScreen,
           arguments: AiStudioImageToolMode.inpaint,
@@ -76,26 +69,22 @@ class HomeAiStudioSection extends StatelessWidget {
       _AiStudioAction(
         label: 'lbl_ai_chat'.tr,
         icon: Icons.chat_bubble_outline_rounded,
-        colors: const [Color(0xFF3B5BDB), Color(0xFF2641A8)],
         onTap: () => _openAiTool(AppRoutes.aiStudioChatScreen),
       ),
       _AiStudioAction(
         label: 'lbl_ai_vision'.tr,
         icon: Icons.camera_alt_outlined,
-        colors: const [Color(0xFF4DABF7), Color(0xFF1C7ED6)],
         onTap: () => _openAiTool(AppRoutes.aiStudioVisionScreen),
       ),
       _AiStudioAction(
         label: 'lbl_ai_gallery'.tr,
         icon: Icons.photo_library_outlined,
-        colors: const [Color(0xFF9775FA), Color(0xFF7048E8)],
         onTap: () =>
             NavigatorService.pushNamed(AppRoutes.screen18MyDesignsScreen),
       ),
       _AiStudioAction(
         label: 'lbl_remove_bg'.tr,
         icon: Icons.layers_clear_outlined,
-        colors: const [Color(0xFFFF6B9D), Color(0xFFE64980)],
         onTap: () => NavigatorService.pushNamed(
           AppRoutes.screen19RemoveBackgroundScreen,
         ),
@@ -103,7 +92,6 @@ class HomeAiStudioSection extends StatelessWidget {
       _AiStudioAction(
         label: 'lbl_ai_get_inspired'.tr,
         icon: Icons.lightbulb_outline_rounded,
-        colors: const [Color(0xFF845EF7), Color(0xFF5F3DC4)],
         onTap: () =>
             NavigatorService.pushNamed(AppRoutes.screen16OnlineDesignsScreen),
       ),
@@ -122,36 +110,27 @@ class HomeAiStudioSection extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(
-                Icons.auto_awesome,
-                color: primary,
-                size: 20.adaptSize,
+              Container(
+                width: 32.adaptSize,
+                height: 32.adaptSize,
+                decoration: BoxDecoration(
+                  color: AppDs.accentYellow.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(AppDs.radiusSm),
+                ),
+                child: Icon(
+                  Icons.auto_awesome_rounded,
+                  color: AppDs.accentYellow,
+                  size: 18.adaptSize,
+                ),
               ),
               SizedBox(width: AppDs.space2.h),
               Expanded(
                 child: AppText(
                   'lbl_ai_studio'.tr,
                   variant: AppTextVariant.title,
-                  color: primary,
+                  color: AppDs.textOnDarkPrimary,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Container(
-                margin: EdgeInsets.only(right: AppDs.space2.h),
-                padding: EdgeInsets.symmetric(
-                  horizontal: AppDs.space2.h,
-                  vertical: 4.v,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF10A37F).withValues(alpha: 0.18),
-                  borderRadius:
-                      BorderRadius.circular(AppDs.radiusFull.adaptSize),
-                ),
-                child: AppText(
-                  'lbl_chatgpt'.tr,
-                  variant: AppTextVariant.caption,
-                  color: const Color(0xFF10A37F),
                 ),
               ),
               BlocBuilder<WalletBloc, WalletState>(
@@ -163,7 +142,7 @@ class HomeAiStudioSection extends StatelessWidget {
                           ? (isPro ? 'lbl_pro'.tr : 'lbl_free'.tr)
                           : '${walletState.coinBalance} ${'lbl_coins'.tr}');
                   return Material(
-                    color: primary,
+                    color: AppDs.accentYellow,
                     borderRadius:
                         BorderRadius.circular(AppDs.radiusFull.adaptSize),
                     clipBehavior: Clip.antiAlias,
@@ -237,13 +216,11 @@ class _AiStudioAction {
   const _AiStudioAction({
     required this.label,
     required this.icon,
-    required this.colors,
     required this.onTap,
   });
 
   final String label;
   final IconData icon;
-  final List<Color> colors;
   final VoidCallback onTap;
 }
 
@@ -268,23 +245,15 @@ class _AiStudioTile extends StatelessWidget {
                 width: 48.adaptSize,
                 height: 48.adaptSize,
                 decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: action.colors,
+                  color: AppDs.atelierInk,
+                  borderRadius: BorderRadius.circular(AppDs.radiusMd),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.1),
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: action.colors.last.withValues(alpha: 0.35),
-                      blurRadius: 8,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
                 ),
                 child: Icon(
                   action.icon,
-                  color: Colors.white,
+                  color: AppDs.accentYellow,
                   size: 22.adaptSize,
                 ),
               ),

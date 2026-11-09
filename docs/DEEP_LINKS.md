@@ -19,7 +19,11 @@ Shared Musamimuk links should open the **app** when installed, and the **Play St
 | `https://HOST/open/remove-background` | Remove background |
 | `https://HOST/open/qr` | QR generator |
 | `https://HOST/open/about` | Help & support |
+| `https://HOST/open/invite/{code}` | Referral invite (store if not installed) |
+| `https://HOST/invite/{code}` | Same invite landing |
+| `https://HOST/?ref={code}` | Legacy invite → redirects to `/open/invite/{code}` |
 | `musamimuk://contest/12` | Same as HTTPS contest detail |
+| `musamimuk://invite/{code}` | Stores referral code → register |
 
 `HOST` is currently `srv1813447.hstgr.cloud` (and optionally `musamimuk.app`).
 

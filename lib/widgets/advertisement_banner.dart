@@ -353,12 +353,11 @@ class _AdSlide extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             if (imageUrl != null && imageUrl.isNotEmpty)
-              Image.network(
-                imageUrl,
+              Image(
+                image: musamiAuthenticatedNetworkImage(imageUrl),
                 fit: BoxFit.cover,
-                headers: musamiAuthenticatedHeadersForUrl(imageUrl),
-                loadingBuilder: (context, child, progress) {
-                  if (progress == null) return child;
+                frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+                  if (wasSynchronouslyLoaded || frame != null) return child;
                   return ColoredBox(
                     color: cs.surfaceContainerHighest.withValues(alpha: 0.45),
                     child: Center(

@@ -129,5 +129,161 @@ void main() {
     final texts = imported!.stateHistory.last.layers.whereType<TextLayer>();
     expect(texts.single.text, 'Page two');
   });
+
+  test('photo transform meta survives design_data round-trip', () {
+    final photo = WidgetLayer(
+      widget: const SizedBox(width: 300, height: 180),
+      width: 300,
+      scale: 1.25,
+      offset: const Offset(40, -12),
+      rotation: 0.35,
+      flipX: true,
+      flipY: false,
+      exportConfigs: const WidgetLayerExportConfigs(
+        networkUrl: 'https://example.com/media/photo.png',
+        meta: {
+          'musamiLayerKind': 'gallery',
+          'musamiImageFitMode': 'stretch',
+          'musamiMaintainAspectRatio': false,
+        },
+      ),
+      meta: const {
+        'musamiLayerKind': 'gallery',
+        'fileUrl': 'https://example.com/media/photo.png',
+        'musamiAspect': 0.6,
+        'musamiImageAspect': 0.75,
+        'musamiImageFitMode': 'stretch',
+        'musamiMaintainAspectRatio': false,
+        'musamiCropAlignX': -0.4,
+        'musamiCropAlignY': 0.2,
+        'musamiLayerLocked': true,
+        'musamiOpacity': 0.85,
+        'musamiClippingMask': true,
+        'musamiClipMaskUrl': 'https://example.com/mask.png',
+      },
+    );
+
+    final json = jsonEncode(buildMinifiedExportMap([photo]));
+    final imported = musamiTryParseDesignImportHistory(json);
+    expect(imported, isNotNull);
+
+    final layer = imported!.stateHistory.last.layers.whereType<WidgetLayer>().single;
+    expect(layer.width, closeTo(300, 0.001));
+    expect(layer.scale, closeTo(1.25, 0.001));
+    expect(layer.offset.dx, closeTo(40, 0.001));
+    expect(layer.offset.dy, closeTo(-12, 0.001));
+    expect(layer.rotation, closeTo(0.35, 0.001));
+    expect(layer.flipX, isTrue);
+    expect(layer.flipY, isFalse);
+    expect(layer.meta?['musamiAspect'], 0.6);
+    expect(layer.meta?['musamiImageAspect'], 0.75);
+    expect(layer.meta?['musamiImageFitMode'], 'stretch');
+    expect(layer.meta?['musamiMaintainAspectRatio'], isFalse);
+    expect(layer.meta?['musamiCropAlignX'], -0.4);
+    expect(layer.meta?['musamiCropAlignY'], 0.2);
+    expect(layer.meta?['musamiLayerLocked'], isTrue);
+    expect(layer.meta?['musamiOpacity'], 0.85);
+    expect(layer.meta?['musamiClippingMask'], isTrue);
+    expect(layer.meta?['musamiClipMaskUrl'], 'https://example.com/mask.png');
+  });
+
+  test('legacy photo without fit keys stays crop after round-trip', () {
+    final legacy = WidgetLayer(
+      widget: const SizedBox(width: 200, height: 200),
+      width: 200,
+      exportConfigs: const WidgetLayerExportConfigs(
+        networkUrl: 'https://example.com/legacy.png',
+      ),
+      meta: const {
+        'musamiLayerKind': 'gallery',
+        'musamiAspect': 1.0,
+        'musamiImageAspect': 1.0,
+      },
+    );
+
+    final imported = musamiTryParseDesignImportHistory(
+      jsonEncode(buildMinifiedExportMap([legacy])),
+    );
+    final layer =
+        imported!.stateHistory.last.layers.whereType<WidgetLayer>().single;
+    expect(layer.meta?.containsKey('musamiImageFitMode'), isFalse);
+    expect(layer.meta?.containsKey('musamiMaintainAspectRatio'), isFalse);
+  });
+
+  test('multipage envelope retains per-page photo geometry on reopen', () {
+    final page1History = jsonEncode(buildMinifiedExportMap([
+      WidgetLayer(
+        widget: const SizedBox(width: 220, height: 110),
+        width: 220,
+        scale: 2.0,
+        offset: const Offset(10, 20),
+        exportConfigs: const WidgetLayerExportConfigs(
+          networkUrl: 'https://example.com/p1.png',
+        ),
+        meta: const {
+          'musamiLayerKind': 'gallery',
+          'musamiAspect': 0.5,
+          'musamiImageAspect': 0.5,
+          'musamiImageFitMode': 'stretch',
+          'musamiMaintainAspectRatio': false,
+        },
+      ),
+    ]));
+    final page2History = jsonEncode(buildMinifiedExportMap([
+      WidgetLayer(
+        widget: const SizedBox(width: 180, height: 180),
+        width: 180,
+        scale: 1.0,
+        exportConfigs: const WidgetLayerExportConfigs(
+          networkUrl: 'https://example.com/p2.png',
+        ),
+        meta: const {
+          'musamiLayerKind': 'gallery',
+          'musamiAspect': 1.0,
+          'musamiImageAspect': 1.0,
+          'musamiImageFitMode': 'crop',
+          'musamiMaintainAspectRatio': true,
+        },
+      ),
+    ]));
+
+    final envelope = MusamiDocument(
+      activePageId: 'page_1',
+      pages: [
+        MusamiPage(
+          id: 'page_1',
+          name: 'Page 1',
+          width: 1080,
+          height: 1080,
+          historyJson: page1History,
+        ),
+        MusamiPage(
+          id: 'page_2',
+          name: 'Page 2',
+          width: 1080,
+          height: 1080,
+          historyJson: page2History,
+        ),
+      ],
+    ).serialize();
+
+    final doc = tryParseMusamiDocument(envelope);
+    expect(doc, isNotNull);
+    expect(doc!.pages, hasLength(2));
+
+    final reopenP1 = musamiTryParseDesignImportHistory(doc.pages[0].historyJson);
+    final reopenP2 = musamiTryParseDesignImportHistory(doc.pages[1].historyJson);
+    final p1 = reopenP1!.stateHistory.last.layers.whereType<WidgetLayer>().single;
+    final p2 = reopenP2!.stateHistory.last.layers.whereType<WidgetLayer>().single;
+
+    expect(p1.width, closeTo(220, 0.001));
+    expect(p1.scale, closeTo(2.0, 0.001));
+    expect(p1.meta?['musamiImageFitMode'], 'stretch');
+    expect(p1.meta?['musamiMaintainAspectRatio'], isFalse);
+
+    expect(p2.width, closeTo(180, 0.001));
+    expect(p2.meta?['musamiImageFitMode'], 'crop');
+    expect(p2.meta?['musamiMaintainAspectRatio'], isTrue);
+  });
 }
 

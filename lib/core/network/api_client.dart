@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:musamimuk/core/network/api_cache_interceptor.dart';
 import 'package:musamimuk/core/network/api_error_mapper.dart';
 import 'package:musamimuk/core/session/session_manager.dart';
 import 'package:musamimuk/core/utils/pref_utils.dart';
@@ -40,6 +41,8 @@ class ApiClient {
     // Logger outermost so every request/response/error is printed (incl. after auth).
     _dio.interceptors.add(_ApiLoggerInterceptor());
     _dio.interceptors.add(_AuthSessionInterceptor());
+    // Catalog / public GET cache (TTL). Skips wallet, auth, print, etc.
+    _dio.interceptors.add(ApiCacheInterceptor());
   }
 
   static final ApiClient _instance = ApiClient._();

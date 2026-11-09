@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pro_image_editor/pro_image_editor.dart';
 
+import '../../../core/network/authenticated_image.dart';
 import 'musami_clipping_mask.dart';
 import 'musami_layer_raster_utils.dart';
 import 'musami_perspective_warp_meta.dart';
@@ -67,9 +68,10 @@ Future<MusamiWarpSourceBundle?> musamiResolveWarpSource(
 
   Uint8List? remoteOriginal;
   if (storedUrl != null && storedUrl.isNotEmpty) {
-    remoteOriginal = await musamiResolveRasterBytesForBackgroundRemoval(
-      Image.network(storedUrl),
-    );
+    remoteOriginal = await musamiCachedNetworkImageBytes(storedUrl) ??
+        await musamiResolveRasterBytesForBackgroundRemoval(
+          Image(image: musamiAuthenticatedNetworkImage(storedUrl)),
+        );
   }
   if ((remoteOriginal == null || remoteOriginal.isEmpty) &&
       storedAsset != null &&

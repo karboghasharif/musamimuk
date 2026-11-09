@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:pro_image_editor/pro_image_editor.dart';
 
 import '../../../core/app_export.dart';
+import '../utils/musami_image_fit.dart';
 
 const Color _kMusamiLayerQuickBarIconColor = Color(0xFF1A1A1A);
 
@@ -11,10 +12,13 @@ const Color _kMusamiLayerQuickBarIconColor = Color(0xFF1A1A1A);
 enum MusamiLayerQuickBarPlacement { above, below }
 
 /// Gap between the selection border and the quick bar.
-const double kMusamiLayerQuickBarGap = 8;
+const double kMusamiLayerQuickBarGap = 10;
 
 /// Fixed visual height of the pill bar.
-const double kMusamiLayerQuickBarHeight = 40;
+const double kMusamiLayerQuickBarHeight = 44;
+
+/// Horizontal margin when clamping the bar near canvas edges.
+const double kMusamiLayerQuickBarEdgeMargin = 8;
 
 /// Chooses where to show the quick bar so it stays on canvas.
 ///
@@ -82,6 +86,29 @@ Offset musamiLayerQuickBarAnchorForBounds({
   return Offset(centerX, dy);
 }
 
+/// Keeps a centered bar's centre-X inside [viewportWidth] with edge margin.
+double musamiLayerQuickBarClampedCenterX({
+  required double centerX,
+  required double barWidth,
+  required double viewportWidth,
+  double margin = kMusamiLayerQuickBarEdgeMargin,
+}) {
+  if (viewportWidth <= 0 || barWidth <= 0) return centerX;
+  final half = barWidth / 2;
+  final minX = margin + half;
+  final maxX = viewportWidth - margin - half;
+  if (maxX < minX) return viewportWidth / 2;
+  return centerX.clamp(minX, maxX);
+}
+
+/// Estimated width of the floating pill for the given [actions].
+double musamiLayerQuickBarEstimatedWidth(MusamiLayerQuickBarActions actions) {
+  var buttons = 4; // lock, duplicate, delete, more
+  if (actions.onReplace != null) buttons++;
+  if (actions.onComment != null) buttons++;
+  return buttons * 40.0 + 8;
+}
+
 /// Callbacks wired from the editor screen into the floating quick bar.
 class MusamiLayerQuickBarActions {
   const MusamiLayerQuickBarActions({
@@ -90,6 +117,7 @@ class MusamiLayerQuickBarActions {
     required this.onDuplicate,
     required this.onDelete,
     required this.onMore,
+    this.onReplace,
     this.onComment,
   });
 
@@ -100,10 +128,13 @@ class MusamiLayerQuickBarActions {
 
   /// Receives the More button [BuildContext] for menu anchoring.
   final void Function(BuildContext anchorContext) onMore;
+
+  /// Image layers: swap content while keeping frame geometry.
+  final VoidCallback? onReplace;
   final VoidCallback? onComment;
 }
 
-/// White pill toolbar (lock / duplicate / delete / more) shown on selection.
+/// White pill toolbar (replace / lock / duplicate / delete / more) on selection.
 class MusamiLayerFloatingQuickBar extends StatelessWidget {
   const MusamiLayerFloatingQuickBar({super.key, required this.actions});
 
@@ -113,26 +144,37 @@ class MusamiLayerFloatingQuickBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: Colors.white,
-      elevation: 10,
-      shadowColor: Colors.black.withValues(alpha: 0.28),
+      elevation: 12,
+      shadowColor: Colors.black.withValues(alpha: 0.22),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppDs.radiusFull),
-        side: BorderSide(color: Colors.black.withValues(alpha: 0.10)),
+        side: BorderSide(color: Colors.black.withValues(alpha: 0.08)),
       ),
       clipBehavior: Clip.antiAlias,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppDs.space1),
+        padding: const EdgeInsets.symmetric(horizontal: 4),
         child: SizedBox(
           height: kMusamiLayerQuickBarHeight,
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (actions.onReplace != null)
+                _QuickBarIconButton(
+                  icon: Icons.swap_horiz_rounded,
+                  tooltip: 'lbl_replace'.tr,
+                  onTap: actions.onReplace!,
+                ),
               if (actions.onComment != null)
                 _QuickBarIconButton(
                   icon: Icons.add_comment_outlined,
                   tooltip: 'lbl_layer_menu_comment'.tr,
                   onTap: actions.onComment!,
                 ),
+              _QuickBarIconButton(
+                icon: Icons.control_point_duplicate_rounded,
+                tooltip: 'lbl_layer_menu_duplicate'.tr,
+                onTap: actions.onDuplicate,
+              ),
               _QuickBarIconButton(
                 icon: actions.isLocked
                     ? Icons.lock_rounded
@@ -141,11 +183,7 @@ class MusamiLayerFloatingQuickBar extends StatelessWidget {
                     ? 'lbl_layer_menu_unlock'.tr
                     : 'lbl_layer_menu_lock'.tr,
                 onTap: actions.onLockToggle,
-              ),
-              _QuickBarIconButton(
-                icon: Icons.control_point_duplicate_rounded,
-                tooltip: 'lbl_layer_menu_duplicate'.tr,
-                onTap: actions.onDuplicate,
+                emphasized: actions.isLocked,
               ),
               _QuickBarIconButton(
                 icon: Icons.delete_outline_rounded,
@@ -172,14 +210,19 @@ class _QuickBarIconButton extends StatelessWidget {
     required this.icon,
     required this.tooltip,
     required this.onTap,
+    this.emphasized = false,
   });
 
   final IconData icon;
   final String tooltip;
   final VoidCallback onTap;
+  final bool emphasized;
 
   @override
   Widget build(BuildContext context) {
+    final color = emphasized
+        ? kMusamiImageSelectionColor
+        : _kMusamiLayerQuickBarIconColor;
     return Tooltip(
       message: tooltip,
       child: InkWell(
@@ -187,16 +230,61 @@ class _QuickBarIconButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppDs.radiusFull),
         child: SizedBox(
           width: 40,
-          height: 40,
-          child: Icon(
-            icon,
-            size: AppDs.iconSm,
-            color: _kMusamiLayerQuickBarIconColor,
-          ),
+          height: kMusamiLayerQuickBarHeight,
+          child: Icon(icon, size: 22, color: color),
         ),
       ),
     );
   }
+}
+
+/// Safe top/bottom insets so OverlayPortal selection chrome stays under the
+/// editor app bar and above scaffold bottom toolbars.
+///
+/// [minTop] should be the reserved editor app-bar height (status + accent +
+/// row). Live PIE [appBarHeight] / [canvasBodySize] refine the band when known.
+({double top, double bottom}) musamiSelectionOverlayClipInsets({
+  required Size screenSize,
+  required double appBarHeight,
+  required Size canvasBodySize,
+  double minTop = 0,
+}) {
+  final top = math.max(
+    minTop.isFinite && minTop > 0 ? minTop : 0.0,
+    appBarHeight.isFinite && appBarHeight > 0 ? appBarHeight : 0.0,
+  );
+  final bodyH = canvasBodySize.height;
+  final bottom = bodyH.isFinite && bodyH > 0
+      ? math.max(0.0, screenSize.height - top - bodyH)
+      : 0.0;
+  return (top: top, bottom: bottom);
+}
+
+/// Wraps [child] so only the band between [top] and [bottom] screen insets is
+/// visible, while keeping [child] in full-overlay coordinates (needed for
+/// [Transform] selection frames from OverlayPortal).
+Widget musamiClipOverlayPortalToViewport({
+  required double top,
+  required double bottom,
+  required Widget child,
+}) {
+  final topPad = top.isFinite && top > 0 ? top : 0.0;
+  final bottomPad = bottom.isFinite && bottom > 0 ? bottom : 0.0;
+  if (topPad <= 0 && bottomPad <= 0) return child;
+
+  // Positive padding shrinks the clip window; matching negative padding puts
+  // the child back in absolute overlay space so layer transforms stay aligned.
+  return Positioned.fill(
+    child: Padding(
+      padding: EdgeInsets.only(top: topPad, bottom: bottomPad),
+      child: ClipRect(
+        child: Padding(
+          padding: EdgeInsets.only(top: -topPad, bottom: -bottomPad),
+          child: child,
+        ),
+      ),
+    ),
+  );
 }
 
 /// Selection overlay + floating quick bar in the same overlay coordinate space.
@@ -208,6 +296,9 @@ class MusamiLayerSelectionChrome extends StatelessWidget {
     required this.canvasBodySize,
     required this.actions,
     required this.selectionOverlay,
+    this.appBarHeight = 0,
+    this.minAppBarHeight = 0,
+    this.editorKey,
   });
 
   final OverlayChildLayoutInfo info;
@@ -216,31 +307,73 @@ class MusamiLayerSelectionChrome extends StatelessWidget {
   final MusamiLayerQuickBarActions actions;
   final Widget selectionOverlay;
 
+  /// PIE app-bar height snapshot (may be 0 before first measure).
+  final double appBarHeight;
+
+  /// Always-on floor for the top clip (status bar + editor app bar row).
+  final double minAppBarHeight;
+
+  /// When set, live [SizesManager] values override stale closure snapshots.
+  final GlobalKey<ProImageEditorState>? editorKey;
+
   @override
   Widget build(BuildContext context) {
+    final liveEditor = editorKey?.currentState;
+    final liveBody = liveEditor?.sizesManager.bodySize;
+    final bodySize = (liveBody != null && liveBody.height > 0)
+        ? liveBody
+        : canvasBodySize;
+    final liveAppBar = liveEditor?.sizesManager.appBarHeight ?? 0;
+    final insets = musamiSelectionOverlayClipInsets(
+      screenSize: MediaQuery.sizeOf(context),
+      appBarHeight: math.max(appBarHeight, liveAppBar),
+      canvasBodySize: bodySize,
+      minTop: minAppBarHeight,
+    );
+
     final placement = musamiLayerQuickBarPlacement(
       layer: layer,
-      canvasBodySize: canvasBodySize,
+      canvasBodySize: bodySize,
     );
-    final anchor = musamiLayerQuickBarAnchor(
+    final rawAnchor = musamiLayerQuickBarAnchor(
       info: info,
       placement: placement,
     );
+    final barW = musamiLayerQuickBarEstimatedWidth(actions);
+    final clampedX = musamiLayerQuickBarClampedCenterX(
+      centerX: rawAnchor.dx,
+      barWidth: barW,
+      viewportWidth: bodySize.width > 0
+          ? bodySize.width
+          : MediaQuery.sizeOf(context).width,
+    );
 
-    return Stack(
+    final chrome = Stack(
       clipBehavior: Clip.none,
       fit: StackFit.passthrough,
       children: [
         selectionOverlay,
         Positioned(
-          left: anchor.dx,
-          top: anchor.dy,
+          left: clampedX,
+          top: rawAnchor.dy,
           child: FractionalTranslation(
             translation: const Offset(-0.5, 0),
-            child: MusamiLayerFloatingQuickBar(actions: actions),
+            child: AnimatedOpacity(
+              opacity: 1,
+              duration: const Duration(milliseconds: 140),
+              child: MusamiLayerFloatingQuickBar(actions: actions),
+            ),
           ),
         ),
       ],
+    );
+
+    // OverlayPortal paints above Scaffold chrome — always clip to the canvas
+    // band so borders/handles cannot cover the app bar or bottom toolbars.
+    return musamiClipOverlayPortalToViewport(
+      top: insets.top,
+      bottom: insets.bottom,
+      child: chrome,
     );
   }
 }

@@ -1,9 +1,11 @@
 import 'dart:typed_data';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:musamimuk/core/network/api_client.dart';
+import 'package:musamimuk/core/network/authenticated_image.dart';
 
 import 'musami_clipping_mask.dart';
 import 'musami_curved_text_meta.dart';
@@ -90,6 +92,9 @@ String? musamiTryExtractNetworkImageUrl(Widget root) {
   if (resolved is NetworkImage) {
     return resolved.url;
   }
+  if (resolved is CachedNetworkImageProvider) {
+    return resolved.url;
+  }
   return null;
 }
 
@@ -127,6 +132,9 @@ Future<Uint8List?> musamiResolveRasterBytesForBackgroundRemoval(
   final url = musamiTryExtractNetworkImageUrl(root);
   if (url == null || url.trim().isEmpty) return null;
 
+  final cached = await musamiCachedNetworkImageBytes(url);
+  if (cached != null && cached.isNotEmpty) return cached;
+
   try {
     final response = await ApiClient().dio.get<List<int>>(
       url,
@@ -156,9 +164,13 @@ bool musamiLayerMetaSupportsPerspectiveWarp(Map<String, dynamic>? meta) {
   return true;
 }
 
-/// Prefix for any future non-destructive crop metadata. Not used in the current
-/// destructive-bytes implementation; [replace] strips these defensively.
+/// Prefix for ephemeral / destructive crop-revision metadata.
+///
+/// Excludes live cover-pan keys (`musamiCropAlignX` / `musamiCropAlignY`), which
+/// are part of the image transform contract and must survive replace / BG remove.
 const String kMusamiCropMetaKeyPrefix = 'musamiCrop';
 
-bool musamiIsCropMetaKey(String key) =>
-    key == 'musamiCropRevision' || key.startsWith(kMusamiCropMetaKeyPrefix);
+bool musamiIsCropMetaKey(String key) {
+  if (key == 'musamiCropAlignX' || key == 'musamiCropAlignY') return false;
+  return key == 'musamiCropRevision' || key.startsWith(kMusamiCropMetaKeyPrefix);
+}

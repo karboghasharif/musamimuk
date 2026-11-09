@@ -197,11 +197,11 @@ class _AiStudioChatScreenState extends State<AiStudioChatScreen> {
                       onPressed: _busy ? null : () => _send(),
                       style: IconButton.styleFrom(
                         backgroundColor: AiStudioChrome.accent,
-                        foregroundColor: Colors.white,
+                        foregroundColor: AiStudioChrome.onAccent,
                         disabledBackgroundColor:
                             AiStudioChrome.accent.withValues(alpha: 0.35),
                       ),
-                      icon: const Icon(Icons.send_rounded),
+                      icon: const Icon(Icons.arrow_upward_rounded),
                     ),
                   ],
                 ),

@@ -138,15 +138,16 @@ class PrintShopDrawer extends StatelessWidget {
                       NavigatorService.pushNamed(AppRoutes.printNoticesScreen);
                     },
                   ),
-                  _tile(
-                    context,
-                    icon: Icons.swap_horiz_rounded,
-                    label: 'lbl_switch_mode'.tr,
-                    onTap: () {
-                      Navigator.pop(context);
-                      showPrintModeSheet(context);
-                    },
-                  ),
+                  if (cachedAvailableWorkModes().length > 1)
+                    _tile(
+                      context,
+                      icon: Icons.swap_horiz_rounded,
+                      label: 'lbl_switch_mode'.tr,
+                      onTap: () {
+                        Navigator.pop(context);
+                        showPrintModeSheet(context);
+                      },
+                    ),
                   _tile(
                     context,
                     icon: Icons.design_services_outlined,

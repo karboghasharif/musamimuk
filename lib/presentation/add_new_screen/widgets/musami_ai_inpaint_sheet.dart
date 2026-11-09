@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../../../core/app_export.dart';
+import 'musami_ai_chrome.dart';
 
 /// Sheet: paint white edit regions over [imageBytes], enter prompt.
 Future<({Uint8List maskPng, String prompt})?> showMusamiAiInpaintSheet({
@@ -108,121 +109,151 @@ class _MusamiAiInpaintSheetState extends State<_MusamiAiInpaintSheet> {
       child: SizedBox(
         height: height,
         child: SafeArea(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              AppDs.space4.h,
-              AppDs.space3.v,
-              AppDs.space4.h,
-              AppDs.space3.v,
-            ),
+          child: AppSheetPagePadding(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  'lbl_ai_inpaint'.tr,
-                  style: AppDs.sheetTitle(
-                    Theme.of(context),
-                    color: Colors.white,
-                  ),
-                ),
-                SizedBox(height: AppDs.space1.v),
-                Text(
-                  'msg_ai_inpaint_mask_hint'.tr,
-                  style: TextStyle(
-                    color: AppDs.textOnDarkSecondary,
-                    fontSize: 12.fSize,
-                  ),
-                ),
-                SizedBox(height: AppDs.space2.v),
-                Expanded(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(AppDs.radiusMd),
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        _paintSize = Size(
-                          constraints.maxWidth,
-                          constraints.maxHeight,
-                        );
-                        return Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            ColoredBox(
-                              color: Colors.black87,
-                              child: Image.memory(
-                                widget.imageBytes,
-                                fit: BoxFit.contain,
-                              ),
-                            ),
-                            GestureDetector(
-                              onPanStart: (d) {
-                                setState(() {
-                                  _current = [d.localPosition];
-                                  _strokes.add(_current!);
-                                });
-                              },
-                              onPanUpdate: (d) {
-                                setState(() {
-                                  _current?.add(d.localPosition);
-                                });
-                              },
-                              onPanEnd: (_) => _current = null,
-                              child: CustomPaint(
-                                painter: _MaskPreviewPainter(
-                                  strokes: _strokes,
-                                  brush: _brush,
-                                ),
-                              ),
-                            ),
-                          ],
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                SizedBox(height: AppDs.space2.v),
-                Row(
-                  children: [
-                    Text(
-                      'lbl_ai_inpaint_brush'.tr,
-                      style: TextStyle(color: Colors.white, fontSize: 12.fSize),
-                    ),
-                    Expanded(
-                      child: Slider(
-                        value: _brush,
-                        min: 12,
-                        max: 64,
-                        onChanged: (v) => setState(() => _brush = v),
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: 'lbl_ai_inpaint_clear_mask'.tr,
-                      onPressed: () => setState(() => _strokes.clear()),
-                      icon: const Icon(Icons.clear, color: Colors.white70),
-                    ),
-                  ],
-                ),
-                TextField(
-                  controller: _promptCtrl,
-                  maxLines: 2,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    hintText: 'msg_ai_inpaint_prompt_hint'.tr,
-                    hintStyle: TextStyle(color: AppDs.textOnDarkSecondary),
-                    filled: true,
-                    fillColor: Colors.white.withValues(alpha: 0.06),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(AppDs.radiusMd),
+                MusamiAiSheetHeader(
+                  title: 'lbl_ai_inpaint'.tr,
+                  subtitle: 'msg_ai_inpaint_mask_hint'.tr,
+                  icon: Icons.format_paint_rounded,
+                  trailing: IconButton(
+                    tooltip: 'lbl_cancel'.tr,
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      color: Colors.white70,
                     ),
                   ),
                 ),
                 SizedBox(height: AppDs.space3.v),
-                FilledButton(
-                  onPressed: _apply,
-                  child: Text('lbl_apply'.tr),
+                Expanded(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: MusamiAiChrome.panelDeep,
+                      borderRadius: BorderRadius.circular(AppDs.radiusMd),
+                      border: Border.all(color: MusamiAiChrome.hairline),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(AppDs.radiusMd),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          _paintSize = Size(
+                            constraints.maxWidth,
+                            constraints.maxHeight,
+                          );
+                          return Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              ColoredBox(
+                                color: Colors.black,
+                                child: Image.memory(
+                                  widget.imageBytes,
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                              GestureDetector(
+                                onPanStart: (d) {
+                                  setState(() {
+                                    _current = [d.localPosition];
+                                    _strokes.add(_current!);
+                                  });
+                                },
+                                onPanUpdate: (d) {
+                                  setState(() {
+                                    _current?.add(d.localPosition);
+                                  });
+                                },
+                                onPanEnd: (_) => _current = null,
+                                child: CustomPaint(
+                                  painter: _MaskPreviewPainter(
+                                    strokes: _strokes,
+                                    brush: _brush,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                  ),
                 ),
-                TextButton(
+                SizedBox(height: AppDs.space3.v),
+                Container(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+                  decoration: BoxDecoration(
+                    color: MusamiAiChrome.panelDeep,
+                    borderRadius: BorderRadius.circular(AppDs.radiusMd),
+                    border: Border.all(color: MusamiAiChrome.hairline),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.brush_rounded,
+                        size: 18,
+                        color: MusamiAiChrome.accent,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'lbl_ai_inpaint_brush'.tr,
+                        style: const TextStyle(
+                          color: AppDs.textOnDarkPrimary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Expanded(
+                        child: SliderTheme(
+                          data: SliderTheme.of(context).copyWith(
+                            activeTrackColor: MusamiAiChrome.accent,
+                            inactiveTrackColor:
+                                Colors.white.withValues(alpha: 0.12),
+                            thumbColor: MusamiAiChrome.accent,
+                            overlayColor:
+                                MusamiAiChrome.accent.withValues(alpha: 0.16),
+                          ),
+                          child: Slider(
+                            value: _brush,
+                            min: 12,
+                            max: 64,
+                            onChanged: (v) => setState(() => _brush = v),
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'lbl_ai_inpaint_clear_mask'.tr,
+                        onPressed: () => setState(() => _strokes.clear()),
+                        icon: const Icon(
+                          Icons.layers_clear_rounded,
+                          color: AppDs.textOnDarkSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(height: AppDs.space3.v),
+                TextField(
+                  controller: _promptCtrl,
+                  maxLines: 2,
+                  style: const TextStyle(
+                    color: AppDs.textOnDarkPrimary,
+                    fontSize: 15,
+                    height: 1.35,
+                  ),
+                  decoration: MusamiAiChrome.fieldDecoration(
+                    hint: 'msg_ai_inpaint_prompt_hint'.tr,
+                  ),
+                ),
+                SizedBox(height: AppDs.space4.v),
+                MusamiAiPrimaryButton(
+                  label: 'lbl_apply'.tr,
+                  icon: Icons.auto_fix_high_rounded,
+                  onPressed: _apply,
+                ),
+                MusamiAiGhostButton(
+                  label: 'lbl_cancel'.tr,
                   onPressed: () => Navigator.pop(context),
-                  child: Text('lbl_cancel'.tr),
                 ),
               ],
             ),
@@ -242,7 +273,7 @@ class _MaskPreviewPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.55)
+      ..color = MusamiAiChrome.accent.withValues(alpha: 0.55)
       ..strokeWidth = brush
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
@@ -253,7 +284,7 @@ class _MaskPreviewPainter extends CustomPainter {
         canvas.drawCircle(
           stroke.first,
           brush / 2,
-          Paint()..color = Colors.white.withValues(alpha: 0.55),
+          Paint()..color = MusamiAiChrome.accent.withValues(alpha: 0.55),
         );
         continue;
       }

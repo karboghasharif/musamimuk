@@ -86,10 +86,17 @@ TextLayer _cloneTextLayer(TextLayer layer, Offset nudge) {
   );
 }
 
+WidgetLayerExportConfigs _cloneExportConfigs(WidgetLayerExportConfigs configs) {
+  final meta = configs.meta;
+  return configs.copyWith(
+    meta: meta == null ? null : Map<String, dynamic>.from(meta),
+  );
+}
+
 WidgetLayer _cloneWidgetLayer(WidgetLayer layer, Offset nudge) {
   return WidgetLayer(
     // The widget tree is immutable and safe to share; the mutable state that
-    // matters (id, key, meta, transform) is all rebuilt here.
+    // matters (id, key, meta, exportConfigs.meta, transform) is all rebuilt here.
     widget: layer.widget,
     width: layer.width,
     offset: layer.offset + nudge,
@@ -98,7 +105,7 @@ WidgetLayer _cloneWidgetLayer(WidgetLayer layer, Offset nudge) {
     flipX: layer.flipX,
     flipY: layer.flipY,
     interaction: layer.interaction,
-    exportConfigs: layer.exportConfigs,
+    exportConfigs: _cloneExportConfigs(layer.exportConfigs),
     meta: _cloneMeta(layer.meta),
     boxConstraints: layer.boxConstraints,
     groupId: layer.groupId,

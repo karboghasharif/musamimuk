@@ -100,8 +100,6 @@ class _AiStudioImageScreenState extends State<AiStudioImageScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final primary = theme.colorScheme.primary;
-
     return SafeArea(
       child: Scaffold(
         backgroundColor: AppDs.surfaceBase,
@@ -148,10 +146,20 @@ class _AiStudioImageScreenState extends State<AiStudioImageScreen> {
                     onSelected: _busy
                         ? null
                         : (_) => setState(() => _size = size),
-                    selectedColor: AiStudioChrome.accent.withValues(alpha: 0.35),
+                    selectedColor: AiStudioChrome.accent,
+                    checkmarkColor: AiStudioChrome.onAccent,
                     labelStyle: TextStyle(
-                      color: AppDs.textOnDarkPrimary,
+                      color: _size == size
+                          ? AiStudioChrome.onAccent
+                          : AppDs.textOnDarkPrimary,
                       fontSize: 12.fSize,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    backgroundColor: AppDs.atelierInk,
+                    side: BorderSide(
+                      color: _size == size
+                          ? AiStudioChrome.accent
+                          : AiStudioChrome.hairline,
                     ),
                   ),
               ],
@@ -166,11 +174,19 @@ class _AiStudioImageScreenState extends State<AiStudioImageScreen> {
             if (_busy)
               const AppLoadingBlock(message: null)
             else if (_imageBytes != null) ...[
-              ClipRRect(
-                borderRadius: BorderRadius.circular(AppDs.radiusLg.adaptSize),
-                child: AspectRatio(
-                  aspectRatio: _size == '1536x1024' ? 1536 / 1024 : 1,
-                  child: Image.memory(_imageBytes!, fit: BoxFit.cover),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius:
+                      BorderRadius.circular(AppDs.radiusLg.adaptSize),
+                  border: Border.all(color: AiStudioChrome.hairline),
+                ),
+                child: ClipRRect(
+                  borderRadius:
+                      BorderRadius.circular(AppDs.radiusLg.adaptSize),
+                  child: AspectRatio(
+                    aspectRatio: _size == '1536x1024' ? 1536 / 1024 : 1,
+                    child: Image.memory(_imageBytes!, fit: BoxFit.cover),
+                  ),
                 ),
               ),
               SizedBox(height: AppDs.space3.v),
@@ -179,11 +195,11 @@ class _AiStudioImageScreenState extends State<AiStudioImageScreen> {
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: _generate,
-                      icon: const Icon(Icons.refresh),
+                      icon: const Icon(Icons.refresh_rounded),
                       label: Text('lbl_ai_regenerate'.tr),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: primary,
-                        side: BorderSide(color: primary.withValues(alpha: 0.5)),
+                        foregroundColor: AppDs.textOnDarkPrimary,
+                        side: const BorderSide(color: AiStudioChrome.hairline),
                         minimumSize: Size(0, 48.v),
                       ),
                     ),
@@ -195,8 +211,8 @@ class _AiStudioImageScreenState extends State<AiStudioImageScreen> {
                       icon: const Icon(Icons.brush_outlined),
                       label: Text('lbl_ai_use_in_design'.tr),
                       style: FilledButton.styleFrom(
-                        backgroundColor: primary,
-                        foregroundColor: AppDs.onAccent,
+                        backgroundColor: AiStudioChrome.accent,
+                        foregroundColor: AiStudioChrome.onAccent,
                         minimumSize: Size(0, 48.v),
                       ),
                     ),

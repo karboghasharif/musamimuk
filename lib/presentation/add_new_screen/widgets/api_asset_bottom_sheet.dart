@@ -620,10 +620,9 @@ class _ApiAssetBottomSheetState extends State<ApiAssetBottomSheet> {
   }
 
   Widget _buildAssetImage(MediaItem asset, {required BoxFit fit}) {
-    return Image.network(
-      asset.fileUrl,
+    return Image(
+      image: musamiAuthenticatedNetworkImage(asset.fileUrl),
       fit: fit,
-      headers: musamiAuthenticatedHeadersForUrl(asset.fileUrl),
       errorBuilder: (_, _, _) => Icon(
         Icons.broken_image_outlined,
         color: AppDs.textOnDarkDisabled,

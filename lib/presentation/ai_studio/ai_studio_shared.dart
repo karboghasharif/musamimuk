@@ -19,11 +19,13 @@ import '../../widgets/app_bar/custom_app_bar.dart';
 import '../wallet/bloc/wallet_bloc.dart';
 import '../wallet/wallet_cost_guard.dart';
 
-/// Shared chrome for ChatGPT-powered AI Studio tools.
+/// Shared chrome for AI Studio tools (brand: dark atelier + yellow accent).
 class AiStudioChrome {
   AiStudioChrome._();
 
-  static const Color accent = Color(0xFF10A37F);
+  static const Color accent = AppDs.accentYellow;
+  static const Color onAccent = AppDs.onAccent;
+  static const Color hairline = Color(0x22FFFFFF);
 
   static PreferredSizeWidget appBar(BuildContext context, String title) {
     return CustomAppBar(
@@ -52,14 +54,14 @@ class AiStudioChrome {
         vertical: AppDs.space1.v + 2,
       ),
       decoration: BoxDecoration(
-        color: accent.withValues(alpha: 0.16),
+        color: accent.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(AppDs.radiusFull.adaptSize),
-        border: Border.all(color: accent.withValues(alpha: 0.45)),
+        border: Border.all(color: accent.withValues(alpha: 0.4)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.auto_awesome, size: 14.adaptSize, color: accent),
+          Icon(Icons.auto_awesome_rounded, size: 14.adaptSize, color: accent),
           SizedBox(width: 6.h),
           AppText(
             label,
@@ -83,11 +85,12 @@ class AiStudioChrome {
           ActionChip(
             label: Text(tip, maxLines: 1, overflow: TextOverflow.ellipsis),
             onPressed: () => onTap(tip),
-            backgroundColor: Colors.white.withValues(alpha: 0.06),
-            side: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
+            backgroundColor: AppDs.atelierInk,
+            side: const BorderSide(color: hairline),
             labelStyle: TextStyle(
               color: AppDs.textOnDarkPrimary,
               fontSize: 12.fSize,
+              fontWeight: FontWeight.w600,
             ),
           ),
       ],
@@ -222,24 +225,50 @@ class AiStudioProviderPicker extends StatelessWidget {
             for (final kind in kinds)
               PopupMenuItem<EditorAiProviderKind>(
                 value: kind,
-                child: Text(kind.labelKey.tr),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.auto_awesome_rounded,
+                      size: 16,
+                      color: kind == selected
+                          ? AiStudioChrome.accent
+                          : AppDs.textOnDarkSecondary,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(kind.labelKey.tr),
+                  ],
+                ),
               ),
           ],
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: AppDs.space2.h),
+          child: Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: AppDs.space2.h + 2,
+              vertical: 6.v,
+            ),
+            decoration: BoxDecoration(
+              color: AppDs.atelierInk,
+              borderRadius: BorderRadius.circular(AppDs.radiusFull),
+              border: Border.all(color: AiStudioChrome.hairline),
+            ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                Icon(
+                  Icons.auto_awesome_rounded,
+                  size: 14.adaptSize,
+                  color: AiStudioChrome.accent,
+                ),
+                SizedBox(width: 6.h),
                 Text(
                   selected.labelKey.tr,
                   style: TextStyle(
                     color: AppDs.textOnDarkPrimary,
-                    fontSize: 13.fSize,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 12.fSize,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
                 Icon(
-                  Icons.expand_more,
+                  Icons.expand_more_rounded,
                   size: 18.adaptSize,
                   color: AppDs.textOnDarkSecondary,
                 ),
@@ -293,25 +322,34 @@ class AiStudioPromptField extends StatelessWidget {
       controller: controller,
       minLines: minLines,
       maxLines: maxLines,
-      style: TextStyle(color: AppDs.textOnDarkPrimary, fontSize: 15.fSize),
+      style: TextStyle(
+        color: AppDs.textOnDarkPrimary,
+        fontSize: 15.fSize,
+        height: 1.35,
+      ),
       textInputAction: TextInputAction.send,
       onSubmitted: (_) => onSubmitted?.call(),
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: TextStyle(color: AppDs.textOnDarkSecondary),
+        hintStyle: TextStyle(
+          color: AppDs.textOnDarkSecondary.withValues(alpha: 0.85),
+        ),
         filled: true,
-        fillColor: Colors.white.withValues(alpha: 0.06),
+        fillColor: AppDs.atelierInk,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppDs.radiusMd.adaptSize),
-          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
+          borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppDs.radiusMd.adaptSize),
-          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
+          borderSide: const BorderSide(color: AiStudioChrome.hairline),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppDs.radiusMd.adaptSize),
-          borderSide: const BorderSide(color: AiStudioChrome.accent, width: 1.4),
+          borderSide: const BorderSide(
+            color: AiStudioChrome.accent,
+            width: 1.4,
+          ),
         ),
         contentPadding: EdgeInsets.all(AppDs.space4.h),
       ),

@@ -6,6 +6,7 @@ class Screen0RegisterState extends Equatable {
     this.emailFieldController,
     this.passwordFieldController,
     this.passwordConfirmationController,
+    this.referralCodeController,
     this.isShowPassword = true,
     this.accountType = Screen0RegisterBloc.accountTypeDesigner,
     this.screen0RegisterModelObj,
@@ -17,6 +18,7 @@ class Screen0RegisterState extends Equatable {
   TextEditingController? emailFieldController;
   TextEditingController? passwordFieldController;
   TextEditingController? passwordConfirmationController;
+  TextEditingController? referralCodeController;
   Screen0RegisterModel? screen0RegisterModelObj;
   bool isShowPassword;
   /// designer | shop | rider — account signup intent (KYC follows for shop/rider).
@@ -30,6 +32,7 @@ class Screen0RegisterState extends Equatable {
         emailFieldController,
         passwordFieldController,
         passwordConfirmationController,
+        referralCodeController,
         isShowPassword,
         accountType,
         screen0RegisterModelObj,
@@ -42,6 +45,7 @@ class Screen0RegisterState extends Equatable {
     TextEditingController? emailFieldController,
     TextEditingController? passwordFieldController,
     TextEditingController? passwordConfirmationController,
+    TextEditingController? referralCodeController,
     bool? isShowPassword,
     String? accountType,
     Screen0RegisterModel? screen0RegisterModelObj,
@@ -57,6 +61,8 @@ class Screen0RegisterState extends Equatable {
           passwordFieldController ?? this.passwordFieldController,
       passwordConfirmationController: passwordConfirmationController ??
           this.passwordConfirmationController,
+      referralCodeController:
+          referralCodeController ?? this.referralCodeController,
       isShowPassword: isShowPassword ?? this.isShowPassword,
       accountType: accountType ?? this.accountType,
       screen0RegisterModelObj:

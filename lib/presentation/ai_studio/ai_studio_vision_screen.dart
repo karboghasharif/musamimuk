@@ -119,8 +119,6 @@ class _AiStudioVisionScreenState extends State<AiStudioVisionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final primary = theme.colorScheme.primary;
-
     return SafeArea(
       child: Scaffold(
         backgroundColor: AppDs.surfaceBase,
@@ -152,18 +150,25 @@ class _AiStudioVisionScreenState extends State<AiStudioVisionScreen> {
             AspectRatio(
               aspectRatio: 4 / 3,
               child: Material(
-                color: Colors.white.withValues(alpha: 0.05),
+                color: AppDs.atelierInk,
                 borderRadius: BorderRadius.circular(AppDs.radiusLg.adaptSize),
                 clipBehavior: Clip.antiAlias,
-                child: _previewBytes == null
-                    ? Center(
-                        child: AppText(
-                          'msg_ai_vision_empty'.tr,
-                          variant: AppTextVariant.secondary,
-                          textAlign: TextAlign.center,
-                        ),
-                      )
-                    : Image.memory(_previewBytes!, fit: BoxFit.cover),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius:
+                        BorderRadius.circular(AppDs.radiusLg.adaptSize),
+                    border: Border.all(color: AiStudioChrome.hairline),
+                  ),
+                  child: _previewBytes == null
+                      ? Center(
+                          child: AppText(
+                            'msg_ai_vision_empty'.tr,
+                            variant: AppTextVariant.secondary,
+                            textAlign: TextAlign.center,
+                          ),
+                        )
+                      : Image.memory(_previewBytes!, fit: BoxFit.cover),
+                ),
               ),
             ),
             SizedBox(height: AppDs.space3.v),
@@ -175,7 +180,8 @@ class _AiStudioVisionScreenState extends State<AiStudioVisionScreen> {
                     icon: const Icon(Icons.photo_library_outlined),
                     label: Text('lbl_photo_gallery'.tr),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: primary,
+                      foregroundColor: AppDs.textOnDarkPrimary,
+                      side: const BorderSide(color: AiStudioChrome.hairline),
                       minimumSize: Size(0, 48.v),
                     ),
                   ),
@@ -187,7 +193,8 @@ class _AiStudioVisionScreenState extends State<AiStudioVisionScreen> {
                     icon: const Icon(Icons.photo_camera_outlined),
                     label: Text('lbl_camera'.tr),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: primary,
+                      foregroundColor: AppDs.textOnDarkPrimary,
+                      side: const BorderSide(color: AiStudioChrome.hairline),
                       minimumSize: Size(0, 48.v),
                     ),
                   ),

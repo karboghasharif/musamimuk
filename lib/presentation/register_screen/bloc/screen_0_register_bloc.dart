@@ -32,6 +32,7 @@ class Screen0RegisterBloc
     state.emailFieldController?.dispose();
     state.passwordFieldController?.dispose();
     state.passwordConfirmationController?.dispose();
+    state.referralCodeController?.dispose();
     return super.close();
   }
 
@@ -61,11 +62,13 @@ class Screen0RegisterBloc
     Screen0RegisterInitialEvent event,
     Emitter<Screen0RegisterState> emit,
   ) async {
+    final pending = PrefUtils().getPendingReferralCode() ?? '';
     emit(state.copyWith(
       userProfileController: TextEditingController(),
       emailFieldController: TextEditingController(),
       passwordFieldController: TextEditingController(),
       passwordConfirmationController: TextEditingController(),
+      referralCodeController: TextEditingController(text: pending),
       isShowPassword: true,
       accountType: accountTypeDesigner,
       registerError: null,
@@ -83,6 +86,7 @@ class Screen0RegisterBloc
         email: event.email,
         password: event.password,
         passwordConfirmation: event.passwordConfirmation,
+        referralCode: event.referralCode,
       );
       if (result is RegisterSuccess) {
         final prefs = PrefUtils();

@@ -1,11 +1,9 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
-import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:pro_image_editor/pro_image_editor.dart';
 
 import '../../../core/app_export.dart';
 import 'arabic_custom_keyboard.dart';
+import 'musami_app_color_picker.dart';
 import 'musami_text_editor_ai_sheet.dart';
 import 'musami_text_editor_arabic_fonts.dart';
 import 'musami_text_editor_script.dart';
@@ -44,10 +42,11 @@ void musamiShowTextColorPicker(BuildContext context, TextEditorState editor) {
   if (editor.backgroundColorMode != LayerBackgroundMode.onlyColor) {
     editor.backgroundColorMode = LayerBackgroundMode.backgroundAndColor;
   }
-  _musamiShowHueColorPickerSheet(
+  musamiShowAppColorPicker(
     context,
     title: 'lbl_pick_text_color'.tr,
     initialColor: editor.primaryColor,
+    enableAlpha: false,
     onColorChanged: (c) => editor.primaryColor = c,
   );
 }
@@ -67,10 +66,6 @@ void musamiShowTextBackgroundPicker(
         child: AppSheetPagePadding(
           child: StatefulBuilder(
             builder: (context, setModalState) {
-              final pickerWidth = min(
-                MediaQuery.sizeOf(context).width - 32,
-                320.0,
-              );
               return SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -106,20 +101,15 @@ void musamiShowTextBackgroundPicker(
                     ),
                     SizedBox(height: AppDs.space3.v),
                     Center(
-                      child: ColorPicker(
+                      child: MusamiAppColorPickerPanel(
                         pickerColor: pickerColor,
+                        enableAlpha: true,
                         onColorChanged: (Color c) {
                           setModalState(() => pickerColor = c);
                           editor.backgroundColorMode =
                               LayerBackgroundMode.backgroundAndColor;
                           editor.secondaryColor = c;
                         },
-                        enableAlpha: false,
-                        displayThumbColor: true,
-                        paletteType: PaletteType.hsvWithHue,
-                        labelTypes: const [],
-                        pickerAreaHeightPercent: 0.65,
-                        colorPickerWidth: pickerWidth,
                       ),
                     ),
                   ],
@@ -133,64 +123,7 @@ void musamiShowTextBackgroundPicker(
   );
 }
 
-void _musamiShowHueColorPickerSheet(
-  BuildContext context, {
-  required String title,
-  required Color initialColor,
-  required ValueChanged<Color> onColorChanged,
-  bool enableAlpha = false,
-}) {
-  showAppModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    builder: (ctx) {
-      final sheetTheme = Theme.of(ctx);
-      Color pickerColor = initialColor;
-      return AppDarkSheetTheme(
-        child: AppSheetPagePadding(
-          child: StatefulBuilder(
-            builder: (context, setModalState) {
-              final pickerWidth = min(
-                MediaQuery.sizeOf(context).width - 32,
-                320.0,
-              );
-              return SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      title,
-                      style: AppDs.sheetTitle(sheetTheme, color: Colors.white),
-                    ),
-                    SizedBox(height: AppDs.space4.v),
-                    Center(
-                      child: ColorPicker(
-                        pickerColor: pickerColor,
-                        onColorChanged: (Color c) {
-                          setModalState(() => pickerColor = c);
-                          onColorChanged(c);
-                        },
-                        enableAlpha: enableAlpha,
-                        displayThumbColor: true,
-                        paletteType: PaletteType.hsvWithHue,
-                        labelTypes: const [],
-                        pickerAreaHeightPercent: 0.65,
-                        colorPickerWidth: pickerWidth,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ),
-      );
-    },
-  );
-}
-
-/// Full HSV colour picker for a canvas [TextLayer] (matches inline text editor UX).
+/// Full HSV colour picker for canvas layers (image tint, text, borders, …).
 void musamiShowLayerTextColorPicker(
   BuildContext context, {
   required String title,
@@ -198,7 +131,7 @@ void musamiShowLayerTextColorPicker(
   required ValueChanged<Color> onColorChanged,
   bool enableAlpha = false,
 }) {
-  _musamiShowHueColorPickerSheet(
+  musamiShowAppColorPicker(
     context,
     title: title,
     initialColor: initialColor,
@@ -227,10 +160,6 @@ void musamiShowLayerTextBackgroundPicker(
         child: AppSheetPagePadding(
           child: StatefulBuilder(
             builder: (innerCtx, setModalState) {
-              final pickerWidth = min(
-                MediaQuery.sizeOf(innerCtx).width - 32,
-                320.0,
-              );
               return SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -264,18 +193,13 @@ void musamiShowLayerTextBackgroundPicker(
                     ),
                     SizedBox(height: AppDs.space3.v),
                     Center(
-                      child: ColorPicker(
+                      child: MusamiAppColorPickerPanel(
                         pickerColor: pickerColor,
+                        enableAlpha: true,
                         onColorChanged: (Color c) {
                           setModalState(() => pickerColor = c);
                           onBackgroundChanged(c);
                         },
-                        enableAlpha: true,
-                        displayThumbColor: true,
-                        paletteType: PaletteType.hsvWithHue,
-                        labelTypes: const [],
-                        pickerAreaHeightPercent: 0.65,
-                        colorPickerWidth: pickerWidth,
                       ),
                     ),
                   ],
@@ -328,12 +252,53 @@ void _musamiShowColorGridSheet(
               Wrap(
                 spacing: AppDs.space3.h,
                 runSpacing: AppDs.space3.v,
-                children: palette.map((c) {
-                  final isWhite = c == const Color(0xFFFFFFFF);
-                  return InkWell(
+                children: [
+                  ...palette.map((c) {
+                    final isWhite = c == const Color(0xFFFFFFFF);
+                    return InkWell(
+                      onTap: () {
+                        onPick(c);
+                        Navigator.pop(ctx);
+                      },
+                      borderRadius: BorderRadius.circular(
+                        AppDs.radiusLg.adaptSize,
+                      ),
+                      child: Container(
+                        width: AppDs.minTap.adaptSize * 0.85,
+                        height: AppDs.minTap.adaptSize * 0.85,
+                        decoration: BoxDecoration(
+                          color: c,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: isWhite
+                                ? Colors.white.withValues(alpha: 0.5)
+                                : Colors.transparent,
+                            width: isWhite ? 2 : 0,
+                          ),
+                          boxShadow: [
+                            if (!isWhite)
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.2),
+                                blurRadius: 6,
+                                offset: const Offset(0, 2),
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
+                  InkWell(
                     onTap: () {
-                      onPick(c);
                       Navigator.pop(ctx);
+                      musamiShowAppColorPicker(
+                        context,
+                        title: title,
+                        initialColor: palette.isNotEmpty
+                            ? palette.first
+                            : Colors.white,
+                        enableAlpha: true,
+                        onColorChanged: onPick,
+                      );
                     },
                     borderRadius: BorderRadius.circular(
                       AppDs.radiusLg.adaptSize,
@@ -342,26 +307,20 @@ void _musamiShowColorGridSheet(
                       width: AppDs.minTap.adaptSize * 0.85,
                       height: AppDs.minTap.adaptSize * 0.85,
                       decoration: BoxDecoration(
-                        color: c,
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: isWhite
-                              ? Colors.white.withValues(alpha: 0.5)
-                              : Colors.transparent,
-                          width: isWhite ? 2 : 0,
+                          color: sheetTheme.colorScheme.primary,
+                          width: 2,
                         ),
-                        boxShadow: [
-                          if (!isWhite)
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.2),
-                              blurRadius: 6,
-                              offset: const Offset(0, 2),
-                            ),
-                        ],
+                      ),
+                      child: Icon(
+                        Icons.palette_outlined,
+                        color: sheetTheme.colorScheme.primary,
+                        size: 22.adaptSize,
                       ),
                     ),
-                  );
-                }).toList(),
+                  ),
+                ],
               ),
             ],
           ),

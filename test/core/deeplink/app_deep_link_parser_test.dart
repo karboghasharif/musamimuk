@@ -77,4 +77,23 @@ void main() {
     final link = parser.parse(Uri.parse('https://evil.example/contest/1'));
     expect(link, isNull);
   });
+
+  test('parses influencer invite links and query ref', () {
+    final openInvite = parser.parse(
+      Uri.parse('https://srv1813447.hstgr.cloud/open/invite/ABC12XYZ'),
+    );
+    expect(openInvite!.target, AppDeepLinkTarget.referralInvite);
+    expect(openInvite.referralCode, 'ABC12XYZ');
+    expect(openInvite.routeName, AppRoutes.screen0RegisterScreen);
+
+    final custom = parser.parse(Uri.parse('musamimuk://invite/ABC12XYZ'));
+    expect(custom!.target, AppDeepLinkTarget.referralInvite);
+    expect(custom.referralCode, 'ABC12XYZ');
+
+    final query = parser.parse(
+      Uri.parse('https://srv1813447.hstgr.cloud/?ref=ABC12XYZ'),
+    );
+    expect(query!.target, AppDeepLinkTarget.referralInvite);
+    expect(query.referralCode, 'ABC12XYZ');
+  });
 }

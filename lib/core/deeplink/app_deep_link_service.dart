@@ -5,9 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../session/session_manager.dart';
-import '../utils/logger.dart';
-import '../utils/navigator_service.dart';
+import '../app_export.dart';
 import 'app_deep_link.dart';
 import 'app_link_config.dart';
 
@@ -84,6 +82,11 @@ class AppDeepLinkService {
         return;
       }
 
+      if (link.target == AppDeepLinkTarget.referralInvite) {
+        await _handleReferralInvite(link);
+        return;
+      }
+
       final route = link.routeName;
       final args = link.arguments;
 
@@ -135,6 +138,25 @@ class AppDeepLinkService {
     } catch (e) {
       if (kDebugMode) Logger.log('Play Store launch failed: $e');
     }
+  }
+
+  /// Persist invite code; earnings apply only after a real signup with that code.
+  Future<void> _handleReferralInvite(AppDeepLink link) async {
+    final code = link.referralCode?.trim().toUpperCase();
+    if (code != null && code.isNotEmpty) {
+      await PrefUtils().setPendingReferralCode(code);
+    }
+
+    final prefs = PrefUtils();
+    final isFullAccount =
+        prefs.isLoggedIn() && !prefs.isGuestAccount();
+    if (isFullAccount) {
+      await _pushWhenNavigatorReady(AppRoutes.screen1HomeScreen, null);
+      return;
+    }
+
+    // Guest or logged-out → register so the pending code can be attributed.
+    await _pushWhenNavigatorReady(AppRoutes.screen0RegisterScreen, null);
   }
 
   Future<void> dispose() async {

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/scheduler.dart';
 import 'package:toastification/toastification.dart';
 
+import '../network/api_response_cache.dart';
 import '../utils/app_toast.dart';
 import '../utils/navigator_service.dart';
 import '../utils/pref_utils.dart';
@@ -188,6 +189,7 @@ class SessionManager {
   Future<void> logout({bool callApi = false}) async {
     _pendingNavigation = null;
     await PrefUtils().clearAuth();
+    await ApiResponseCache.instance.clearUserScoped();
     authClearedHandler?.call();
     _navigateToLogin();
   }
@@ -204,6 +206,7 @@ class SessionManager {
     try {
       rememberCurrentRouteAsPending();
       await PrefUtils().clearAuth();
+      await ApiResponseCache.instance.clearUserScoped();
       authClearedHandler?.call();
 
       if (showMessage) {

@@ -60,9 +60,43 @@ PODS:
   - file_picker (0.0.1):
     - DKImagePickerController/PhotoGallery
     - Flutter
+  - Firebase/CoreOnly (12.19.3):
+    - FirebaseCore (~> 12.19.3)
+  - Firebase/Messaging (12.19.3):
+    - Firebase/CoreOnly
+    - FirebaseMessaging (~> 12.19.0)
+  - firebase_core (5.1.0):
+    - Firebase/CoreOnly (= 12.19.3)
+    - Flutter
+  - firebase_messaging (17.0.1):
+    - Firebase/Messaging (= 12.19.3)
+    - firebase_core
+    - Flutter
+  - FirebaseCore (12.19.3):
+    - FirebaseCoreInternal (~> 12.19.0)
+    - GoogleUtilities/Environment (~> 8.1)
+    - GoogleUtilities/Logger (~> 8.1)
+  - FirebaseCoreInternal (12.19.0):
+    - "GoogleUtilities/NSData+zlib (~> 8.1)"
+  - FirebaseInstallations (12.19.0):
+    - FirebaseCore (~> 12.19.0)
+    - GoogleUtilities/Environment (~> 8.1)
+    - GoogleUtilities/UserDefaults (~> 8.1)
+    - PromisesObjC (~> 2.4)
+  - FirebaseMessaging (12.19.0):
+    - FirebaseCore (~> 12.19.0)
+    - FirebaseInstallations (~> 12.19.0)
+    - GoogleDataTransport (~> 10.1)
+    - GoogleUtilities/AppDelegateSwizzler (~> 8.1)
+    - GoogleUtilities/Environment (~> 8.1)
+    - GoogleUtilities/Reachability (~> 8.1)
+    - GoogleUtilities/UserDefaults (~> 8.1)
+    - nanopb (~> 3.30910.0)
   - Flutter (1.0.0)
   - flutter_facebook_auth (7.1.5):
     - FBSDKLoginKit (= 18.0.2)
+    - Flutter
+  - flutter_local_notifications (0.0.1):
     - Flutter
   - flutter_secure_storage_darwin (10.0.0):
     - Flutter
@@ -70,13 +104,15 @@ PODS:
   - gal (1.0.0):
     - Flutter
     - FlutterMacOS
-  - google_mlkit_commons (0.11.1):
+  - geolocator_apple (1.2.0):
     - Flutter
-    - MLKitVision (~> 10.0.0)
-  - google_mlkit_selfie_segmentation (0.10.1):
+    - FlutterMacOS
+  - Google-Maps-iOS-Utils (6.1.0):
+    - GoogleMaps (~> 9.0)
+  - google_maps_flutter_ios (0.0.1):
     - Flutter
-    - google_mlkit_commons
-    - GoogleMLKit/SegmentationSelfie (~> 9.0.0)
+    - Google-Maps-iOS-Utils (< 7.0, >= 5.0)
+    - GoogleMaps (< 11.0, >= 8.4)
   - google_sign_in_ios (0.0.1):
     - AppAuth (>= 1.7.4)
     - Flutter
@@ -86,27 +122,35 @@ PODS:
   - GoogleDataTransport (10.1.0):
     - nanopb (~> 3.30910.0)
     - PromisesObjC (~> 2.4)
-  - GoogleMLKit/MLKitCore (9.0.0):
-    - MLKitCommon (~> 14.0.0)
-  - GoogleMLKit/SegmentationSelfie (9.0.0):
-    - GoogleMLKit/MLKitCore
-    - MLKitSegmentationSelfie (~> 1.0.0-beta14)
+  - GoogleMaps (9.4.0):
+    - GoogleMaps/Maps (= 9.4.0)
+  - GoogleMaps/Maps (9.4.0)
   - GoogleSignIn (8.0.0):
     - AppAuth (< 2.0, >= 1.7.3)
     - AppCheckCore (~> 11.0)
     - GTMAppAuth (< 5.0, >= 4.1.1)
     - GTMSessionFetcher/Core (~> 3.3)
-  - GoogleToolboxForMac/Defines (4.2.1)
-  - GoogleToolboxForMac/Logger (4.2.1):
-    - GoogleToolboxForMac/Defines (= 4.2.1)
-  - "GoogleToolboxForMac/NSData+zlib (4.2.1)":
-    - GoogleToolboxForMac/Defines (= 4.2.1)
+  - GoogleUtilities/AppDelegateSwizzler (8.1.0):
+    - GoogleUtilities/Environment
+    - GoogleUtilities/Logger
+    - GoogleUtilities/Network
+    - GoogleUtilities/Privacy
   - GoogleUtilities/Environment (8.1.0):
     - GoogleUtilities/Privacy
   - GoogleUtilities/Logger (8.1.0):
     - GoogleUtilities/Environment
     - GoogleUtilities/Privacy
+  - GoogleUtilities/Network (8.1.0):
+    - GoogleUtilities/Logger
+    - "GoogleUtilities/NSData+zlib"
+    - GoogleUtilities/Privacy
+    - GoogleUtilities/Reachability
+  - "GoogleUtilities/NSData+zlib (8.1.0)":
+    - GoogleUtilities/Privacy
   - GoogleUtilities/Privacy (8.1.0)
+  - GoogleUtilities/Reachability (8.1.0):
+    - GoogleUtilities/Logger
+    - GoogleUtilities/Privacy
   - GoogleUtilities/UserDefaults (8.1.0):
     - GoogleUtilities/Logger
     - GoogleUtilities/Privacy
@@ -123,28 +167,6 @@ PODS:
   - in_app_purchase_storekit (0.0.1):
     - Flutter
     - FlutterMacOS
-  - MLImage (1.0.0-beta8)
-  - MLKitCommon (14.0.0):
-    - GoogleDataTransport (~> 10.0)
-    - GoogleToolboxForMac/Logger (< 5.0, >= 4.2.1)
-    - "GoogleToolboxForMac/NSData+zlib (< 5.0, >= 4.2.1)"
-    - GoogleUtilities/Logger (~> 8.0)
-    - GoogleUtilities/UserDefaults (~> 8.0)
-    - GTMSessionFetcher/Core (< 4.0, >= 3.3.2)
-  - MLKitSegmentationCommon (1.0.0-beta14):
-    - MLKitCommon (~> 14.0)
-    - MLKitXenoCommon (= 1.0.0-beta16)
-  - MLKitSegmentationSelfie (1.0.0-beta14):
-    - MLKitSegmentationCommon (= 1.0.0-beta14)
-  - MLKitVision (10.0.0):
-    - GoogleToolboxForMac/Logger (< 5.0, >= 4.2.1)
-    - "GoogleToolboxForMac/NSData+zlib (< 5.0, >= 4.2.1)"
-    - GTMSessionFetcher/Core (< 4.0, >= 3.3.2)
-    - MLImage (= 1.0.0-beta8)
-    - MLKitCommon (~> 14.0)
-  - MLKitXenoCommon (1.0.0-beta16):
-    - MLKitCommon (~> 14.0)
-    - MLKitVision (~> 10.0)
   - nanopb (3.30910.0):
     - nanopb/decode (= 3.30910.0)
     - nanopb/encode (= 3.30910.0)
@@ -158,7 +180,21 @@ PODS:
   - PromisesObjC (2.4.0)
   - PromisesSwift (2.4.0):
     - PromisesObjC (= 2.4.0)
+  - purchases_flutter (10.18.1):
+    - Flutter
+    - PurchasesHybridCommon (= 19.15.0)
+  - purchases_ui_flutter (10.18.1):
+    - Flutter
+    - PurchasesHybridCommonUI (= 19.15.0)
+  - PurchasesHybridCommon (19.15.0):
+    - RevenueCat (= 5.98.0)
+  - PurchasesHybridCommonUI (19.15.0):
+    - PurchasesHybridCommon (= 19.15.0)
+    - RevenueCatUI (= 5.98.0)
   - RecaptchaInterop (101.0.0)
+  - RevenueCat (5.98.0)
+  - RevenueCatUI (5.98.0):
+    - RevenueCat (= 5.98.0)
   - SDWebImage (5.21.7):
     - SDWebImage/Core (= 5.21.7)
   - SDWebImage/Core (5.21.7)
@@ -178,6 +214,69 @@ PODS:
   - sqflite_darwin (0.0.4):
     - Flutter
     - FlutterMacOS
+  - Stripe (26.13.0):
+    - StripeApplePay (= 26.13.0)
+    - StripeCore (= 26.13.0)
+    - StripeIssuing (= 26.13.0)
+    - StripePayments (= 26.13.0)
+    - StripePaymentsUI (= 26.13.0)
+    - StripeUICore (= 26.13.0)
+  - stripe_ios (0.0.1):
+    - Flutter
+    - Stripe (~> 26.13.0)
+    - stripe_ios/stripe_ios (= 0.0.1)
+    - stripe_ios/stripe_objc (= 0.0.1)
+    - StripeApplePay (~> 26.13.0)
+    - StripeFinancialConnections (~> 26.13.0)
+    - StripePayments (~> 26.13.0)
+    - StripePaymentSheet (~> 26.13.0)
+    - StripePaymentsUI (~> 26.13.0)
+  - stripe_ios/stripe_ios (0.0.1):
+    - Flutter
+    - Stripe (~> 26.13.0)
+    - stripe_ios/stripe_objc
+    - StripeApplePay (~> 26.13.0)
+    - StripeFinancialConnections (~> 26.13.0)
+    - StripePayments (~> 26.13.0)
+    - StripePaymentSheet (~> 26.13.0)
+    - StripePaymentsUI (~> 26.13.0)
+  - stripe_ios/stripe_objc (0.0.1):
+    - Flutter
+    - Stripe (~> 26.13.0)
+    - StripeApplePay (~> 26.13.0)
+    - StripeFinancialConnections (~> 26.13.0)
+    - StripePayments (~> 26.13.0)
+    - StripePaymentSheet (~> 26.13.0)
+    - StripePaymentsUI (~> 26.13.0)
+  - StripeApplePay (26.13.0):
+    - StripeCore (= 26.13.0)
+  - StripeCore (26.13.0)
+  - StripeFinancialConnections (26.13.0):
+    - StripeCore (= 26.13.0)
+    - StripeUICore (= 26.13.0)
+  - StripeFinancialConnectionsLite (26.13.0):
+    - StripeCore (= 26.13.0)
+  - StripeIssuing (26.13.0):
+    - StripeCore (= 26.13.0)
+    - StripePayments (= 26.13.0)
+    - StripePaymentsUI (= 26.13.0)
+  - StripePayments (26.13.0):
+    - StripeCore (= 26.13.0)
+    - StripePayments/Stripe3DS2 (= 26.13.0)
+  - StripePayments/Stripe3DS2 (26.13.0):
+    - StripeCore (= 26.13.0)
+  - StripePaymentSheet (26.13.0):
+    - StripeApplePay (= 26.13.0)
+    - StripeCore (= 26.13.0)
+    - StripeFinancialConnectionsLite (= 26.13.0)
+    - StripePayments (= 26.13.0)
+    - StripePaymentsUI (= 26.13.0)
+  - StripePaymentsUI (26.13.0):
+    - StripeCore (= 26.13.0)
+    - StripePayments (= 26.13.0)
+    - StripeUICore (= 26.13.0)
+  - StripeUICore (26.13.0):
+    - StripeCore (= 26.13.0)
   - SwiftyGif (5.4.5)
   - url_launcher_ios (0.0.1):
     - Flutter
@@ -186,23 +285,29 @@ DEPENDENCIES:
   - app_links (from `.symlinks/plugins/app_links/ios`)
   - connectivity_plus (from `.symlinks/plugins/connectivity_plus/ios`)
   - file_picker (from `.symlinks/plugins/file_picker/ios`)
+  - firebase_core (from `.symlinks/plugins/firebase_core/ios`)
+  - firebase_messaging (from `.symlinks/plugins/firebase_messaging/ios`)
   - Flutter (from `Flutter`)
   - flutter_facebook_auth (from `.symlinks/plugins/flutter_facebook_auth/ios`)
+  - flutter_local_notifications (from `.symlinks/plugins/flutter_local_notifications/ios`)
   - flutter_secure_storage_darwin (from `.symlinks/plugins/flutter_secure_storage_darwin/darwin`)
   - gal (from `.symlinks/plugins/gal/darwin`)
-  - google_mlkit_commons (from `.symlinks/plugins/google_mlkit_commons/ios`)
-  - google_mlkit_selfie_segmentation (from `.symlinks/plugins/google_mlkit_selfie_segmentation/ios`)
+  - geolocator_apple (from `.symlinks/plugins/geolocator_apple/darwin`)
+  - google_maps_flutter_ios (from `.symlinks/plugins/google_maps_flutter_ios/ios`)
   - google_sign_in_ios (from `.symlinks/plugins/google_sign_in_ios/darwin`)
   - image_picker_ios (from `.symlinks/plugins/image_picker_ios/ios`)
   - in_app_purchase_storekit (from `.symlinks/plugins/in_app_purchase_storekit/darwin`)
   - package_info_plus (from `.symlinks/plugins/package_info_plus/ios`)
   - pro_image_editor (from `.symlinks/plugins/pro_image_editor/darwin`)
+  - purchases_flutter (from `.symlinks/plugins/purchases_flutter/ios`)
+  - purchases_ui_flutter (from `.symlinks/plugins/purchases_ui_flutter/ios`)
   - share_plus (from `.symlinks/plugins/share_plus/ios`)
   - shared_preferences_foundation (from `.symlinks/plugins/shared_preferences_foundation/darwin`)
   - sign_in_with_apple (from `.symlinks/plugins/sign_in_with_apple/ios`)
   - sms_autofill (from `.symlinks/plugins/sms_autofill/ios`)
   - speech_to_text (from `.symlinks/plugins/speech_to_text/darwin`)
   - sqflite_darwin (from `.symlinks/plugins/sqflite_darwin/darwin`)
+  - stripe_ios (from `.symlinks/plugins/stripe_ios/ios`)
   - url_launcher_ios (from `.symlinks/plugins/url_launcher_ios/ios`)
 
 SPEC REPOS:
@@ -217,24 +322,37 @@ SPEC REPOS:
     - FBSDKCoreKit
     - FBSDKCoreKit_Basics
     - FBSDKLoginKit
+    - Firebase
+    - FirebaseCore
+    - FirebaseCoreInternal
+    - FirebaseInstallations
+    - FirebaseMessaging
+    - Google-Maps-iOS-Utils
     - GoogleDataTransport
-    - GoogleMLKit
+    - GoogleMaps
     - GoogleSignIn
-    - GoogleToolboxForMac
     - GoogleUtilities
     - GTMAppAuth
     - GTMSessionFetcher
-    - MLImage
-    - MLKitCommon
-    - MLKitSegmentationCommon
-    - MLKitSegmentationSelfie
-    - MLKitVision
-    - MLKitXenoCommon
     - nanopb
     - PromisesObjC
     - PromisesSwift
+    - PurchasesHybridCommon
+    - PurchasesHybridCommonUI
     - RecaptchaInterop
+    - RevenueCat
+    - RevenueCatUI
     - SDWebImage
+    - Stripe
+    - StripeApplePay
+    - StripeCore
+    - StripeFinancialConnections
+    - StripeFinancialConnectionsLite
+    - StripeIssuing
+    - StripePayments
+    - StripePaymentSheet
+    - StripePaymentsUI
+    - StripeUICore
     - SwiftyGif
 
 EXTERNAL SOURCES:
@@ -244,18 +362,24 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/connectivity_plus/ios"
   file_picker:
     :path: ".symlinks/plugins/file_picker/ios"
+  firebase_core:
+    :path: ".symlinks/plugins/firebase_core/ios"
+  firebase_messaging:
+    :path: ".symlinks/plugins/firebase_messaging/ios"
   Flutter:
     :path: Flutter
   flutter_facebook_auth:
     :path: ".symlinks/plugins/flutter_facebook_auth/ios"
+  flutter_local_notifications:
+    :path: ".symlinks/plugins/flutter_local_notifications/ios"
   flutter_secure_storage_darwin:
     :path: ".symlinks/plugins/flutter_secure_storage_darwin/darwin"
   gal:
     :path: ".symlinks/plugins/gal/darwin"
-  google_mlkit_commons:
-    :path: ".symlinks/plugins/google_mlkit_commons/ios"
-  google_mlkit_selfie_segmentation:
-    :path: ".symlinks/plugins/google_mlkit_selfie_segmentation/ios"
+  geolocator_apple:
+    :path: ".symlinks/plugins/geolocator_apple/darwin"
+  google_maps_flutter_ios:
+    :path: ".symlinks/plugins/google_maps_flutter_ios/ios"
   google_sign_in_ios:
     :path: ".symlinks/plugins/google_sign_in_ios/darwin"
   image_picker_ios:
@@ -266,6 +390,10 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/package_info_plus/ios"
   pro_image_editor:
     :path: ".symlinks/plugins/pro_image_editor/darwin"
+  purchases_flutter:
+    :path: ".symlinks/plugins/purchases_flutter/ios"
+  purchases_ui_flutter:
+    :path: ".symlinks/plugins/purchases_ui_flutter/ios"
   share_plus:
     :path: ".symlinks/plugins/share_plus/ios"
   shared_preferences_foundation:
@@ -278,6 +406,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/speech_to_text/darwin"
   sqflite_darwin:
     :path: ".symlinks/plugins/sqflite_darwin/darwin"
+  stripe_ios:
+    :path: ".symlinks/plugins/stripe_ios/ios"
   url_launcher_ios:
     :path: ".symlinks/plugins/url_launcher_ios/ios"
 
@@ -295,34 +425,42 @@ SPEC CHECKSUMS:
   FBSDKCoreKit_Basics: eb530cd6a79030dbb11df460aafb2767bcad9028
   FBSDKLoginKit: 6a70798793e499335a98fab1a758d7da34af196e
   file_picker: a0560bc09d61de87f12d246fc47d2119e6ef37be
+  Firebase: e3c5ab38229ae085490d02398d97b9f5374bbe6e
+  firebase_core: 80d50cac10fc9dff2597c55ed43e296d9a0bc90a
+  firebase_messaging: 378a914df459aea513c6642ebb531fe7d7200c94
+  FirebaseCore: ab948de5d99e69aeed3cd6f5ace263ce795b2559
+  FirebaseCoreInternal: 656b1c2fd5a1c5976183dc54b73deda78fb26ee3
+  FirebaseInstallations: f70a49eed611f5602f373e40974b3b01556ac217
+  FirebaseMessaging: c15f48126adbe8b4d3238a5e1fa24bab3ad3e472
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   flutter_facebook_auth: fe770ba7c3b26637a955662b84b33c4ab33d3a14
+  flutter_local_notifications: 643a3eda1ce1c0599413ca31672536d423dee214
   flutter_secure_storage_darwin: acdb3f316ed05a3e68f856e0353b133eec373a23
   gal: baecd024ebfd13c441269ca7404792a7152fde89
-  google_mlkit_commons: a5e4ffae5bc59ea4c7b9025dc72cb6cb79dc1166
-  google_mlkit_selfie_segmentation: 0317616b7e460f242bd13a805b70f4e0ba636336
+  geolocator_apple: ab36aa0e8b7d7a2d7639b3b4e48308394e8cef5e
+  Google-Maps-iOS-Utils: 0a484b05ed21d88c9f9ebbacb007956edd508a96
+  google_maps_flutter_ios: 17552876e72723da1d41accc22f03b5f7afbde69
   google_sign_in_ios: b48bb9af78576358a168361173155596c845f0b9
   GoogleDataTransport: aae35b7ea0c09004c3797d53c8c41f66f219d6a7
-  GoogleMLKit: b1eee21a41c57704fe72483b15c85cb2c0cd7444
+  GoogleMaps: 0608099d4870cac8754bdba9b6953db543432438
   GoogleSignIn: ce8c89bb9b37fb624b92e7514cc67335d1e277e4
-  GoogleToolboxForMac: d1a2cbf009c453f4d6ded37c105e2f67a32206d8
   GoogleUtilities: 00c88b9a86066ef77f0da2fab05f65d7768ed8e1
   GTMAppAuth: f69bd07d68cd3b766125f7e072c45d7340dea0de
   GTMSessionFetcher: 5aea5ba6bd522a239e236100971f10cb71b96ab6
   image_picker_ios: e0ece4aa2a75771a7de3fa735d26d90817041326
   in_app_purchase_storekit: 22cca7d08eebca9babdf4d07d0baccb73325d3c8
-  MLImage: 0de5c6c2bf9e93b80ef752e2797f0836f03b58c0
-  MLKitCommon: 47d47b50a031d00db62f1b0efe5a1d8b09a3b2e6
-  MLKitSegmentationCommon: f634fb3c20c1d8bace22a2c026bdaa0ca17613d9
-  MLKitSegmentationSelfie: 62371f35c33d49c3e7474443677b6a0c7ac9c98b
-  MLKitVision: 39a5a812db83c4a0794445088e567f3631c11961
-  MLKitXenoCommon: 1a4268c1222a6043047af5bb9435028206c63287
   nanopb: fad817b59e0457d11a5dfbde799381cd727c1275
   package_info_plus: af8e2ca6888548050f16fa2f1938db7b5a5df499
   pro_image_editor: e57a76b305fd8c2e06d57f92aec82b9c6a6e8d9f
   PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
   PromisesSwift: 9d77319bbe72ebf6d872900551f7eeba9bce2851
+  purchases_flutter: bce632274172e59844aa3ba697b90a139fe81978
+  purchases_ui_flutter: f43993b7b2a7566a52f2ac6442c483eff9453d1a
+  PurchasesHybridCommon: 896c922f222ffde889a96568e02268b5ca9db85a
+  PurchasesHybridCommonUI: 843d45949325d6cf4c4abe285fa15876ca16f910
   RecaptchaInterop: 11e0b637842dfb48308d242afc3f448062325aba
+  RevenueCat: d2d6a98d8e1d53cc1c6362cc1fdfb64ca99b8735
+  RevenueCatUI: 8f089ba531a2393465cb5062e2009eb3a6e42927
   SDWebImage: e9fc87c1aab89a8ab1bbd74eba378c6f53be8abf
   share_plus: 50da8cb520a8f0f65671c6c6a99b3617ed10a58a
   shared_preferences_foundation: 7036424c3d8ec98dfe75ff1667cb0cd531ec82bb
@@ -330,9 +468,20 @@ SPEC CHECKSUMS:
   sms_autofill: b36b2147535657fea83d7f3898d7831de70bd8e4
   speech_to_text: 3b313d98516d3d0406cea424782ec25470c59d19
   sqflite_darwin: 20b2a3a3b70e43edae938624ce550a3cbf66a3d0
+  Stripe: 2f6d025c3dc6c93890f39c75c4b85ccb96412cfc
+  stripe_ios: 407544c50d1da0cca0fe67b8f2ef068add93d163
+  StripeApplePay: 05c69df3ee93e82b6399e4c3c03bbf7ccd3568e5
+  StripeCore: 02c8ba87ddf9b838fc1d4a2d3650d416e0c9ddc1
+  StripeFinancialConnections: 35e44f12ca99c5db3d8069a29c0ffcc669ab0400
+  StripeFinancialConnectionsLite: 2321c88ad41e2477568c23a8b391890cc82c1b7b
+  StripeIssuing: 715e7b38b95bb1e50e72a318113ff3c80561aaf1
+  StripePayments: cf4557e925d39aa0c308b51bb3dcb4e34f817086
+  StripePaymentSheet: e250c2518ea55f6c81fa124320343535ccb458a6
+  StripePaymentsUI: c15703ef9d7029a771b6888e112ea24ff328cdba
+  StripeUICore: 64ea2cd22d214b711cfc39bce86863e1afa9993e
   SwiftyGif: 706c60cf65fa2bc5ee0313beece843c8eb8194d4
   url_launcher_ios: 7a95fa5b60cc718a708b8f2966718e93db0cef1b
 
-PODFILE CHECKSUM: f94c0a06350451eba0c7def24e28f7ce2925c348
+PODFILE CHECKSUM: 2b7004df8431740e1b56bb9bab2f3b2a583b9af2
 
 COCOAPODS: 1.16.2

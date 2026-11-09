@@ -16,6 +16,7 @@ import '../../ai_studio/ai_studio_shared.dart';
 import '../../wallet/bloc/wallet_bloc.dart';
 import '../../wallet/wallet_cost_guard.dart';
 import '../bloc/add_new_bloc.dart';
+import 'musami_ai_chrome.dart';
 
 /// Command-bar overlay shown after the user picks an AI action from the FAB.
 class MusamiEditorAiOverlay extends StatelessWidget {
@@ -79,30 +80,28 @@ class MusamiEditorAiExpandableFab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final primary = theme.colorScheme.primary;
     const supportImages = true;
 
     return ExpandableFab(
       key: fabKey,
       type: ExpandableFabType.up,
-      distance: 72,
-      duration: const Duration(milliseconds: 220),
+      distance: 76,
+      duration: AppDs.motionFast,
       childrenAnimation: ExpandableFabAnimation.none,
       // No dim overlay — its full-screen Container expands the FAB slot and
       // steals canvas hit-testing even after the menu closes.
       openButtonBuilder: RotateFloatingActionButtonBuilder(
-        child: const Icon(Icons.auto_awesome),
+        child: const Icon(Icons.auto_awesome_rounded),
         fabSize: ExpandableFabSize.regular,
-        foregroundColor: Colors.white,
-        backgroundColor: primary,
+        foregroundColor: MusamiAiChrome.onAccent,
+        backgroundColor: MusamiAiChrome.accent,
         shape: const CircleBorder(),
       ),
       closeButtonBuilder: DefaultFloatingActionButtonBuilder(
-        child: const Icon(Icons.close),
+        child: const Icon(Icons.close_rounded),
         fabSize: ExpandableFabSize.regular,
-        foregroundColor: Colors.white,
-        backgroundColor: const Color(0xFF3A3A3E),
+        foregroundColor: AppDs.textOnDarkPrimary,
+        backgroundColor: MusamiAiChrome.panel,
         shape: const CircleBorder(),
       ),
       children: [
@@ -158,28 +157,28 @@ class _AiFabLabeledAction extends StatelessWidget {
   final IconData icon;
   final VoidCallback onPressed;
 
-  static const _chrome = Color(0xFF28282C);
-
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Material(
-          color: _chrome,
-          borderRadius: BorderRadius.circular(20),
-          elevation: 2,
+          color: MusamiAiChrome.panel,
+          elevation: 3,
+          shadowColor: Colors.black54,
+          borderRadius: BorderRadius.circular(AppDs.radiusFull),
           child: InkWell(
             onTap: onPressed,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(AppDs.radiusFull),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               child: Text(
                 label,
                 style: const TextStyle(
-                  color: Colors.white,
+                  color: AppDs.textOnDarkPrimary,
                   fontSize: 13,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.1,
                 ),
               ),
             ),
@@ -189,10 +188,11 @@ class _AiFabLabeledAction extends StatelessWidget {
         FloatingActionButton.small(
           heroTag: heroTag,
           tooltip: tooltip,
-          backgroundColor: _chrome,
-          foregroundColor: Colors.white,
+          backgroundColor: MusamiAiChrome.panelDeep,
+          foregroundColor: MusamiAiChrome.accent,
+          elevation: 3,
           onPressed: onPressed,
-          child: Icon(icon),
+          child: Icon(icon, size: 20),
         ),
       ],
     );
@@ -235,8 +235,7 @@ class _EditorAiCommandBarState extends State<EditorAiCommandBar> {
   late EditorAiProviderKind _providerKind;
   EditorAiMessageBase? _provider;
 
-  static const _anim = Duration(milliseconds: 220);
-  static const _chrome = Color(0xFF28282C);
+  static const _anim = AppDs.motionFast;
 
   @override
   void initState() {
@@ -458,14 +457,12 @@ class _EditorAiCommandBarState extends State<EditorAiCommandBar> {
   }
 
   Future<void> _pickExample() async {
-    final result = await showModalBottomSheet<String>(
+    final result = await showAppModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
-      useSafeArea: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      builder: (_) => const AppDarkSheetTheme(
+        child: _EditorAiExampleCommandsSheet(),
       ),
-      builder: (_) => const _EditorAiExampleCommandsSheet(),
     );
     if (result == null || !mounted) return;
     _mode.value = EditorAiGenerationMode.text;
@@ -479,6 +476,7 @@ class _EditorAiCommandBarState extends State<EditorAiCommandBar> {
     final bottomPad =
         math.max(0.0, widget.bottomInset) +
         math.max(0.0, keyboard - widget.bottomInset);
+    final imageOk = _provider?.isImageGenerationSupported ?? false;
 
     return ValueListenableBuilder<bool>(
       valueListenable: _alignTop,
@@ -492,34 +490,147 @@ class _EditorAiCommandBarState extends State<EditorAiCommandBar> {
             padding: EdgeInsets.fromLTRB(12, 12, 12, 72 + bottomPad),
             child: Material(
               type: MaterialType.transparency,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  LayoutBuilder(
-                    builder: (_, constraints) {
-                      final isNarrow = constraints.maxWidth < 560;
-                      final input = _buildInput();
-                      final actions = _buildActionRow();
-                      if (isNarrow) {
-                        return Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [actions, const SizedBox(height: 7), input],
-                        );
-                      }
-                      return Row(
-                        children: [
-                          Expanded(child: input),
-                          const SizedBox(width: 12),
-                          actions,
-                        ],
-                      );
-                    },
-                  ),
-                ],
+              child: AnimatedContainer(
+                duration: _anim,
+                curve: Curves.easeOutCubic,
+                decoration: MusamiAiChrome.panelDecoration(),
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildToolbar(imageOk: imageOk),
+                    if (imageOk) ...[
+                      const SizedBox(height: 10),
+                      _buildModeChips(),
+                    ],
+                    const SizedBox(height: 10),
+                    _buildInput(),
+                  ],
+                ),
               ),
             ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildToolbar({required bool imageOk}) {
+    return Row(
+      children: [
+        if (widget.onClose != null)
+          _toolbarIcon(
+            tooltip: 'Close AI bar',
+            icon: Icons.close_rounded,
+            onPressed: widget.onClose,
+          ),
+        _toolbarIcon(
+          tooltip: 'Example commands',
+          icon: Icons.lightbulb_outline_rounded,
+          onPressed: _pickExample,
+        ),
+        const SizedBox(width: 4),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          decoration: BoxDecoration(
+            color: MusamiAiChrome.accent.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(AppDs.radiusFull),
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.auto_awesome_rounded,
+                color: MusamiAiChrome.accent,
+                size: 14,
+              ),
+              SizedBox(width: 4),
+              Text(
+                'AI',
+                style: TextStyle(
+                  color: MusamiAiChrome.accent,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.4,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const Spacer(),
+        _providerMenu(),
+        _coinCostBadge(),
+        ValueListenableBuilder<bool>(
+          valueListenable: _alignTop,
+          builder: (_, alignTop, _) {
+            return _toolbarIcon(
+              tooltip: 'Move bar',
+              icon: Icons.swap_vert_rounded,
+              onPressed: () => _alignTop.value = !alignTop,
+              selected: alignTop,
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _toolbarIcon({
+    required String tooltip,
+    required IconData icon,
+    required VoidCallback? onPressed,
+    bool selected = false,
+  }) {
+    return IconButton(
+      tooltip: tooltip,
+      visualDensity: VisualDensity.compact,
+      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+      onPressed: onPressed,
+      icon: Icon(
+        icon,
+        size: 20,
+        color: selected ? MusamiAiChrome.accent : AppDs.textOnDarkSecondary,
+      ),
+    );
+  }
+
+  Widget _buildModeChips() {
+    return ValueListenableBuilder<EditorAiGenerationMode>(
+      valueListenable: _mode,
+      builder: (_, mode, _) {
+        final items = <(EditorAiGenerationMode, String, IconData)>[
+          (EditorAiGenerationMode.text, 'Text', Icons.description_outlined),
+          (
+            EditorAiGenerationMode.designComposition,
+            'Design',
+            Icons.dashboard_customize_outlined,
+          ),
+          (
+            EditorAiGenerationMode.sticker,
+            'Sticker',
+            Icons.sticky_note_2_outlined,
+          ),
+          (
+            EditorAiGenerationMode.background,
+            'Background',
+            Icons.wallpaper_outlined,
+          ),
+        ];
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              for (var i = 0; i < items.length; i++) ...[
+                if (i > 0) const SizedBox(width: 8),
+                MusamiAiChoiceChip(
+                  label: items[i].$2,
+                  icon: items[i].$3,
+                  selected: mode == items[i].$1,
+                  onTap: () => _mode.value = items[i].$1,
+                ),
+              ],
+            ],
           ),
         );
       },
@@ -533,117 +644,65 @@ class _EditorAiCommandBarState extends State<EditorAiCommandBar> {
         return ValueListenableBuilder<EditorAiGenerationMode>(
           valueListenable: _mode,
           builder: (_, mode, _) {
-            return DecoratedBox(
-              decoration: BoxDecoration(boxShadow: kElevationToShadow[6]),
-              child: TextField(
-                readOnly: processing,
-                onEditingComplete: _send,
-                controller: _inputCtrl,
-                focusNode: _inputFocus,
-                keyboardType: TextInputType.text,
-                textInputAction: TextInputAction.send,
-                textCapitalization: TextCapitalization.sentences,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  filled: true,
-                  fillColor: _chrome,
-                  border: const OutlineInputBorder(),
-                  hintText: switch (mode) {
-                    EditorAiGenerationMode.text =>
-                      'Edit canvas (text/arrow/blur) — or “add burger image”',
-                    EditorAiGenerationMode.designComposition =>
-                      'Describe a fully editable banner or template…',
-                    EditorAiGenerationMode.sticker =>
-                      'Describe an image sticker to generate (GPT Image)…',
-                    EditorAiGenerationMode.background =>
-                      'Describe a new background image (GPT Image)…',
-                  },
-                  hintStyle: const TextStyle(
-                    color: Colors.white54,
-                    fontSize: 13,
-                  ),
-                  suffixIcon: Padding(
-                    padding: const EdgeInsets.only(right: 7),
-                    child: processing
-                        ? const Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              SizedBox.square(
-                                dimension: 22,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              ),
-                            ],
-                          )
-                        : IconButton(
-                            tooltip: 'Send to AI',
-                            icon: const Icon(Icons.send, color: Colors.white70),
-                            onPressed: _send,
+            return TextField(
+              readOnly: processing,
+              onEditingComplete: _send,
+              controller: _inputCtrl,
+              focusNode: _inputFocus,
+              keyboardType: TextInputType.text,
+              textInputAction: TextInputAction.send,
+              textCapitalization: TextCapitalization.sentences,
+              minLines: 1,
+              maxLines: 4,
+              style: const TextStyle(
+                color: AppDs.textOnDarkPrimary,
+                fontSize: 15,
+                height: 1.35,
+              ),
+              decoration: MusamiAiChrome.fieldDecoration(
+                hint: switch (mode) {
+                  EditorAiGenerationMode.text =>
+                    'Edit canvas — or ask to add an image…',
+                  EditorAiGenerationMode.designComposition =>
+                    'Describe an editable banner or template…',
+                  EditorAiGenerationMode.sticker =>
+                    'Describe a sticker to generate…',
+                  EditorAiGenerationMode.background =>
+                    'Describe a new background…',
+                },
+                suffix: processing
+                    ? const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: SizedBox.square(
+                          dimension: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.2,
+                            color: MusamiAiChrome.accent,
                           ),
-                  ),
-                ),
+                        ),
+                      )
+                    : IconButton(
+                        tooltip: 'Send to AI',
+                        onPressed: _send,
+                        icon: Container(
+                          width: 34,
+                          height: 34,
+                          decoration: const BoxDecoration(
+                            color: MusamiAiChrome.accent,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.arrow_upward_rounded,
+                            size: 18,
+                            color: MusamiAiChrome.onAccent,
+                          ),
+                        ),
+                      ),
               ),
             );
           },
         );
       },
-    );
-  }
-
-  Widget _buildActionRow() {
-    final imageOk = _provider?.isImageGenerationSupported ?? false;
-
-    return Container(
-      decoration: const ShapeDecoration(
-        shadows: [
-          BoxShadow(
-            color: Color(0x66000000),
-            blurRadius: 8,
-            offset: Offset(0, 2),
-          ),
-        ],
-        color: _chrome,
-        shape: StadiumBorder(),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (widget.onClose != null)
-            IconButton(
-              tooltip: 'Close AI bar',
-              icon: const Icon(Icons.close, color: Colors.white70),
-              onPressed: widget.onClose,
-            ),
-          IconButton(
-            tooltip: 'Example commands',
-            icon: const Icon(Icons.info_outline, color: Colors.white70),
-            onPressed: _pickExample,
-          ),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 6),
-            child: Icon(Icons.auto_awesome, color: Color(0xFF10A37F), size: 20),
-          ),
-          _providerMenu(),
-          _coinCostBadge(),
-          if (imageOk) _modeMenu(),
-          ValueListenableBuilder<bool>(
-            valueListenable: _alignTop,
-            builder: (_, alignTop, _) {
-              return IconButton(
-                tooltip: 'Move bar',
-                icon: AnimatedRotation(
-                  duration: _anim,
-                  turns: alignTop ? 0.5 : 0,
-                  child: const Icon(Icons.arrow_upward, color: Colors.white70),
-                ),
-                onPressed: () => _alignTop.value = !_alignTop.value,
-              );
-            },
-          ),
-        ],
-      ),
     );
   }
 
@@ -660,26 +719,28 @@ class _EditorAiCommandBarState extends State<EditorAiCommandBar> {
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                 decoration: BoxDecoration(
-                  color: Colors.white12,
-                  borderRadius: BorderRadius.circular(999),
+                  color: Colors.white.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(AppDs.radiusFull),
+                  border: Border.all(color: MusamiAiChrome.hairline),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const Icon(
-                      Icons.monetization_on,
-                      size: 12,
-                      color: Colors.white70,
+                      Icons.monetization_on_rounded,
+                      size: 13,
+                      color: MusamiAiChrome.accent,
                     ),
                     const SizedBox(width: 3),
                     Text(
                       '$cost',
                       style: const TextStyle(
-                        color: Colors.white70,
+                        color: AppDs.textOnDarkPrimary,
                         fontSize: 11,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ],
@@ -710,48 +771,6 @@ class _EditorAiCommandBarState extends State<EditorAiCommandBar> {
       },
     );
   }
-
-  Widget _modeMenu() {
-    return ValueListenableBuilder<EditorAiGenerationMode>(
-      valueListenable: _mode,
-      builder: (_, mode, _) {
-        return PopupMenuButton<EditorAiGenerationMode>(
-          tooltip: 'Generation mode',
-          initialValue: mode,
-          onSelected: (v) => _mode.value = v,
-          itemBuilder: (_) => const [
-            PopupMenuItem(
-              value: EditorAiGenerationMode.text,
-              child: Text('Text commands'),
-            ),
-            PopupMenuItem(
-              value: EditorAiGenerationMode.designComposition,
-              child: Text('Generate editable design'),
-            ),
-            PopupMenuItem(
-              value: EditorAiGenerationMode.sticker,
-              child: Text('Generate sticker (GPT Image)'),
-            ),
-            PopupMenuItem(
-              value: EditorAiGenerationMode.background,
-              child: Text('Replace background (GPT Image)'),
-            ),
-          ],
-          child: Icon(
-            switch (mode) {
-              EditorAiGenerationMode.text => Icons.description_outlined,
-              EditorAiGenerationMode.designComposition =>
-                Icons.dashboard_customize_outlined,
-              EditorAiGenerationMode.sticker => Icons.sticky_note_2_outlined,
-              EditorAiGenerationMode.background => Icons.wallpaper_outlined,
-            },
-            color: Colors.white70,
-            size: 20,
-          ),
-        );
-      },
-    );
-  }
 }
 
 class _EditorAiExampleCommandsSheet extends StatelessWidget {
@@ -773,43 +792,69 @@ class _EditorAiExampleCommandsSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 16),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Example commands',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-              ],
+    final theme = Theme.of(context);
+    final maxH = MediaQuery.sizeOf(context).height * 0.72;
+    return AppSheetPagePadding(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxH),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            MusamiAiSheetHeader(
+              title: 'Example commands',
+              subtitle: 'Tap one to run it instantly',
+              icon: Icons.lightbulb_outline_rounded,
+              trailing: IconButton(
+                tooltip: 'Close',
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.close_rounded, color: Colors.white70),
+              ),
             ),
-          ),
-          Flexible(
-            child: ListView.builder(
-              padding: const EdgeInsets.only(bottom: 16),
-              shrinkWrap: true,
-              itemCount: _commands.length,
-              itemBuilder: (_, index) {
-                final command = _commands[index];
-                return ListTile(
-                  title: Text(command),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.pop(context, command),
-                );
-              },
+            SizedBox(height: AppDs.space3.v),
+            Flexible(
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: _commands.length,
+                separatorBuilder: (_, _) => SizedBox(height: AppDs.space2.v),
+                itemBuilder: (_, index) {
+                  final command = _commands[index];
+                  return Material(
+                    color: MusamiAiChrome.panelDeep,
+                    borderRadius: BorderRadius.circular(AppDs.radiusMd),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(AppDs.radiusMd),
+                      onTap: () => Navigator.pop(context, command),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                command,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: AppDs.textOnDarkPrimary,
+                                  height: 1.35,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            const Icon(
+                              Icons.north_east_rounded,
+                              size: 18,
+                              color: MusamiAiChrome.accent,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

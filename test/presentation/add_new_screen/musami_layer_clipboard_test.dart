@@ -3,7 +3,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:musamimuk/presentation/add_new_screen/utils/musami_layer_clipboard.dart';
 import 'package:pro_image_editor/pro_image_editor.dart';
 
-WidgetLayer _imageLayer() {
+WidgetLayer _imageLayer({
+  Map<String, dynamic>? meta,
+  WidgetLayerExportConfigs? exportConfigs,
+}) {
+  final layerMeta = meta ??
+      <String, dynamic>{
+        'musamiLayerKind': 'gallery',
+        'musamiAspect': 0.5,
+        'musamiImageAspect': 0.75,
+        'musamiImageFitMode': 'stretch',
+        'musamiMaintainAspectRatio': false,
+      };
   return WidgetLayer(
     widget: const SizedBox(width: 200, height: 100),
     width: 200,
@@ -11,11 +22,12 @@ WidgetLayer _imageLayer() {
     rotation: 0.3,
     flipX: true,
     offset: const Offset(100, 100),
-    meta: <String, dynamic>{
-      'musamiLayerKind': 'gallery',
-      'musamiAspect': 0.5,
-      'musamiImageAspect': 0.75,
-    },
+    exportConfigs: exportConfigs ??
+        WidgetLayerExportConfigs(
+          networkUrl: 'https://example.com/photo.png',
+          meta: Map<String, dynamic>.from(layerMeta),
+        ),
+    meta: layerMeta,
   );
 }
 
@@ -57,6 +69,46 @@ void main() {
 
       expect(source.meta!['musamiAspect'], 0.5);
       expect(copy.meta!['musamiImageAspect'], 0.75);
+    });
+
+    test('does not share exportConfigs.meta with the source', () {
+      final source = _imageLayer();
+      final copy = musamiCloneLayer(source)! as WidgetLayer;
+
+      copy.exportConfigs.meta!['musamiImageFitMode'] = 'crop';
+      expect(source.exportConfigs.meta!['musamiImageFitMode'], 'stretch');
+      expect(identical(source.exportConfigs.meta, copy.exportConfigs.meta), isFalse);
+    });
+
+    test('preserves crop / stretch / aspect-lock transform meta on duplicate', () {
+      final cropped = musamiCloneLayer(
+        _imageLayer(
+          meta: <String, dynamic>{
+            'musamiLayerKind': 'gallery',
+            'musamiImageFitMode': 'crop',
+            'musamiMaintainAspectRatio': true,
+            'musamiAspect': 1.25,
+            'musamiImageAspect': 0.8,
+            'musamiLayerLocked': true,
+          },
+        ),
+      )! as WidgetLayer;
+      expect(cropped.meta!['musamiImageFitMode'], 'crop');
+      expect(cropped.meta!['musamiMaintainAspectRatio'], isTrue);
+      expect(cropped.meta!['musamiLayerLocked'], isTrue);
+
+      final stretched = musamiCloneLayer(
+        _imageLayer(
+          meta: <String, dynamic>{
+            'musamiLayerKind': 'gallery',
+            'musamiImageFitMode': 'stretch',
+            'musamiMaintainAspectRatio': false,
+            'musamiAspect': 2.0,
+          },
+        ),
+      )! as WidgetLayer;
+      expect(stretched.meta!['musamiImageFitMode'], 'stretch');
+      expect(stretched.meta!['musamiMaintainAspectRatio'], isFalse);
     });
 
     test('copies every styling field of a text layer', () {

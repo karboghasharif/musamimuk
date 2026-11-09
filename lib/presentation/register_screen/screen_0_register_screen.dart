@@ -105,6 +105,8 @@ class _Screen0RegisterScreenState extends State<Screen0RegisterScreen> {
                                     SizedBox(height: AppDs.space3.v),
                                     _buildPasswordConfirmationField(context),
                                     _buildConfirmMatchFeedback(),
+                                    SizedBox(height: AppDs.space3.v),
+                                    _buildReferralCodeField(context),
                                     SizedBox(height: AppDs.space6.v),
                                     _buildRegisterButton(context),
                                     SizedBox(height: AppDs.space4.v),
@@ -385,6 +387,35 @@ class _Screen0RegisterScreenState extends State<Screen0RegisterScreen> {
     );
   }
 
+  Widget _buildReferralCodeField(BuildContext context) {
+    return BlocSelector<Screen0RegisterBloc, Screen0RegisterState,
+        TextEditingController?>(
+      selector: (state) => state.referralCodeController,
+      builder: (context, referralCodeController) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            AppTextField(
+              controller: referralCodeController,
+              label: 'lbl_referral_code_optional'.tr,
+              hintText: 'lbl_referral_code_optional'.tr,
+              prefixIcon: Icons.card_giftcard_outlined,
+              textInputAction: TextInputAction.done,
+              onFieldSubmitted: (_) => _onTapRegister(context),
+            ),
+            Padding(
+              padding: EdgeInsets.only(top: AppDs.space2.v),
+              child: AppText(
+                'msg_referral_code_hint'.tr,
+                variant: AppTextVariant.caption,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Widget _buildConfirmMatchFeedback() {
     final state = context.read<Screen0RegisterBloc>().state;
     final a = state.passwordFieldController?.text ?? '';
@@ -627,11 +658,13 @@ class _Screen0RegisterScreenState extends State<Screen0RegisterScreen> {
     if (name.isEmpty || email.isEmpty || password.isEmpty) {
       return;
     }
+    final referralCode = bloc.state.referralCodeController?.text.trim();
     bloc.add(RegisterSubmitEvent(
       name: name,
       email: email,
       password: password,
       passwordConfirmation: passwordConfirmation,
+      referralCode: referralCode,
     ));
   }
 }

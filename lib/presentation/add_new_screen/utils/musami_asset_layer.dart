@@ -4,6 +4,7 @@ import 'package:pro_image_editor/pro_image_editor.dart';
 import '../../../core/network/authenticated_image.dart';
 import '../../../core/utils/design_state_history.dart';
 import '../../../data/models/media_item.dart';
+import 'musami_image_fit.dart';
 
 /// Builds a [WidgetLayer] for an API asset, with precache and intrinsic size.
 ///
@@ -31,6 +32,19 @@ Future<WidgetLayer?> musamiBuildAssetWidgetLayer({
   final resolvedScale =
       scale ??
       musamiInsertedImageScale(intrinsic: Size(w, h), canvas: canvas);
+  final photoLike = musamiLayerSupportsImageFitMode(<String, dynamic>{
+    'musamiLayerKind': layerKind,
+  });
+  final meta = <String, dynamic>{
+    'fileUrl': url,
+    if (photoLike)
+      ...musamiPhotoInsertMeta(layerKind: layerKind, width: w, height: h)
+    else ...{
+      'musamiLayerKind': layerKind,
+      if (w > 0) kMusamiPhotoFrameAspectMetaKey: h / w,
+      if (w > 0) kMusamiPhotoImageAspectMetaKey: h / w,
+    },
+  };
 
   return WidgetLayer(
     width: w,
@@ -41,13 +55,7 @@ Future<WidgetLayer?> musamiBuildAssetWidgetLayer({
       networkUrl: url,
       meta: <String, dynamic>{'musamiLayerKind': layerKind, 'fileUrl': url},
     ),
-    meta: <String, dynamic>{
-      'musamiLayerKind': layerKind,
-      'fileUrl': url,
-      // Frame and image ratios start identical; resizing only moves the frame.
-      if (w > 0) 'musamiAspect': h / w,
-      if (w > 0) 'musamiImageAspect': h / w,
-    },
+    meta: meta,
     widget: SizedBox(
       width: w,
       height: h,

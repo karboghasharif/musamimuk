@@ -14,6 +14,11 @@ void main() {
       expect(musamiIsCropMetaKey('musamiOpacity'), isFalse);
       expect(musamiIsCropMetaKey('musamiBorderW'), isFalse);
     });
+
+    test('preserves Cover pan alignment keys', () {
+      expect(musamiIsCropMetaKey('musamiCropAlignX'), isFalse);
+      expect(musamiIsCropMetaKey('musamiCropAlignY'), isFalse);
+    });
   });
 
   group('musamiTryExtractMemoryImageBytes', () {
@@ -51,9 +56,14 @@ void main() {
         'musamiOpacity': 0.5,
         'musamiCropRevision': 3,
         'musamiCropRectNorm': '0.1',
+        'musamiCropAlignX': -0.25,
+        'musamiCropAlignY': 0.5,
       };
       meta.removeWhere((k, _) => musamiIsCropMetaKey(k));
       expect(meta.containsKey('musamiCropRevision'), isFalse);
+      expect(meta.containsKey('musamiCropRectNorm'), isFalse);
+      expect(meta['musamiCropAlignX'], -0.25);
+      expect(meta['musamiCropAlignY'], 0.5);
       expect(meta['musamiOpacity'], 0.5);
       expect(meta['musamiLayerKind'], 'gallery');
     });

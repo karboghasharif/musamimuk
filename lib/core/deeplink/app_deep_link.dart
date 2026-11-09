@@ -20,6 +20,8 @@ enum AppDeepLinkTarget {
   qrGenerator,
   subscription,
   playStore,
+  /// Influencer invite — stores [referralCode] then opens register / home.
+  referralInvite,
 }
 
 /// Parsed deep-link payload ready for navigation.
@@ -29,6 +31,7 @@ class AppDeepLink {
     this.contestId,
     this.submissionId,
     this.designId,
+    this.referralCode,
     this.raw,
   });
 
@@ -36,6 +39,7 @@ class AppDeepLink {
   final int? contestId;
   final int? submissionId;
   final int? designId;
+  final String? referralCode;
   final Uri? raw;
 
   String get routeName {
@@ -58,6 +62,7 @@ class AppDeepLink {
       AppDeepLinkTarget.qrGenerator => AppRoutes.enhancedQrGeneratorScreen,
       AppDeepLinkTarget.subscription => AppRoutes.screen1SubcriptionScreen,
       AppDeepLinkTarget.playStore => AppRoutes.screen1HomeScreen,
+      AppDeepLinkTarget.referralInvite => AppRoutes.screen0RegisterScreen,
     };
   }
 
@@ -113,7 +118,16 @@ class AppDeepLinkParser {
       'designId',
     ]);
 
+    final queryReferral = _referralFromQuery(normalized);
+
     if (segments.isEmpty) {
+      if (queryReferral != null) {
+        return AppDeepLink(
+          target: AppDeepLinkTarget.referralInvite,
+          referralCode: queryReferral,
+          raw: uri,
+        );
+      }
       if (querySubmissionId != null) {
         return AppDeepLink(
           target: AppDeepLinkTarget.contestFeed,
@@ -145,10 +159,31 @@ class AppDeepLinkParser {
       path = path.sublist(1);
     }
     if (path.isEmpty) {
+      if (queryReferral != null) {
+        return AppDeepLink(
+          target: AppDeepLinkTarget.referralInvite,
+          referralCode: queryReferral,
+          raw: uri,
+        );
+      }
       return AppDeepLink(target: AppDeepLinkTarget.home, raw: uri);
     }
 
     final head = path.first;
+
+    // Influencer invite: /open/invite/{code}, /invite/{code}, /r/{code}
+    if (head == 'invite' || head == 'r' || head == 'ref') {
+      final code = path.length > 1
+          ? _normalizeReferralCode(path[1])
+          : queryReferral;
+      if (code != null) {
+        return AppDeepLink(
+          target: AppDeepLinkTarget.referralInvite,
+          referralCode: code,
+          raw: uri,
+        );
+      }
+    }
 
     // Share / submission short links from backend.
     if (head == 'share' || head == 's' || head == 'submission') {
@@ -356,6 +391,17 @@ class AppDeepLinkParser {
       case 'store':
       case 'install':
         return const AppDeepLink(target: AppDeepLinkTarget.playStore);
+      case 'invite':
+      case 'r':
+      case 'ref':
+        final code = path.length > 1 ? _normalizeReferralCode(path[1]) : null;
+        if (code != null) {
+          return AppDeepLink(
+            target: AppDeepLinkTarget.referralInvite,
+            referralCode: code,
+          );
+        }
+        return null;
       default:
         // Nested module under /open/{module}
         if (path.length > 1) {
@@ -402,6 +448,21 @@ class AppDeepLinkParser {
     }
     return null;
   }
+
+  String? _referralFromQuery(Uri uri) {
+    for (final key in const ['ref', 'referral', 'referral_code', 'code']) {
+      final code = _normalizeReferralCode(uri.queryParameters[key]);
+      if (code != null) return code;
+    }
+    return null;
+  }
+
+  String? _normalizeReferralCode(String? raw) {
+    final cleaned = (raw ?? '').trim().toUpperCase();
+    if (cleaned.isEmpty) return null;
+    if (!RegExp(r'^[A-Z0-9]{4,32}$').hasMatch(cleaned)) return null;
+    return cleaned;
+  }
 }
 
 extension on AppDeepLink {
@@ -411,6 +472,7 @@ extension on AppDeepLink {
       contestId: contestId,
       submissionId: submissionId,
       designId: designId,
+      referralCode: referralCode,
       raw: raw,
     );
   }

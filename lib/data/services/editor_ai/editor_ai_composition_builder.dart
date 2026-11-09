@@ -5,6 +5,7 @@ import 'package:pro_image_editor/core/models/layers/layer_interaction.dart';
 import 'package:pro_image_editor/pro_image_editor.dart';
 
 import '../../../core/utils/design_state_history.dart';
+import '../../../presentation/add_new_screen/utils/musami_image_fit.dart';
 import '../../models/editor_ai_api_models.dart';
 import 'editor_ai_composition.dart';
 
@@ -147,7 +148,11 @@ class EditorAiCompositionBuilder {
             ),
       meta: <String, dynamic>{
         ...exportMeta,
-        'musamiAspect': height / width,
+        ...musamiPhotoInsertMeta(
+          layerKind: 'ai-image',
+          width: width,
+          height: height,
+        ),
         'aiCompositionAssetId': element.assetId,
         'aiClip': element.clip.name,
       },

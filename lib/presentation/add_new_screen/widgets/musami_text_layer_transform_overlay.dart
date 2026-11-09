@@ -5,6 +5,42 @@ import 'package:flutter/material.dart';
 import 'package:pro_image_editor/core/services/gesture_manager.dart';
 import 'package:pro_image_editor/pro_image_editor.dart';
 
+import '../utils/musami_image_fit.dart';
+
+/// Visible knob diameter for transform handles (corners + mid-edges).
+const double kMusamiTransformHandleVisualSize = 14;
+
+/// Opaque touch target for transform handles (Material ~48dp friendly).
+const double kMusamiTransformHandleHitSize = 44;
+
+/// Canva-like selection stroke for photo layers.
+const double kMusamiImageSelectionStrokeWidth = 2;
+
+/// Top-left of a fixed [hitSize] box centered on [handle] of a [boxSize] frame.
+///
+/// Mid-edge handles must be point-sized (not full-edge strips). Full-edge
+/// [Positioned] strips steal hits from corner handles on mobile.
+Offset musamiTransformHandleOrigin({
+  required TextTransformHandle handle,
+  required Size boxSize,
+  required double hitSize,
+}) {
+  final hitHalf = hitSize / 2;
+  final midX = boxSize.width / 2 - hitHalf;
+  final midY = boxSize.height / 2 - hitHalf;
+  return switch (handle) {
+    TextTransformHandle.topLeft => Offset(-hitHalf, -hitHalf),
+    TextTransformHandle.top => Offset(midX, -hitHalf),
+    TextTransformHandle.topRight => Offset(boxSize.width - hitHalf, -hitHalf),
+    TextTransformHandle.right => Offset(boxSize.width - hitHalf, midY),
+    TextTransformHandle.bottomRight =>
+      Offset(boxSize.width - hitHalf, boxSize.height - hitHalf),
+    TextTransformHandle.bottom => Offset(midX, boxSize.height - hitHalf),
+    TextTransformHandle.bottomLeft => Offset(-hitHalf, boxSize.height - hitHalf),
+    TextTransformHandle.left => Offset(-hitHalf, midY),
+  };
+}
+
 /// Resize handle positions on a selected [TextLayer].
 enum TextTransformHandle {
   topLeft,
@@ -90,8 +126,8 @@ class MusamiTextLayerTransformOverlay extends StatefulWidget {
     required this.editorKey,
     required this.strokeColor,
     this.strokeWidth = 1.5,
-    this.handleSize = 10,
-    this.handleHitSize = 28,
+    this.handleSize = kMusamiTransformHandleVisualSize,
+    this.handleHitSize = kMusamiTransformHandleHitSize,
   });
 
   final OverlayChildLayoutInfo info;
@@ -215,7 +251,13 @@ class _MusamiTextLayerTransformOverlayState
                   strokeWidth: widget.strokeWidth,
                 ),
               ),
-              ...TextTransformHandle.values.map(_buildHandle),
+              // Edges under corners so corner hits win if targets slightly overlap.
+              ...TextTransformHandle.values
+                  .where((h) => !h.isCorner)
+                  .map(_buildHandle),
+              ...TextTransformHandle.values
+                  .where((h) => h.isCorner)
+                  .map(_buildHandle),
             ],
           ),
         ),
@@ -224,53 +266,21 @@ class _MusamiTextLayerTransformOverlayState
   }
 
   Widget _buildHandle(TextTransformHandle handle) {
-    final hitHalf = widget.handleHitSize / 2;
-
-    double? top;
-    double? bottom;
-    double? left;
-    double? right;
-
-    switch (handle) {
-      case TextTransformHandle.topLeft:
-        top = -hitHalf;
-        left = -hitHalf;
-      case TextTransformHandle.top:
-        top = -hitHalf;
-        left = 0;
-        right = 0;
-      case TextTransformHandle.topRight:
-        top = -hitHalf;
-        right = -hitHalf;
-      case TextTransformHandle.right:
-        top = 0;
-        bottom = 0;
-        right = -hitHalf;
-      case TextTransformHandle.bottomRight:
-        bottom = -hitHalf;
-        right = -hitHalf;
-      case TextTransformHandle.bottom:
-        bottom = -hitHalf;
-        left = 0;
-        right = 0;
-      case TextTransformHandle.bottomLeft:
-        bottom = -hitHalf;
-        left = -hitHalf;
-      case TextTransformHandle.left:
-        top = 0;
-        bottom = 0;
-        left = -hitHalf;
-    }
-
+    final hit = widget.handleHitSize;
+    final origin = musamiTransformHandleOrigin(
+      handle: handle,
+      boxSize: widget.info.childSize,
+      hitSize: hit,
+    );
     return Positioned(
-      top: top,
-      bottom: bottom,
-      left: left,
-      right: right,
+      left: origin.dx,
+      top: origin.dy,
+      width: hit,
+      height: hit,
       child: _TransformHandle(
         handle: handle,
         visualSize: widget.handleSize,
-        hitSize: widget.handleHitSize,
+        hitSize: hit,
         color: widget.strokeColor,
         onPointerDown: (event) => _onHandleDown(handle, event),
       ),
@@ -537,14 +547,6 @@ typedef MusamiWidgetLayerGeometryCallback =
       required Offset offset,
     });
 
-/// Smallest / largest painted (on-canvas) frame size a resize may produce.
-///
-/// The frame is free to become any ratio inside these bounds — portrait,
-/// landscape, square, very wide or very tall — because the image content is
-/// cropped to the frame rather than stretched into it.
-const double _kMinFrameSizePx = 16;
-const double _kMaxFrameSizePx = 6000;
-
 /// Immutable snapshot taken on pointer-down.
 ///
 /// Every move event derives the new frame from this snapshot instead of the
@@ -561,6 +563,7 @@ class _WidgetResizeSession {
     required this.startRotation,
     required this.startFlipX,
     required this.startFlipY,
+    required this.maintainAspect,
   });
 
   final TextTransformHandle handle;
@@ -574,6 +577,9 @@ class _WidgetResizeSession {
   final double startRotation;
   final bool startFlipX;
   final bool startFlipY;
+
+  /// When true, corner/edge drags keep [startFrameSize] aspect.
+  final bool maintainAspect;
 }
 
 /// Figma / Canva-style 8-point transform overlay for canvas [WidgetLayer] images.
@@ -585,9 +591,9 @@ class MusamiWidgetLayerTransformOverlay extends StatefulWidget {
     required this.editorKey,
     required this.onApplyGeometry,
     required this.strokeColor,
-    this.strokeWidth = 1.5,
-    this.handleSize = 10,
-    this.handleHitSize = 28,
+    this.strokeWidth = kMusamiImageSelectionStrokeWidth,
+    this.handleSize = kMusamiTransformHandleVisualSize,
+    this.handleHitSize = kMusamiTransformHandleHitSize,
   });
 
   final OverlayChildLayoutInfo info;
@@ -692,11 +698,26 @@ class _MusamiWidgetLayerTransformOverlayState
     }
   }
 
+  EdgeInsets get _overlayPad =>
+      _editor?.configs.layerInteraction.style.overlayPadding ?? EdgeInsets.zero;
+
+  /// Content box inside PIE overlay padding — selection must hug the image.
+  Size get _contentBoxSize {
+    final raw = widget.info.childSize;
+    final pad = _overlayPad;
+    return Size(
+      math.max(raw.width - pad.horizontal, 1.0),
+      math.max(raw.height - pad.vertical, 1.0),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final childWidth = widget.info.childSize.width;
     final childHeight = widget.info.childSize.height;
     final transform = widget.info.childPaintTransform.clone();
+    final pad = _overlayPad;
+    final content = _contentBoxSize;
 
     return Positioned(
       width: childWidth,
@@ -712,14 +733,32 @@ class _MusamiWidgetLayerTransformOverlayState
             fit: StackFit.passthrough,
             clipBehavior: Clip.none,
             children: [
-              CustomPaint(
-                foregroundPainter: _SelectionBorderPainter(
-                  color: widget.strokeColor,
-                  strokeWidth: widget.strokeWidth,
+              Positioned(
+                left: pad.left,
+                top: pad.top,
+                width: content.width,
+                height: content.height,
+                child: Stack(
+                  fit: StackFit.passthrough,
+                  clipBehavior: Clip.none,
+                  children: [
+                    CustomPaint(
+                      foregroundPainter: _SelectionBorderPainter(
+                        color: widget.strokeColor,
+                        strokeWidth: widget.strokeWidth,
+                      ),
+                    ),
+                    // Edges under corners so corner hits win if targets overlap.
+                    ...TextTransformHandle.values
+                        .where((h) => !h.isCorner)
+                        .map(_buildHandle),
+                    ...TextTransformHandle.values
+                        .where((h) => h.isCorner)
+                        .map(_buildHandle),
+                    _buildLiveSizeBadge(),
+                  ],
                 ),
               ),
-              ...TextTransformHandle.values.map(_buildHandle),
-              _buildLiveSizeBadge(),
             ],
           ),
         ),
@@ -727,26 +766,45 @@ class _MusamiWidgetLayerTransformOverlayState
     );
   }
 
-  /// Live `W … H …` readout of the FRAME while a handle is being dragged.
+  /// Live dimension readout; flips above the frame when dragging a bottom handle
+  /// so it stays away from the finger.
   Widget _buildLiveSizeBadge() {
+    final handle = _session?.handle;
+    final preferAbove = handle == TextTransformHandle.bottom ||
+        handle == TextTransformHandle.bottomLeft ||
+        handle == TextTransformHandle.bottomRight;
+    final gap = widget.handleHitSize / 2 + 10;
+
     return Positioned(
       left: 0,
       right: 0,
-      bottom: -(widget.handleHitSize / 2) - 26,
-      height: 24,
+      top: preferAbove ? -gap - 28 : null,
+      bottom: preferAbove ? null : -gap - 4,
+      height: 28,
       child: ValueListenableBuilder<Size?>(
         valueListenable: _liveFrameSize,
         builder: (context, size, _) {
-          if (size == null) return const SizedBox.shrink();
-          // Counter-rotate so the readout stays upright on a rotated frame.
-          return Center(
-            child: Transform.rotate(
-              angle: -_frameRotation(
-                _layer.rotation,
-                _layer.flipX,
-                _layer.flipY,
-              ),
-              child: _FrameSizeBadge(size: size, color: widget.strokeColor),
+          final visible = size != null;
+          return IgnorePointer(
+            child: AnimatedOpacity(
+              opacity: visible ? 1 : 0,
+              duration: const Duration(milliseconds: 120),
+              curve: Curves.easeOut,
+              child: visible
+                  ? Center(
+                      child: Transform.rotate(
+                        angle: -_frameRotation(
+                          _layer.rotation,
+                          _layer.flipX,
+                          _layer.flipY,
+                        ),
+                        child: _FrameSizeBadge(
+                          size: size,
+                          accent: widget.strokeColor,
+                        ),
+                      ),
+                    )
+                  : const SizedBox.shrink(),
             ),
           );
         },
@@ -755,53 +813,21 @@ class _MusamiWidgetLayerTransformOverlayState
   }
 
   Widget _buildHandle(TextTransformHandle handle) {
-    final hitHalf = widget.handleHitSize / 2;
-
-    double? top;
-    double? bottom;
-    double? left;
-    double? right;
-
-    switch (handle) {
-      case TextTransformHandle.topLeft:
-        top = -hitHalf;
-        left = -hitHalf;
-      case TextTransformHandle.top:
-        top = -hitHalf;
-        left = 0;
-        right = 0;
-      case TextTransformHandle.topRight:
-        top = -hitHalf;
-        right = -hitHalf;
-      case TextTransformHandle.right:
-        top = 0;
-        bottom = 0;
-        right = -hitHalf;
-      case TextTransformHandle.bottomRight:
-        bottom = -hitHalf;
-        right = -hitHalf;
-      case TextTransformHandle.bottom:
-        bottom = -hitHalf;
-        left = 0;
-        right = 0;
-      case TextTransformHandle.bottomLeft:
-        bottom = -hitHalf;
-        left = -hitHalf;
-      case TextTransformHandle.left:
-        top = 0;
-        bottom = 0;
-        left = -hitHalf;
-    }
-
+    final hit = widget.handleHitSize;
+    final origin = musamiTransformHandleOrigin(
+      handle: handle,
+      boxSize: _contentBoxSize,
+      hitSize: hit,
+    );
     return Positioned(
-      top: top,
-      bottom: bottom,
-      left: left,
-      right: right,
+      left: origin.dx,
+      top: origin.dy,
+      width: hit,
+      height: hit,
       child: _TransformHandle(
         handle: handle,
         visualSize: widget.handleSize,
-        hitSize: widget.handleHitSize,
+        hitSize: hit,
         color: widget.strokeColor,
         onPointerDown: (event) => _onHandleDown(handle, event),
       ),
@@ -850,8 +876,11 @@ class _MusamiWidgetLayerTransformOverlayState
       startRotation: layerAfterHistory.rotation,
       startFlipX: layerAfterHistory.flipX,
       startFlipY: layerAfterHistory.flipY,
+      maintainAspect: musamiMaintainAspectFromMeta(layerAfterHistory.meta),
     );
     _liveFrameSize.value = frameSize;
+    // Rebuild so the dimension badge can flip above/below for the active handle.
+    if (mounted) setState(() {});
   }
 
   /// On-canvas frame size with the selection chrome padding removed.
@@ -929,10 +958,8 @@ class _MusamiWidgetLayerTransformOverlayState
     });
   }
 
-  /// Corner drag — width and height move independently, opposite corner pinned.
-  ///
-  /// The frame is free to take any ratio; the image inside is re-cropped by
-  /// [musamiFrameWidgetLayerCore], never stretched.
+  /// Corner drag — free: W+H independent; locked: preserve start aspect.
+  /// Opposite corner stays anchored via [_offsetKeepingAnchor].
   void _applyCornerResize(
     _WidgetResizeSession session,
     WidgetLayer layer,
@@ -942,14 +969,17 @@ class _MusamiWidgetLayerTransformOverlayState
     _applyFrameSize(
       session,
       layer,
-      Size(
-        session.startFrameSize.width + grow.dx,
-        session.startFrameSize.height + grow.dy,
+      musamiResizeFrameFromGesture(
+        start: session.startFrameSize,
+        grow: grow,
+        maintainAspect: session.maintainAspect,
+        isCorner: true,
+        isHorizontalEdge: false,
       ),
     );
   }
 
-  /// Mid-edge drag — moves one axis of the frame and leaves the other alone.
+  /// Mid-edge drag — free: one axis; locked: other axis follows aspect.
   void _applyEdgeResize(
     _WidgetResizeSession session,
     WidgetLayer layer,
@@ -964,9 +994,12 @@ class _MusamiWidgetLayerTransformOverlayState
     _applyFrameSize(
       session,
       layer,
-      Size(
-        session.startFrameSize.width + (isHorizontal ? grow.dx : 0),
-        session.startFrameSize.height + (isHorizontal ? 0 : grow.dy),
+      musamiResizeFrameFromGesture(
+        start: session.startFrameSize,
+        grow: grow,
+        maintainAspect: session.maintainAspect,
+        isCorner: false,
+        isHorizontalEdge: isHorizontal,
       ),
     );
   }
@@ -981,9 +1014,10 @@ class _MusamiWidgetLayerTransformOverlayState
     if (session.startScale <= 0 || !session.startScale.isFinite) return;
     if (!requested.width.isFinite || !requested.height.isFinite) return;
 
+    // musamiResizeFrameFromGesture already clamps; re-clamp for safety.
     final frame = Size(
-      requested.width.clamp(_kMinFrameSizePx, _kMaxFrameSizePx),
-      requested.height.clamp(_kMinFrameSizePx, _kMaxFrameSizePx),
+      requested.width.clamp(kMusamiMinFrameSizePx, kMusamiMaxFrameSizePx),
+      requested.height.clamp(kMusamiMinFrameSizePx, kMusamiMaxFrameSizePx),
     );
 
     widget.onApplyGeometry(
@@ -991,7 +1025,15 @@ class _MusamiWidgetLayerTransformOverlayState
       width: frame.width / session.startScale,
       aspect: frame.height / frame.width,
       scale: session.startScale,
-      offset: _offsetKeepingAnchor(session, frame),
+      offset: musamiOffsetKeepingAnchor(
+        startOffset: session.startOffset,
+        startFrame: session.startFrameSize,
+        newFrame: frame,
+        anchorSign: session.handle.anchorSign,
+        rotation: session.startRotation,
+        flipX: session.startFlipX,
+        flipY: session.startFlipY,
+      ),
     );
     _liveFrameSize.value = frame;
   }
@@ -1002,36 +1044,6 @@ class _MusamiWidgetLayerTransformOverlayState
       sign.dx == 0 ? 0 : deltaLocal.dx * sign.dx,
       sign.dy == 0 ? 0 : deltaLocal.dy * sign.dy,
     );
-  }
-
-  /// Moves the layer centre so the corner/edge opposite the dragged handle
-  /// stays at the exact same canvas point while the frame grows or shrinks.
-  Offset _offsetKeepingAnchor(
-    _WidgetResizeSession session,
-    Size newFrameSize,
-  ) {
-    final anchor = session.handle.anchorSign;
-    final startW = session.startFrameSize.width;
-    final startH = session.startFrameSize.height;
-
-    final startAnchorLocal = Offset(
-      anchor.dx * startW / 2,
-      anchor.dy * startH / 2,
-    );
-    final newAnchorLocal = Offset(
-      anchor.dx * newFrameSize.width / 2,
-      anchor.dy * newFrameSize.height / 2,
-    );
-
-    final shift = _localDeltaToEditor(
-      startAnchorLocal - newAnchorLocal,
-      session.startRotation,
-      session.startFlipX,
-      session.startFlipY,
-    );
-    final next = session.startOffset + shift;
-    if (!next.dx.isFinite || !next.dy.isFinite) return session.startOffset;
-    return next;
   }
 
   /// Rotation between the overlay's local frame and canvas coordinates.
@@ -1058,14 +1070,10 @@ class _MusamiWidgetLayerTransformOverlayState
     Offset deltaGlobal,
     _WidgetResizeSession session,
   ) {
-    if (!deltaGlobal.dx.isFinite || !deltaGlobal.dy.isFinite) return Offset.zero;
-
     final editor = _editor;
     final viewerScale =
         editor?.interactiveViewer.currentState?.scaleFactor ?? 1.0;
-    final canvasDelta = (viewerScale.isFinite && viewerScale > 0)
-        ? deltaGlobal / viewerScale
-        : deltaGlobal;
+    final canvasDelta = musamiScreenDeltaToCanvasDelta(deltaGlobal, viewerScale);
 
     return _rotateOffset(
       canvasDelta,
@@ -1076,18 +1084,9 @@ class _MusamiWidgetLayerTransformOverlayState
       ),
     );
   }
-
-  Offset _localDeltaToEditor(
-    Offset localDelta,
-    double rotation,
-    bool flipX,
-    bool flipY,
-  ) {
-    return _rotateOffset(localDelta, _frameRotation(rotation, flipX, flipY));
-  }
 }
 
-class _TransformHandle extends StatelessWidget {
+class _TransformHandle extends StatefulWidget {
   const _TransformHandle({
     required this.handle,
     required this.visualSize,
@@ -1103,47 +1102,54 @@ class _TransformHandle extends StatelessWidget {
   final ValueChanged<PointerDownEvent> onPointerDown;
 
   @override
-  Widget build(BuildContext context) {
-    final isCorner = handle.isCorner;
-    final edgeLong = visualSize * 2.4;
-    final edgeShort = visualSize * 0.9;
+  State<_TransformHandle> createState() => _TransformHandleState();
+}
 
-    final visualW = isCorner
-        ? visualSize
-        : (handle == TextTransformHandle.top ||
-                  handle == TextTransformHandle.bottom
-              ? edgeLong
-              : edgeShort);
-    final visualH = isCorner
-        ? visualSize
-        : (handle == TextTransformHandle.left ||
-                  handle == TextTransformHandle.right
-              ? edgeLong
-              : edgeShort);
+class _TransformHandleState extends State<_TransformHandle> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final knobSize = widget.visualSize;
+    final scale = _pressed ? 1.18 : 1.0;
 
     return MouseRegion(
-      cursor: handle.cursor,
+      cursor: widget.handle.cursor,
       child: Listener(
         behavior: HitTestBehavior.opaque,
-        onPointerDown: onPointerDown,
+        onPointerDown: (event) {
+          setState(() => _pressed = true);
+          widget.onPointerDown(event);
+        },
+        onPointerUp: (_) {
+          if (_pressed) setState(() => _pressed = false);
+        },
+        onPointerCancel: (_) {
+          if (_pressed) setState(() => _pressed = false);
+        },
         child: SizedBox(
-          width: hitSize,
-          height: hitSize,
+          width: widget.hitSize,
+          height: widget.hitSize,
           child: Center(
-            child: Container(
-              width: visualW,
-              height: visualH,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(isCorner ? 1.5 : 2),
-                border: Border.all(color: color, width: 1.5),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x40000000),
-                    blurRadius: 3,
-                    offset: Offset(0, 1),
-                  ),
-                ],
+            child: AnimatedScale(
+              scale: scale,
+              duration: const Duration(milliseconds: 90),
+              curve: Curves.easeOut,
+              child: Container(
+                width: knobSize,
+                height: knobSize,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: widget.color, width: 2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Color(_pressed ? 0x66000000 : 0x40000000),
+                      blurRadius: _pressed ? 5 : 3,
+                      offset: const Offset(0, 1),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -1153,12 +1159,12 @@ class _TransformHandle extends StatelessWidget {
   }
 }
 
-/// Compact `W … H …` pill shown under a frame while it is being resized.
+/// Compact dimension pill shown under/above a frame while it is being resized.
 class _FrameSizeBadge extends StatelessWidget {
-  const _FrameSizeBadge({required this.size, required this.color});
+  const _FrameSizeBadge({required this.size, required this.accent});
 
   final Size size;
-  final Color color;
+  final Color accent;
 
   String _format(double value) {
     final rounded = value.roundToDouble();
@@ -1171,23 +1177,32 @@ class _FrameSizeBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: const Color(0xE6000000),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color, width: 1),
+        color: const Color(0xF2141414),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: accent.withValues(alpha: 0.85), width: 1),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x66000000),
+            blurRadius: 8,
+            offset: Offset(0, 2),
+          ),
+        ],
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         child: Text(
-          'W ${_format(size.width)}  H ${_format(size.height)}',
+          '${_format(size.width)} × ${_format(size.height)}',
           maxLines: 1,
           softWrap: false,
           textDirection: TextDirection.ltr,
           style: const TextStyle(
             color: Colors.white,
-            fontSize: 11,
-            height: 1.1,
+            fontSize: 12,
+            height: 1.15,
             fontWeight: FontWeight.w600,
+            letterSpacing: 0.2,
             decoration: TextDecoration.none,
+            fontFeatures: [FontFeature.tabularFigures()],
           ),
         ),
       ),
@@ -1209,8 +1224,15 @@ class _SelectionBorderPainter extends CustomPainter {
     final paint = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth;
-    canvas.drawRect(Offset.zero & size, paint);
+      ..strokeWidth = strokeWidth
+      ..strokeJoin = StrokeJoin.round
+      ..isAntiAlias = true;
+    // Inset by half stroke so the border sits on the image edge, not outside.
+    final inset = strokeWidth / 2;
+    canvas.drawRect(
+      Rect.fromLTWH(inset, inset, size.width - strokeWidth, size.height - strokeWidth),
+      paint,
+    );
   }
 
   @override

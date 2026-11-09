@@ -109,17 +109,25 @@ class _AiStudioDesignScreenState extends State<AiStudioDesignScreen> {
                 padding: EdgeInsets.only(bottom: AppDs.space2.v),
                 child: Material(
                   color: selected
-                      ? AiStudioChrome.accent.withValues(alpha: 0.18)
-                      : Colors.white.withValues(alpha: 0.05),
-                  borderRadius:
-                      BorderRadius.circular(AppDs.radiusMd.adaptSize),
+                      ? AiStudioChrome.accent.withValues(alpha: 0.14)
+                      : AppDs.atelierInk,
+                  shape: RoundedRectangleBorder(
+                    borderRadius:
+                        BorderRadius.circular(AppDs.radiusMd.adaptSize),
+                    side: BorderSide(
+                      color: selected
+                          ? AiStudioChrome.accent
+                          : AiStudioChrome.hairline,
+                      width: selected ? 1.4 : 1,
+                    ),
+                  ),
                   child: ListTile(
                     onTap: () => setState(() => _preset = preset),
                     title: Text(
                       preset.name,
                       style: const TextStyle(
                         color: AppDs.textOnDarkPrimary,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                     subtitle: Text(
@@ -128,7 +136,7 @@ class _AiStudioDesignScreenState extends State<AiStudioDesignScreen> {
                     ),
                     trailing: selected
                         ? const Icon(
-                            Icons.check_circle,
+                            Icons.check_circle_rounded,
                             color: AiStudioChrome.accent,
                           )
                         : null,

@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/app_export.dart';
 import '../../core/utils/app_toast.dart';
+import '../../core/utils/saudi_iban.dart';
 import '../../data/models/print_models.dart';
 
 /// Atelier KYC field — [AppTextField] for single-line, multiline when [maxLines] > 1.
@@ -1784,13 +1785,14 @@ String? requiredText(String? value) {
   return null;
 }
 
-/// Saudi IBAN: SA + 22 digits (spaces ignored).
+/// Saudi IBAN: SA + 22 digits (spaces / Arabic digits ignored via [SaudiIban]).
 String? saudiIbanText(String? value) {
   final required = requiredText(value);
   if (required != null) return required;
-  final clean = value!.replaceAll(RegExp(r'\s+'), '').toUpperCase();
-  if (!RegExp(r'^SA[0-9]{22}$').hasMatch(clean)) {
-    return 'msg_print_iban_invalid'.tr;
-  }
-  return null;
+  return switch (SaudiIban.validationFailure(value)) {
+    null => null,
+    SaudiIban.reasonFormat => 'msg_print_iban_format'.tr,
+    SaudiIban.reasonChecksum => 'msg_print_iban_checksum'.tr,
+    _ => 'msg_print_iban_invalid'.tr,
+  };
 }

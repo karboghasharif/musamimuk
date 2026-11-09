@@ -397,7 +397,7 @@ Update this section when fixing related bugs:
 |-------|-------------------|
 | Public vs private | Private never in Online Designs; My Designs has Public/Private tabs |
 | Shape color | Shape silhouettes recolor live via srcIn tint |
-| Image stretch | Side/corner stretch updates UI live via layer GlobalKey setState |
+| Image stretch | Canva-style: purple selection + 8 handles; **Free** (default for new photos) = independent W/H + `BoxFit.fill`; **Lock ratio** keeps aspect; Crop/Stretch fill toggle; live `W:/H:` badge; undo once per drag; floating Replace/Duplicate/Delete |
 | Canvas overflow | Content outside white paper masked with solid `surfaceBase` |
 | Online Designs layout | Catalog card scrolls inside Expanded `AppCard` without bottom overflow |
 | Reopened design colours | Saved tint/tune/border/shadow/opacity re-applied to widget layers after history import |
