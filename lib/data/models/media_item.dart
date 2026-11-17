@@ -87,6 +87,18 @@ class MediaItem {
   bool get isPrivateDesign =>
       visibility != null && visibility!.toLowerCase().trim() == 'private';
 
+  /// Waiting for admin approval before becoming public.
+  bool get isPendingReviewDesign =>
+      visibility != null &&
+      visibility!.toLowerCase().trim() == 'pending_review';
+
+  /// Approved public designs only (not pending review).
+  bool get isPublicDesign =>
+      visibility != null && visibility!.toLowerCase().trim() == 'public';
+
+  /// Not publicly listed — private or pending admin review.
+  bool get isNonPublicDesign => !isPublicDesign;
+
   /// Compact details for online designs preview (name, category, downloads, trending).
   String formatOnlineDesignPreviewDetails() {
     final lines = <String>[];

@@ -199,6 +199,119 @@ class PrintOrderActions {
     }
     return orderPaid;
   }
+
+  static Future<PrintOrder?> payChangeRequest({
+    required BuildContext context,
+    required PrintRepository repo,
+    required PrintOrder order,
+    required PrintChangeRequest changeRequest,
+  }) async {
+    final method = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: AppDs.surfaceRaised,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        final isDelivery = order.fulfillment == 'delivery';
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(20.h, 16.v, 20.h, 20.v),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'lbl_print_pay_change'.tr,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                  ),
+                ),
+                if (changeRequest.deltaAmount != null) ...[
+                  SizedBox(height: 6.v),
+                  Text(
+                    printSar(changeRequest.deltaAmount!),
+                    style: const TextStyle(color: AppDs.printGold, fontSize: 14),
+                  ),
+                ],
+                SizedBox(height: 12.v),
+                PrintGoldButton(
+                  label: 'lbl_print_pay_mada'.tr,
+                  onPressed: () => Navigator.pop(ctx, 'mada'),
+                ),
+                SizedBox(height: 8.v),
+                PrintGhostButton(
+                  label: 'lbl_print_pay_visa'.tr,
+                  onPressed: () => Navigator.pop(ctx, 'visa'),
+                ),
+                SizedBox(height: 8.v),
+                PrintGhostButton(
+                  label: 'lbl_print_pay_applepay'.tr,
+                  onPressed: () => Navigator.pop(ctx, 'applepay'),
+                ),
+                if (isDelivery) ...[
+                  SizedBox(height: 8.v),
+                  PrintGhostButton(
+                    label: 'lbl_print_pay_cod'.tr,
+                    icon: Icons.payments_outlined,
+                    onPressed: () => Navigator.pop(ctx, 'cod'),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (method == null || !context.mounted) return null;
+
+    final paid = await repo.payChangeRequest(
+      orderId: order.id,
+      changeRequestId: changeRequest.id,
+      method: method,
+    );
+    if (!context.mounted) return null;
+    if (paid is PrintFailure<PrintPaySession>) {
+      showAppToast(paid.message, type: ToastificationType.error);
+      return null;
+    }
+    final session = (paid as PrintSuccess<PrintPaySession>).data;
+    var orderPaid = session.order;
+    final stripe = session.stripe;
+    try {
+      if (stripe != null && stripe.needsClientPayment) {
+        final completed =
+            await PrintStripeService.instance.presentPaymentSheet(stripe);
+        if (!completed || !context.mounted) return null;
+        final intentId = stripe.paymentIntentId;
+        if (intentId == null || intentId.isEmpty) {
+          showAppToast('msg_print_pay_failed'.tr, type: ToastificationType.error);
+          return null;
+        }
+        final confirmed = await repo.confirmChangePay(
+          orderId: order.id,
+          changeRequestId: changeRequest.id,
+          paymentIntentId: intentId,
+        );
+        if (!context.mounted) return null;
+        if (confirmed is PrintFailure<PrintOrder>) {
+          showAppToast(confirmed.message, type: ToastificationType.error);
+          return null;
+        }
+        orderPaid = (confirmed as PrintSuccess<PrintOrder>).data;
+      }
+    } catch (e) {
+      if (context.mounted) {
+        showAppToast(
+          e.toString().replaceFirst('Exception: ', ''),
+          type: ToastificationType.error,
+        );
+      }
+      return null;
+    }
+    return orderPaid;
+  }
 }
 
 /// Live competing offers while the order is still open for quotes.

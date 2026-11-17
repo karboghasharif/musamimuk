@@ -6,6 +6,8 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+// pro_image_editor 14.x init configs require material_ui ThemeData (not Flutter's).
+import 'package:material_ui/material_ui.dart' as material_ui;
 import 'package:pro_image_editor/pro_image_editor.dart';
 import 'package:pro_image_editor/core/models/layers/layer_interaction.dart';
 import 'package:pro_image_editor/features/filter_editor/constants/identity_matrix_constant.dart';
@@ -3193,7 +3195,11 @@ class _AddNewScreenState extends State<AddNewScreen>
       return;
     }
 
-    final theme = Theme.of(context);
+    final appBrightness = Theme.of(context).brightness;
+    // CropRotateEditorInitConfigs.theme is material_ui.ThemeData in PIE 14.x.
+    final editorTheme = appBrightness == Brightness.dark
+        ? material_ui.ThemeData.dark()
+        : material_ui.ThemeData.light();
     final cropRotateOnly = ProImageEditorConfigs(
       i18n: I18n(
         doneLoadingMsg: 'msg_saving_your_design'.tr,
@@ -3236,7 +3242,7 @@ class _AddNewScreenState extends State<AddNewScreen>
         builder: (routeContext) => CropRotateEditor.memory(
           raw,
           initConfigs: CropRotateEditorInitConfigs(
-            theme: theme,
+            theme: editorTheme,
             configs: cropRotateOnly,
             convertToUint8List: true,
             enableCloseButton: true,
@@ -7201,7 +7207,20 @@ class _AddNewScreenState extends State<AddNewScreen>
             );
           }
           if (!context.mounted) return;
-          await showDesignSaveSuccessDialog(context);
+          final apiVisibility =
+              result.design?.visibility?.toLowerCase().trim();
+          final wasAlreadyPublic =
+              widget.designVisibility?.toLowerCase().trim() == 'public';
+          final submittedForReview = apiVisibility == 'pending_review' ||
+              (apiVisibility == null &&
+                  form.visibility == 'public' &&
+                  !wasAlreadyPublic);
+          await showDesignSaveSuccessDialog(
+            context,
+            message: submittedForReview
+                ? 'msg_design_submitted_for_review'.tr
+                : null,
+          );
         case SaveDesignFailure(:final message):
           showAppToast(message, type: ToastificationType.error);
       }

@@ -204,6 +204,206 @@ class _PrintTrackingScreenState extends State<PrintTrackingScreen> {
     if (paid != null) setState(() => _order = paid);
   }
 
+  Future<void> _requestChange(PrintOrder order) async {
+    if (_busy) return;
+    final qtyCtrl = TextEditingController(
+      text: '${order.spec?.quantity ?? 100}',
+    );
+    final noteCtrl = TextEditingController(text: order.spec?.notes ?? '');
+    final designerNoteCtrl = TextEditingController();
+    final papers = const [
+      '80gsm',
+      '120gsm',
+      '250gsm',
+      '300gsm',
+      'glossy',
+      'matte',
+    ];
+    var paper = order.spec?.paper ?? '80gsm';
+    if (!papers.contains(paper)) paper = '80gsm';
+    final finishes = List<String>.from(order.spec?.finishing ?? const []);
+    final availableFinishes = const [
+      'lamination',
+      'cutting',
+      'folding',
+      'binding',
+    ];
+
+    final submitted = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppDs.surfaceRaised,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 20.h,
+            right: 20.h,
+            top: 16.v,
+            bottom: MediaQuery.viewInsetsOf(ctx).bottom + 20.v,
+          ),
+          child: StatefulBuilder(
+            builder: (ctx, setModal) {
+              return SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'lbl_print_request_change'.tr,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
+                    ),
+                    SizedBox(height: 6.v),
+                    Text(
+                      'msg_print_change_qty_hint'.tr,
+                      style: const TextStyle(color: Colors.white54, fontSize: 12),
+                    ),
+                    SizedBox(height: 12.v),
+                    TextField(
+                      controller: qtyCtrl,
+                      keyboardType: TextInputType.number,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: printTicketField('lbl_print_quantity'.tr),
+                    ),
+                    SizedBox(height: 10.v),
+                    DropdownButtonFormField<String>(
+                      // ignore: deprecated_member_use — controlled value needed inside StatefulBuilder
+                      value: paper,
+                      dropdownColor: AppDs.surfaceRaised,
+                      decoration: printTicketField('lbl_print_paper'.tr),
+                      items: papers
+                          .map(
+                            (p) => DropdownMenuItem(
+                              value: p,
+                              child: Text(
+                                p,
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (v) => setModal(() => paper = v ?? paper),
+                    ),
+                    SizedBox(height: 10.v),
+                    Wrap(
+                      spacing: 8,
+                      children: availableFinishes.map((f) {
+                        final selected = finishes.contains(f);
+                        return FilterChip(
+                          label: Text(f),
+                          selected: selected,
+                          onSelected: (on) => setModal(() {
+                            if (on) {
+                              finishes.add(f);
+                            } else {
+                              finishes.remove(f);
+                            }
+                          }),
+                        );
+                      }).toList(),
+                    ),
+                    SizedBox(height: 10.v),
+                    TextField(
+                      controller: noteCtrl,
+                      maxLines: 2,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: printTicketField('lbl_print_optional_note'.tr),
+                    ),
+                    SizedBox(height: 10.v),
+                    TextField(
+                      controller: designerNoteCtrl,
+                      maxLines: 2,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: printTicketField('lbl_print_change_note'.tr),
+                    ),
+                    SizedBox(height: 14.v),
+                    PrintGoldButton(
+                      label: 'lbl_print_request_change'.tr,
+                      onPressed: () {
+                        final qty = int.tryParse(qtyCtrl.text.trim()) ?? 0;
+                        if (qty < 1) return;
+                        Navigator.pop(ctx, {
+                          'spec': {
+                            'quantity': qty,
+                            'paper': paper,
+                            'finishing': finishes,
+                            if (noteCtrl.text.trim().isNotEmpty)
+                              'notes': noteCtrl.text.trim(),
+                          },
+                          'note': designerNoteCtrl.text.trim(),
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+    qtyCtrl.dispose();
+    noteCtrl.dispose();
+    designerNoteCtrl.dispose();
+    if (submitted == null || !mounted) return;
+
+    setState(() => _busy = true);
+    final result = await _repo.createChangeRequest(
+      orderId: order.id,
+      spec: (submitted['spec'] as Map).cast<String, dynamic>(),
+      note: submitted['note']?.toString(),
+    );
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (result is PrintFailure<PrintOrder>) {
+      showAppToast(result.message, type: ToastificationType.error);
+      return;
+    }
+    setState(() => _order = (result as PrintSuccess<PrintOrder>).data);
+    showAppToast('msg_print_change_submitted'.tr);
+  }
+
+  Future<void> _cancelChange(PrintOrder order) async {
+    final cr = order.activeChangeRequest;
+    if (cr == null || _busy) return;
+    setState(() => _busy = true);
+    final result = await _repo.cancelChangeRequest(
+      orderId: order.id,
+      changeRequestId: cr.id,
+    );
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (result is PrintFailure<PrintOrder>) {
+      showAppToast(result.message, type: ToastificationType.error);
+      return;
+    }
+    setState(() => _order = (result as PrintSuccess<PrintOrder>).data);
+    showAppToast('msg_print_change_cancelled'.tr);
+  }
+
+  Future<void> _payChange(PrintOrder order) async {
+    final cr = order.activeChangeRequest;
+    if (cr == null || _busy) return;
+    setState(() => _busy = true);
+    final next = await PrintOrderActions.payChangeRequest(
+      context: context,
+      repo: _repo,
+      order: order,
+      changeRequest: cr,
+    );
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      if (next != null) _order = next;
+    });
+  }
+
   Future<void> _declineQuote(PrintQuote quote) async {
     if (_busy) return;
     setState(() => _busy = true);
@@ -346,6 +546,26 @@ class _PrintTrackingScreenState extends State<PrintTrackingScreen> {
                         color: AppDs.atelierBrass,
                         fontWeight: FontWeight.w700,
                       ),
+                    ),
+                  ],
+                  if (order.activeChangeRequest != null) ...[
+                    SizedBox(height: AppDs.space3.v),
+                    _ChangeRequestBanner(
+                      change: order.activeChangeRequest!,
+                      onPay: order.activeChangeRequest!.needsCustomerPayment
+                          ? () => _payChange(order)
+                          : null,
+                      onCancel: order.activeChangeRequest!.status == 'pending'
+                          ? () => _cancelChange(order)
+                          : null,
+                    ),
+                  ],
+                  if (order.canRequestChange) ...[
+                    SizedBox(height: AppDs.space3.v),
+                    PrintGhostButton(
+                      label: 'lbl_print_request_change'.tr,
+                      icon: Icons.edit_note_outlined,
+                      onPressed: _busy ? null : () => _requestChange(order),
                     ),
                   ],
                   SizedBox(height: AppDs.space4.v),
@@ -773,6 +993,71 @@ class _CompactMaps extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+class _ChangeRequestBanner extends StatelessWidget {
+  const _ChangeRequestBanner({
+    required this.change,
+    this.onPay,
+    this.onCancel,
+  });
+
+  final PrintChangeRequest change;
+  final VoidCallback? onPay;
+  final VoidCallback? onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final awaitingPay = change.needsCustomerPayment;
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(AppDs.space3.h),
+      decoration: BoxDecoration(
+        color: AppDs.surfaceRaised,
+        borderRadius: BorderRadius.circular(AppDs.radiusMd),
+        border: Border.all(color: AppDs.atelierBrass.withValues(alpha: 0.45)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            awaitingPay
+                ? 'msg_print_change_awaiting_payment'.tr
+                : 'msg_print_change_pending'.tr,
+            style: AppTypography.body(theme).copyWith(
+              color: AppDs.atelierBrass,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          if (change.deltaAmount != null && change.deltaAmount != 0) ...[
+            SizedBox(height: 4.v),
+            Text(
+              printSar(change.deltaAmount!),
+              style: AppTypography.caption(theme).copyWith(
+                color: AppDs.textOnDarkSecondary,
+              ),
+            ),
+          ],
+          if (onPay != null || onCancel != null) ...[
+            SizedBox(height: 10.v),
+            if (onPay != null)
+              PrintGoldButton(
+                label: 'lbl_print_pay_change'.tr,
+                onPressed: onPay,
+              ),
+            if (onCancel != null) ...[
+              if (onPay != null) SizedBox(height: 8.v),
+              PrintGhostButton(
+                label: 'lbl_print_cancel_change_request'.tr,
+                onPressed: onCancel,
+              ),
+            ],
+          ],
+        ],
+      ),
     );
   }
 }

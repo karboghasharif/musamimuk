@@ -146,15 +146,21 @@ final Map<String, String> enUs = {
   "lbl_ai_inpaint": "Inpaint",
   "lbl_ai_upscale_2x": "2×",
   "lbl_ai_upscale_4x": "4×",
+  "lbl_ai_upscale_factor": "Scale",
+  "lbl_try_these": "Try these",
   "lbl_ai_inpaint_brush": "Brush",
   "lbl_ai_inpaint_clear_mask": "Clear mask",
   "lbl_ai_pick_image": "Pick image",
   "msg_ai_pick_image_first": "Choose an image first.",
+  "msg_ai_tap_to_pick_image": "Tap to pick a photo from your gallery",
+  "msg_ai_upscaling": "Upscaling…",
+  "msg_ai_inpainting": "Inpainting…",
   "msg_ai_upscale_hint":
       "Enhance sharpness and detail with AI. Choose 2× or 4× scale.",
   "msg_ai_upscale_studio_hint":
       "Pick a photo, choose 2× or 4×, then open the result in the editor.",
   "msg_ai_upscale_done": "Upscale complete",
+  "msg_design_image_unavailable": "Preview unavailable",
   "msg_ai_inpaint_mask_hint":
       "Paint white over areas to change. Black areas stay the same.",
   "msg_ai_inpaint_prompt_hint": "Describe what to put in the painted area…",
@@ -447,9 +453,15 @@ final Map<String, String> enUs = {
   "lbl_canvas_lock": "Lock zoom",
   "lbl_canvas_unlock": "Unlock zoom",
   "msg_my_designs_visibility_hint":
-      "Public designs appear in Online Designs. Private stay only here.",
-  "msg_no_public_designs": "No public designs yet. Save one as Public.",
-  "msg_no_private_designs": "No private designs yet. Save one as Private.",
+      "Public designs appear after admin approval. Pending and private stay only here.",
+  "msg_no_public_designs":
+      "No approved public designs yet. Save as Public to submit for review.",
+  "msg_no_private_designs":
+      "No private or pending designs yet. Save one as Private.",
+  "msg_public_requires_admin_review":
+      "Public requests are reviewed by an admin before your design appears online.",
+  "msg_design_submitted_for_review":
+      "Design submitted for admin review. You’ll be notified when it’s approved.",
   "lbl_delete": "Delete",
   "msg_delete_design_title": "Delete design?",
   "msg_delete_design_warning":
@@ -1121,8 +1133,13 @@ final Map<String, String> enUs = {
       "We pin your current location. Drag the map or search if the drop-off is elsewhere.",
   "lbl_print_find_shops": "Find verified shops",
   "lbl_print_shops": "Print shops",
+  "lbl_print_nearest_shops": "Nearest shops",
   "lbl_print_search_shops": "Search shops",
+  "lbl_print_search_shops_hint": "Search print shops, services…",
   "lbl_print_open_now": "Open now",
+  "msg_print_orders_completed": "{count} orders completed",
+  "msg_print_no_shops_nearby":
+      "No print shops found within 25 km. Try again with location on, or relax Open now.",
   "lbl_print_verified": "Verified",
   "lbl_print_shop_profile": "Shop",
   "lbl_print_orders": "orders",
@@ -1199,8 +1216,24 @@ final Map<String, String> enUs = {
   "lbl_print_hello_shop": "Hello, I would like to print this design.",
   "lbl_print_accept": "Accept",
   "lbl_print_decline": "Decline",
+  "lbl_print_reject": "Reject",
   "lbl_print_subtotal": "Subtotal",
   "lbl_print_pay_now": "Pay now",
+  "lbl_print_request_change": "Request change",
+  "lbl_print_cancel_change_request": "Cancel change request",
+  "lbl_print_pay_change": "Pay change difference",
+  "lbl_print_change_request": "Change request",
+  "lbl_print_change_note": "Why / what changed",
+  "lbl_print_shop_note": "Shop note",
+  "msg_print_change_pending": "Change request pending — production paused",
+  "msg_print_change_awaiting_payment":
+      "Pay the change difference to apply the new spec",
+  "msg_print_change_submitted": "Change request sent to the shop.",
+  "msg_print_change_accepted": "Change request accepted.",
+  "msg_print_change_rejected": "Change request rejected.",
+  "msg_print_change_cancelled": "Change request cancelled.",
+  "msg_print_change_reject_hint": "Tell the designer why (min 3 characters).",
+  "msg_print_change_qty_hint": "Update quantity, paper, finishing, or notes.",
   "lbl_print_cancel_order": "Cancel order",
   "msg_print_cancel_confirm":
       "Cancel this print order? If you already paid, a refund will be started.",
@@ -1263,9 +1296,17 @@ final Map<String, String> enUs = {
   "lbl_register_continue_shop": "Create account & set up shop",
   "lbl_register_continue_rider": "Create account & set up rider",
   "msg_register_as_shop_hint":
-      "Next step: complete shop verification documents.",
+      "Next step: complete shop verification documents. Already signed in with Google? Continue with that account — no new email needed.",
   "msg_register_as_rider_hint":
-      "Next step: complete rider verification documents.",
+      "Next step: complete rider verification documents. Already a shop (or Google) account? Continue with the same login — do not create a second email.",
+  "msg_email_exists_use_login_or_google":
+      "This email already has an account. Sign in with your password or Continue with Google, then finish shop/rider setup.",
+  "msg_session_required": "Please sign in first.",
+  "msg_register_pick_shop_or_rider":
+      "Choose Shop or Rider to continue with your current account.",
+  "lbl_continue_with_current_account": "Continue with this account",
+  "msg_register_existing_session_hint":
+      "You're already signed in. Choose Shop or Rider, then continue — we'll attach the profile to this account.",
   "lbl_mode_normal": "Design app",
   "lbl_mode_shop": "Print shop",
   "lbl_mode_rider": "Print rider",
@@ -1571,7 +1612,7 @@ final Map<String, String> enUs = {
   "msg_print_withdraw_sent": "Withdrawal sent.",
   "lbl_print_stripe_connect": "Connect Stripe payouts",
   "msg_print_stripe_connect_required":
-      "Connect Stripe to withdraw your print earnings.",
+      "Connect Stripe in the app to withdraw. A connected account created only in the Stripe Dashboard is not linked to your shop/rider.",
   "msg_print_stripe_connect_open":
       "Finish Stripe onboarding in the browser, then return here.",
   "msg_print_pay_failed": "Payment could not be completed.",

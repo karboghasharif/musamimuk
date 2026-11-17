@@ -6,14 +6,14 @@ import 'package:image_picker/image_picker.dart';
 import 'package:toastification/toastification.dart';
 
 import '../../core/app_export.dart';
+import '../../core/config/editor_ai_config.dart';
 import '../../core/utils/app_toast.dart';
 import '../../data/models/editor_ai_api_models.dart';
 import '../../data/models/wallet_models.dart';
 import '../../data/services/editor_ai/editor_ai_api_service.dart';
-import '../add_new_screen/widgets/musami_ai_chrome.dart';
 import '../add_new_screen/widgets/musami_ai_inpaint_sheet.dart';
-import '../add_new_screen/widgets/musami_ai_upscale_sheet.dart';
 import '../wallet/wallet_cost_guard.dart';
+import 'ai_studio_image_screen.dart';
 import 'ai_studio_shared.dart';
 
 enum AiStudioImageToolMode { upscale, inpaint }
@@ -45,6 +45,7 @@ class _AiStudioImageToolsScreenState extends State<AiStudioImageToolsScreen> {
   Uint8List? _result;
   int _resultW = 1024;
   int _resultH = 1024;
+  int _scale = 2;
 
   bool get _isUpscale => widget.mode == AiStudioImageToolMode.upscale;
 
@@ -81,14 +82,9 @@ class _AiStudioImageToolsScreenState extends State<AiStudioImageToolsScreen> {
     }
     if (!mounted) return;
 
-    int scale = 2;
     String? prompt;
     Uint8List? mask;
-    if (_isUpscale) {
-      final picked = await showMusamiAiUpscaleSheet(context);
-      if (picked == null || !mounted) return;
-      scale = picked;
-    } else {
+    if (!_isUpscale) {
       final painted = await showMusamiAiInpaintSheet(
         context: context,
         imageBytes: source,
@@ -105,7 +101,7 @@ class _AiStudioImageToolsScreenState extends State<AiStudioImageToolsScreen> {
         response = await _api.upscaleImage(
           EditorAiUpscaleRequest(
             imageBase64: base64Encode(source),
-            scale: scale,
+            scale: _scale,
           ),
         );
       } else {
@@ -159,116 +155,151 @@ class _AiStudioImageToolsScreenState extends State<AiStudioImageToolsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final title =
-        _isUpscale ? 'lbl_ai_upscale'.tr : 'lbl_ai_inpaint'.tr;
+    final title = _isUpscale ? 'lbl_ai_upscale'.tr : 'lbl_ai_inpaint'.tr;
+    final feature = _isUpscale
+        ? WalletFeatureCost.aiOpenaiUpscale
+        : WalletFeatureCost.aiOpenaiInpaint;
+
     return Scaffold(
       backgroundColor: AppDs.surfaceBase,
       appBar: AiStudioChrome.appBar(context, title),
-      body: ListView(
-        padding: EdgeInsets.all(AppDs.space4.h),
+      body: Column(
         children: [
-          AiStudioChrome.poweredByChatGpt(context),
-          SizedBox(height: AppDs.space3.v),
-          Text(
-            _isUpscale
-                ? 'msg_ai_upscale_studio_hint'.tr
-                : 'msg_ai_inpaint_studio_hint'.tr,
-            style: TextStyle(
-              color: AppDs.textOnDarkSecondary,
-              fontSize: 13.fSize,
-              height: 1.4,
-            ),
-          ),
-          SizedBox(height: AppDs.space4.v),
-          SizedBox(
-            height: AppDs.buttonHeight,
-            child: OutlinedButton.icon(
-              onPressed: _busy ? null : _pick,
-              icon: const Icon(Icons.photo_library_outlined),
-              label: Text('lbl_ai_pick_image'.tr),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppDs.textOnDarkPrimary,
-                side: const BorderSide(color: MusamiAiChrome.hairline),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppDs.radiusMd),
+          Expanded(
+            child: ListView(
+              padding: EdgeInsets.fromLTRB(
+                AppDs.space4.h,
+                AppDs.space3.v,
+                AppDs.space4.h,
+                AppDs.space4.v,
+              ),
+              children: [
+                AiStudioChrome.toolbar(
+                  kind: EditorAiProviderKind.openAi,
+                  coinHint: BlocBuilderCoinHint(feature: feature),
                 ),
-              ),
-            ),
-          ),
-          if (_source != null) ...[
-            SizedBox(height: AppDs.space3.v),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                color: MusamiAiChrome.panelDeep,
-                borderRadius: BorderRadius.circular(AppDs.radiusMd),
-                border: Border.all(color: MusamiAiChrome.hairline),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(AppDs.radiusMd),
-                child: Image.memory(
-                  _source!,
-                  height: 180,
-                  width: double.infinity,
-                  fit: BoxFit.contain,
-                ),
-              ),
-            ),
-          ],
-          SizedBox(height: AppDs.space4.v),
-          MusamiAiPrimaryButton(
-            label: _isUpscale ? 'lbl_ai_upscale'.tr : 'lbl_ai_inpaint'.tr,
-            icon: _isUpscale
-                ? Icons.high_quality_rounded
-                : Icons.format_paint_rounded,
-            busy: _busy,
-            onPressed: _run,
-          ),
-          if (_result != null) ...[
-            SizedBox(height: AppDs.space5.v),
-            Text(
-              'lbl_results'.tr,
-              style: TextStyle(
-                color: AppDs.textOnDarkPrimary,
-                fontSize: 14.fSize,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            SizedBox(height: AppDs.space2.v),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                color: MusamiAiChrome.panelDeep,
-                borderRadius: BorderRadius.circular(AppDs.radiusMd),
-                border: Border.all(color: MusamiAiChrome.hairline),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(AppDs.radiusMd),
-                child: Image.memory(
-                  _result!,
-                  height: 220,
-                  width: double.infinity,
-                  fit: BoxFit.contain,
-                ),
-              ),
-            ),
-            SizedBox(height: AppDs.space3.v),
-            SizedBox(
-              height: AppDs.buttonHeight,
-              child: OutlinedButton.icon(
-                onPressed: _openInEditor,
-                icon: const Icon(Icons.design_services_outlined),
-                label: Text('lbl_ai_use_in_design'.tr),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: MusamiAiChrome.accent,
-                  side: BorderSide(
-                    color: MusamiAiChrome.accent.withValues(alpha: 0.55),
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppDs.radiusMd),
+                SizedBox(height: AppDs.space3.v),
+                Text(
+                  _isUpscale
+                      ? 'msg_ai_upscale_studio_hint'.tr
+                      : 'msg_ai_inpaint_studio_hint'.tr,
+                  style: TextStyle(
+                    color: AppDs.textOnDarkSecondary,
+                    fontSize: 13.fSize,
+                    height: 1.4,
                   ),
                 ),
+                SizedBox(height: AppDs.space4.v),
+                AiStudioChrome.previewStage(
+                  height: 240,
+                  onTap: _busy ? null : _pick,
+                  child: _source == null
+                      ? AiStudioChrome.emptyPreviewHint(
+                          icon: Icons.add_photo_alternate_outlined,
+                          message: 'msg_ai_tap_to_pick_image'.tr,
+                        )
+                      : Image.memory(_source!, fit: BoxFit.contain),
+                ),
+                SizedBox(height: AppDs.space3.v),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _busy ? null : _pick,
+                        icon: const Icon(Icons.photo_library_outlined),
+                        label: Text(
+                          _source == null
+                              ? 'lbl_ai_pick_image'.tr
+                              : 'msg_bg_removal_change_photo'.tr,
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppDs.textOnDarkPrimary,
+                          side: const BorderSide(color: AiStudioChrome.hairline),
+                          minimumSize: Size(0, 48.v),
+                          shape: RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(AppDs.radiusMd),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (_isUpscale) ...[
+                  SizedBox(height: AppDs.space4.v),
+                  AiStudioChrome.sectionLabel('lbl_ai_upscale_factor'.tr),
+                  SizedBox(height: AppDs.space2.v),
+                  AiStudioChrome.segmentChoice<int>(
+                    value: _scale,
+                    enabled: !_busy,
+                    options: [
+                      (2, 'lbl_ai_upscale_2x'.tr),
+                      (4, 'lbl_ai_upscale_4x'.tr),
+                    ],
+                    onChanged: (v) => setState(() => _scale = v),
+                  ),
+                ],
+                if (_result != null) ...[
+                  SizedBox(height: AppDs.space5.v),
+                  AiStudioChrome.sectionLabel('lbl_results'.tr),
+                  SizedBox(height: AppDs.space2.v),
+                  AiStudioChrome.previewStage(
+                    height: 220,
+                    child: Image.memory(_result!, fit: BoxFit.contain),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                AppDs.space4.h,
+                AppDs.space2.v,
+                AppDs.space4.h,
+                AppDs.space3.v,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AppPrimaryButton(
+                    label: _busy
+                        ? (_isUpscale
+                            ? 'msg_ai_upscaling'.tr
+                            : 'msg_ai_inpainting'.tr)
+                        : (_isUpscale
+                            ? 'lbl_ai_upscale'.tr
+                            : 'lbl_ai_inpaint'.tr),
+                    onPressed: _busy ? null : _run,
+                    isLoading: _busy,
+                  ),
+                  if (_result != null) ...[
+                    SizedBox(height: AppDs.space2.v),
+                    SizedBox(
+                      width: double.infinity,
+                      height: AppDs.buttonHeight,
+                      child: OutlinedButton.icon(
+                        onPressed: _openInEditor,
+                        icon: const Icon(Icons.design_services_outlined),
+                        label: Text('lbl_ai_use_in_design'.tr),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AiStudioChrome.accent,
+                          side: BorderSide(
+                            color: AiStudioChrome.accent.withValues(alpha: 0.55),
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(AppDs.radiusMd),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
-          ],
+          ),
         ],
       ),
     );

@@ -163,7 +163,10 @@ class _PrintShopRegisterScreenState extends State<PrintShopRegisterScreen> {
     return PrintScaffold(
       title: 'lbl_print_register_shop'.tr,
       showBack: false,
-      actions: const [PrintModeButton()],
+      actions: const [
+        PrintExitToDesignerButton(compact: true),
+        PrintModeButton(),
+      ],
       bottom: PrintKycNavBar(
         canGoBack: _step > 1,
         primaryLabel: _step == _totalSteps
@@ -620,7 +623,10 @@ class _PrintShopHomeScreenState extends State<PrintShopHomeScreen> {
       return PrintScaffold(
         title: 'lbl_print_shop_mode'.tr,
         showBack: false,
-        actions: const [PrintModeButton()],
+        actions: const [
+          PrintExitToDesignerButton(compact: true),
+          PrintModeButton(),
+        ],
         body: const Center(child: CircularProgressIndicator()),
       );
     }
@@ -629,7 +635,10 @@ class _PrintShopHomeScreenState extends State<PrintShopHomeScreen> {
       return PrintScaffold(
         title: 'lbl_print_shop_mode'.tr,
         showBack: false,
-        actions: const [PrintModeButton()],
+        actions: const [
+          PrintExitToDesignerButton(compact: true),
+          PrintModeButton(),
+        ],
         body: Stack(
           fit: StackFit.expand,
           children: [
@@ -660,6 +669,8 @@ class _PrintShopHomeScreenState extends State<PrintShopHomeScreen> {
                   ),
                   PrintDocumentList(documents: shop.documents),
                 ],
+                SizedBox(height: AppDs.space5.v),
+                const PrintExitToDesignerButton(),
                 if (_orders.isNotEmpty) ...[
                   SizedBox(height: AppDs.space5.v),
                   ..._orders.map(
@@ -699,6 +710,7 @@ class _PrintShopHomeScreenState extends State<PrintShopHomeScreen> {
             size: 22.adaptSize,
           ),
         ),
+        const PrintExitToDesignerButton(compact: true),
         const PrintModeButton(),
       ],
       bottom: NavigationBar(
@@ -967,6 +979,8 @@ class _PrintShopHomeScreenState extends State<PrintShopHomeScreen> {
                   style: const TextStyle(color: AppDs.printGold),
                 ),
               ),
+              SizedBox(height: AppDs.space3.v),
+              const PrintExitToDesignerButton(),
             ],
           ],
         ),
@@ -1451,7 +1465,32 @@ class _PrintShopOrderPanelState extends State<PrintShopOrderPanel> {
             ),
             SizedBox(height: AppDs.space3.v),
           ],
-          if (!isQuote && order.nextAction != null) ...[
+          if (order.activeChangeRequest != null) ...[
+            Container(
+              width: double.infinity,
+              padding: EdgeInsets.all(AppDs.space3.h),
+              decoration: BoxDecoration(
+                color: AppDs.surfaceRaised,
+                borderRadius: BorderRadius.circular(AppDs.radiusMd),
+                border: Border.all(
+                  color: AppDs.atelierBrass.withValues(alpha: 0.45),
+                ),
+              ),
+              child: Text(
+                order.activeChangeRequest!.needsCustomerPayment
+                    ? 'msg_print_change_awaiting_payment'.tr
+                    : 'msg_print_change_pending'.tr,
+                style: const TextStyle(
+                  color: AppDs.atelierBrass,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            SizedBox(height: AppDs.space3.v),
+          ],
+          if (!isQuote &&
+              order.nextAction != null &&
+              order.activeChangeRequest == null) ...[
             PrintGoldButton(
               label: 'lbl_print_action_${order.nextAction}'.tr,
               loading: _busy,
@@ -1461,7 +1500,8 @@ class _PrintShopOrderPanelState extends State<PrintShopOrderPanel> {
           ],
           if (order.status == 'ready' &&
               order.fulfillment == 'delivery' &&
-              order.delivery?.riderId == null) ...[
+              order.delivery?.riderId == null &&
+              order.activeChangeRequest == null) ...[
             PrintGoldButton(
               label: 'lbl_print_request_rider'.tr,
               loading: _busy,

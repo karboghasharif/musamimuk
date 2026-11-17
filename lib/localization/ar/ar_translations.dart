@@ -142,15 +142,21 @@ final Map<String, String> arSa = {
   "lbl_ai_inpaint": "تعديل بالفرشاة",
   "lbl_ai_upscale_2x": "٢×",
   "lbl_ai_upscale_4x": "٤×",
+  "lbl_ai_upscale_factor": "المقياس",
+  "lbl_try_these": "جرّب هذه",
   "lbl_ai_inpaint_brush": "الفرشاة",
   "lbl_ai_inpaint_clear_mask": "مسح القناع",
   "lbl_ai_pick_image": "اختر صورة",
   "msg_ai_pick_image_first": "اختر صورة أولاً.",
+  "msg_ai_tap_to_pick_image": "اضغط لاختيار صورة من المعرض",
+  "msg_ai_upscaling": "جاري التكبير…",
+  "msg_ai_inpainting": "جاري التعديل…",
   "msg_ai_upscale_hint":
       "حسّن الحدة والتفاصيل بالذكاء الاصطناعي. اختر تكبير ٢× أو ٤×.",
   "msg_ai_upscale_studio_hint":
       "اختر صورة، حدّد ٢× أو ٤×، ثم افتح النتيجة في المحرر.",
   "msg_ai_upscale_done": "اكتمل التكبير",
+  "msg_design_image_unavailable": "المعاينة غير متاحة",
   "msg_ai_inpaint_mask_hint":
       "ارسم بالأبيض على المناطق المراد تغييرها. المناطق السوداء تبقى كما هي.",
   "msg_ai_inpaint_prompt_hint": "صف ما تريد وضعه في المنطقة المرسومة…",
@@ -441,9 +447,15 @@ final Map<String, String> arSa = {
   "lbl_canvas_lock": "قفل التكبير",
   "lbl_canvas_unlock": "فتح التكبير",
   "msg_my_designs_visibility_hint":
-      "التصاميم العامة تظهر في التصاميم عبر الإنترنت. الخاصة تبقى هنا فقط.",
-  "msg_no_public_designs": "لا توجد تصاميم عامة بعد. احفظ تصميمًا كعام.",
-  "msg_no_private_designs": "لا توجد تصاميم خاصة بعد. احفظ تصميمًا كخاص.",
+      "التصاميم العامة تظهر بعد موافقة المشرف. قيد المراجعة والخاصة تبقى هنا فقط.",
+  "msg_no_public_designs":
+      "لا توجد تصاميم عامة معتمدة بعد. احفظ كعام لإرسالها للمراجعة.",
+  "msg_no_private_designs":
+      "لا توجد تصاميم خاصة أو قيد المراجعة بعد. احفظ تصميمًا كخاص.",
+  "msg_public_requires_admin_review":
+      "طلبات النشر العام تُراجع من المشرف قبل ظهور تصميمك أونلاين.",
+  "msg_design_submitted_for_review":
+      "تم إرسال التصميم لمراجعة المشرف. سيتم إشعارك عند الموافقة.",
   "lbl_delete": "حذف",
   "msg_delete_design_title": "حذف التصميم؟",
   "msg_delete_design_warning":
@@ -903,7 +915,7 @@ final Map<String, String> arSa = {
       "اشترِ المزيد من العملات لمتابعة استخدام هذه الميزة.",
   "msg_insufficient_coins_detail":
       "هذه الميزة تكلف {required} عملة. لديك {balance}.",
-  "msg_guest_coins_locked": "أنشئ حساباً مجانياً لشراء وإنفاق عملات مصممك.",
+  "msg_guest_coins_locked": "أنشئ حساباً مجانياً لشراء وإنفاق عملات مساميمك.",
   "msg_coin_store_subtitle":
       "اشترِ باقات العملات لاستخدام أدوات الذكاء الاصطناعي وإزالة الخلفية.",
   "msg_coin_packages_empty": "لا تتوفر باقات عملات حالياً.",
@@ -919,10 +931,10 @@ final Map<String, String> arSa = {
   "lbl_plan_lifetime": "مدى الحياة",
   "lbl_plan_yearly": "سنوي",
   "lbl_plan_monthly": "شهري",
-  "msg_subscription_active_title": "أنت على مصممك برو",
+  "msg_subscription_active_title": "أنت على مساميمك برو",
   "msg_subscription_active_subtitle":
-      "شكراً لدعمك لمصممك. يمكنك إدارة خطتك في أي وقت.",
-  "msg_subscription_unlocked": "تم تفعيل مصممك برو.",
+      "شكراً لدعمك لمساميمك. يمكنك إدارة خطتك في أي وقت.",
+  "msg_subscription_unlocked": "تم تفعيل مساميمك برو.",
   "msg_subscription_error": "حدث خطأ في شاشة الاشتراك.",
   "msg_subscription_unavailable": "الاشتراكات غير متاحة في هذا الإصدار بعد.",
   "msg_subscription_restore_failed": "تعذر استعادة المشتريات.",
@@ -1090,6 +1102,11 @@ final Map<String, String> arSa = {
       "نثبّت موقعك الحالي. حرّك الخريطة أو ابحث إذا كان التسليم في مكان آخر.",
   "lbl_print_find_shops": "ابحث عن مطابع موثّقة",
   "lbl_print_shops": "المطابع",
+  "lbl_print_nearest_shops": "أقرب المطابع",
+  "lbl_print_search_shops_hint": "ابحث عن مطابع أو خدمات…",
+  "msg_print_orders_completed": "{count} طلب مكتمل",
+  "msg_print_no_shops_nearby":
+      "لا توجد مطابع ضمن ٢٥ كم. فعّل الموقع أو أوقف فلتر «مفتوح الآن».",
   "lbl_print_search_shops": "ابحث عن مطبعة",
   "lbl_print_open_now": "مفتوحة الآن",
   "lbl_print_verified": "موثّقة",
@@ -1153,7 +1170,7 @@ final Map<String, String> arSa = {
   "msg_referral_withdraw_sent":
       "تم طلب السحب. سنحوّل المبلغ إلى آيبانك بعد المراجعة.",
   "msg_referral_share":
-      "انضم لمصممُك عبر دعوتي: {url}\nبعد التثبيت أنشئ حسابًا وأدخل الرمز: {code}",
+      "انضم لمساميمك عبر دعوتي: {url}\nبعد التثبيت أنشئ حسابًا وأدخل الرمز: {code}",
   "lbl_referral_code_optional": "رمز الإحالة (اختياري)",
   "msg_referral_code_hint": "إذا دعاك أحد، أدخل رمزه هنا.",
   "msg_referral_cash_intro":
@@ -1168,8 +1185,24 @@ final Map<String, String> arSa = {
   "lbl_print_hello_shop": "مرحباً، أود طباعة هذا التصميم.",
   "lbl_print_accept": "قبول",
   "lbl_print_decline": "رفض",
+  "lbl_print_reject": "رفض",
   "lbl_print_subtotal": "المجموع الفرعي",
   "lbl_print_pay_now": "ادفع الآن",
+  "lbl_print_request_change": "طلب تعديل",
+  "lbl_print_cancel_change_request": "إلغاء طلب التعديل",
+  "lbl_print_pay_change": "ادفع فرق التعديل",
+  "lbl_print_change_request": "طلب تعديل",
+  "lbl_print_change_note": "السبب / ماذا تغيّر",
+  "lbl_print_shop_note": "ملاحظة المطبعة",
+  "msg_print_change_pending": "طلب تعديل معلّق — الإنتاج متوقف مؤقتاً",
+  "msg_print_change_awaiting_payment":
+      "ادفع فرق التعديل لتطبيق المواصفات الجديدة",
+  "msg_print_change_submitted": "تم إرسال طلب التعديل للمطبعة.",
+  "msg_print_change_accepted": "تم قبول طلب التعديل.",
+  "msg_print_change_rejected": "تم رفض طلب التعديل.",
+  "msg_print_change_cancelled": "تم إلغاء طلب التعديل.",
+  "msg_print_change_reject_hint": "اكتب السبب للمصمم (٣ أحرف على الأقل).",
+  "msg_print_change_qty_hint": "حدّث الكمية أو الورق أو التشطيب أو الملاحظات.",
   "lbl_print_cancel_order": "إلغاء الطلب",
   "msg_print_cancel_confirm":
       "إلغاء طلب الطباعة؟ إذا دفعت بالفعل سيبدأ استرداد المبلغ.",
@@ -1232,9 +1265,17 @@ final Map<String, String> arSa = {
   "lbl_register_continue_shop": "إنشاء حساب وإعداد المطبعة",
   "lbl_register_continue_rider": "إنشاء حساب وإعداد المندوب",
   "msg_register_as_shop_hint":
-      "الخطوة التالية: إكمال وثائق توثيق المطبعة.",
+      "الخطوة التالية: إكمال وثائق توثيق المطبعة. مسجّل مسبقاً عبر Google؟ تابع بنفس الحساب دون بريد جديد.",
   "msg_register_as_rider_hint":
-      "الخطوة التالية: إكمال وثائق توثيق المندوب.",
+      "الخطوة التالية: إكمال وثائق توثيق المندوب. لديك حساب مطبعة أو Google؟ تابع بنفس تسجيل الدخول دون إنشاء بريد ثانٍ.",
+  "msg_email_exists_use_login_or_google":
+      "هذا البريد لديه حساب مسبقاً. سجّل الدخول بكلمة المرور أو تابع مع Google ثم أكمل إعداد المطبعة/المندوب.",
+  "msg_session_required": "يرجى تسجيل الدخول أولاً.",
+  "msg_register_pick_shop_or_rider":
+      "اختر مطبعة أو مندوب للمتابعة بالحساب الحالي.",
+  "lbl_continue_with_current_account": "المتابعة بهذا الحساب",
+  "msg_register_existing_session_hint":
+      "أنت مسجّل الدخول بالفعل. اختر مطبعة أو مندوب ثم تابع — سنربط الملف بنفس الحساب.",
   "lbl_mode_normal": "تطبيق التصميم",
   "lbl_mode_shop": "المطبعة",
   "lbl_mode_rider": "مندوب الطباعة",
@@ -1540,7 +1581,7 @@ final Map<String, String> arSa = {
   "msg_print_withdraw_sent": "تم إرسال طلب السحب.",
   "lbl_print_stripe_connect": "ربط سحب Stripe",
   "msg_print_stripe_connect_required":
-      "اربط Stripe لسحب أرباح الطباعة.",
+      "اربط Stripe من داخل التطبيق للسحب. إنشاء حساب متصل من لوحة Stripe فقط لا يربطه بمطبعتك/مندوبك.",
   "msg_print_stripe_connect_open":
       "أكمل تسجيل Stripe في المتصفح ثم عد إلى التطبيق.",
   "msg_print_pay_failed": "تعذر إكمال الدفع.",

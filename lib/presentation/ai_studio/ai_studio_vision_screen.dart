@@ -126,20 +126,16 @@ class _AiStudioVisionScreenState extends State<AiStudioVisionScreen> {
         body: ListView(
           padding: EdgeInsets.all(AppDs.space4.h),
           children: [
-            Row(
-              children: [
-                AiStudioChrome.poweredBy(_providerKind),
-                SizedBox(width: AppDs.space2.h),
-                AiStudioProviderPicker(
-                  value: _providerKind,
-                  includeGemini: false,
-                  onChanged: (kind) => setState(() => _providerKind = kind),
-                ),
-                const Spacer(),
-                BlocBuilderCoinHint(
-                  feature: AiStudioChrome.editorFeatureFor(_providerKind),
-                ),
-              ],
+            AiStudioChrome.toolbar(
+              kind: _providerKind,
+              providerPicker: AiStudioProviderPicker(
+                value: _providerKind,
+                includeGemini: false,
+                onChanged: (kind) => setState(() => _providerKind = kind),
+              ),
+              coinHint: BlocBuilderCoinHint(
+                feature: AiStudioChrome.editorFeatureFor(_providerKind),
+              ),
             ),
             SizedBox(height: AppDs.space3.v),
             AppText(
@@ -147,29 +143,15 @@ class _AiStudioVisionScreenState extends State<AiStudioVisionScreen> {
               variant: AppTextVariant.secondary,
             ),
             SizedBox(height: AppDs.space4.v),
-            AspectRatio(
-              aspectRatio: 4 / 3,
-              child: Material(
-                color: AppDs.atelierInk,
-                borderRadius: BorderRadius.circular(AppDs.radiusLg.adaptSize),
-                clipBehavior: Clip.antiAlias,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    borderRadius:
-                        BorderRadius.circular(AppDs.radiusLg.adaptSize),
-                    border: Border.all(color: AiStudioChrome.hairline),
-                  ),
-                  child: _previewBytes == null
-                      ? Center(
-                          child: AppText(
-                            'msg_ai_vision_empty'.tr,
-                            variant: AppTextVariant.secondary,
-                            textAlign: TextAlign.center,
-                          ),
-                        )
-                      : Image.memory(_previewBytes!, fit: BoxFit.cover),
-                ),
-              ),
+            AiStudioChrome.previewStage(
+              height: 220,
+              onTap: _busy ? null : () => _pick(ImageSource.gallery),
+              child: _previewBytes == null
+                  ? AiStudioChrome.emptyPreviewHint(
+                      icon: Icons.add_a_photo_outlined,
+                      message: 'msg_ai_vision_empty'.tr,
+                    )
+                  : Image.memory(_previewBytes!, fit: BoxFit.cover),
             ),
             SizedBox(height: AppDs.space3.v),
             Row(
@@ -208,6 +190,8 @@ class _AiStudioVisionScreenState extends State<AiStudioVisionScreen> {
               onSubmitted: _busy ? null : _analyze,
             ),
             SizedBox(height: AppDs.space3.v),
+            AiStudioChrome.sectionLabel('lbl_try_these'.tr),
+            SizedBox(height: AppDs.space2.v),
             AiStudioChrome.suggestionChips(
               suggestions: _suggestions,
               onTap: (tip) {

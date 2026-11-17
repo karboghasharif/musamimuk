@@ -46,3 +46,9 @@ class RegisterSubmitEvent extends Screen0RegisterEvent {
         referralCode,
       ];
 }
+
+/// Sign in / create account with Google, then continue to the selected role KYC.
+class RegisterWithGoogleEvent extends Screen0RegisterEvent {}
+
+/// Already signed-in non-guest user continues to shop/rider KYC without re-registering.
+class ContinueExistingSessionEvent extends Screen0RegisterEvent {}

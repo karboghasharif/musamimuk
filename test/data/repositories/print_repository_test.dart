@@ -430,6 +430,153 @@ void main() {
       expect(fields.containsKey('user_id'), isFalse);
       expect(fields.containsKey('coins'), isFalse);
     });
+
+    test('createChangeRequest posts spec+note and parses active_change_request', () async {
+      RequestOptions? captured;
+      final repository = PrintRepository(
+        dio: _dioReturning({
+          'success': true,
+          'data': {
+            'id': 11,
+            'number': 10480,
+            'pickup_code': 'M-10480',
+            'status': 'accepted',
+            'has_pending_change_request': true,
+            'active_change_request': {
+              'id': 44,
+              'status': 'pending',
+              'previous_amount': 55,
+              'requested_spec': {'quantity': 120},
+            },
+            'quotes': [],
+            'messages': [],
+            'timeline': [],
+          },
+        }, onRequest: (request) => captured = request),
+      );
+
+      final result = await repository.createChangeRequest(
+        orderId: 11,
+        spec: {'quantity': 120},
+        note: 'More cards',
+      );
+      expect(result, isA<PrintSuccess<PrintOrder>>());
+      expect(captured?.path, 'print/orders/11/change-requests');
+      final body = captured?.data as Map;
+      expect(body['spec'], isA<Map>());
+      expect(body['note'], 'More cards');
+      final order = (result as PrintSuccess<PrintOrder>).data;
+      expect(order.hasPendingChangeRequest, isTrue);
+      expect(order.activeChangeRequest?.id, 44);
+      expect(order.activeChangeRequest?.status, 'pending');
+    });
+
+    test('acceptChangeRequest and rejectChangeRequest hit shop decide paths', () async {
+      RequestOptions? acceptReq;
+      final acceptRepo = PrintRepository(
+        dio: _dioReturning({
+          'success': true,
+          'data': {
+            'id': 11,
+            'number': 10480,
+            'pickup_code': 'M-10480',
+            'status': 'accepted',
+            'has_pending_change_request': false,
+            'quotes': [],
+            'messages': [],
+            'timeline': [],
+          },
+        }, onRequest: (request) => acceptReq = request),
+      );
+      final accepted = await acceptRepo.acceptChangeRequest(
+        orderId: 11,
+        changeRequestId: 44,
+        shopNote: 'OK',
+        shopTotal: 55,
+      );
+      expect(accepted, isA<PrintSuccess<PrintOrder>>());
+      expect(acceptReq?.path, 'print/orders/11/change-requests/44/accept');
+      expect((acceptReq?.data as Map)['shop_total'], 55);
+
+      RequestOptions? rejectReq;
+      final rejectRepo = PrintRepository(
+        dio: _dioReturning({
+          'success': true,
+          'data': {
+            'id': 11,
+            'number': 10480,
+            'pickup_code': 'M-10480',
+            'status': 'accepted',
+            'has_pending_change_request': false,
+            'quotes': [],
+            'messages': [],
+            'timeline': [],
+          },
+        }, onRequest: (request) => rejectReq = request),
+      );
+      final rejected = await rejectRepo.rejectChangeRequest(
+        orderId: 11,
+        changeRequestId: 44,
+        shopNote: 'Cannot change stock',
+      );
+      expect(rejected, isA<PrintSuccess<PrintOrder>>());
+      expect(rejectReq?.path, 'print/orders/11/change-requests/44/reject');
+      expect((rejectReq?.data as Map)['shop_note'], 'Cannot change stock');
+    });
+
+    test('cancelChangeRequest and payChangeRequest hit customer paths', () async {
+      RequestOptions? cancelReq;
+      final cancelRepo = PrintRepository(
+        dio: _dioReturning({
+          'success': true,
+          'data': {
+            'id': 11,
+            'number': 10480,
+            'pickup_code': 'M-10480',
+            'status': 'accepted',
+            'has_pending_change_request': false,
+            'quotes': [],
+            'messages': [],
+            'timeline': [],
+          },
+        }, onRequest: (request) => cancelReq = request),
+      );
+      final cancelled = await cancelRepo.cancelChangeRequest(
+        orderId: 11,
+        changeRequestId: 44,
+      );
+      expect(cancelled, isA<PrintSuccess<PrintOrder>>());
+      expect(cancelReq?.path, 'print/orders/11/change-requests/44/cancel');
+
+      RequestOptions? payReq;
+      final payRepo = PrintRepository(
+        dio: _dioReturning({
+          'success': true,
+          'data': {
+            'id': 11,
+            'number': 10480,
+            'pickup_code': 'M-10480',
+            'status': 'accepted',
+            'has_pending_change_request': false,
+            'quotes': [],
+            'messages': [],
+            'timeline': [],
+          },
+          'meta': {
+            'stripe': {'mode': 'simulated', 'status': 'succeeded'},
+          },
+        }, onRequest: (request) => payReq = request),
+      );
+      final paid = await payRepo.payChangeRequest(
+        orderId: 11,
+        changeRequestId: 44,
+        method: 'mada',
+      );
+      expect(paid, isA<PrintSuccess<PrintPaySession>>());
+      expect(payReq?.path, 'print/orders/11/change-requests/44/pay');
+      expect((payReq?.data as Map)['method'], 'mada');
+      expect((paid as PrintSuccess<PrintPaySession>).data.stripe?.mode, 'simulated');
+    });
   });
 }
 

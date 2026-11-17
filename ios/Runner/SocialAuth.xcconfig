@@ -1,10 +1,20 @@
-// Replace placeholders with credentials from Google Cloud Console, Meta for Developers,
-// and Apple Developer (Sign in with Apple on App ID `com.musamimuk.ios.app`).
-// Google iOS OAuth client must list bundle id com.musamimuk.ios.app.
-GOOGLE_IOS_CLIENT_ID=REPLACE_WITH_IOS_OAUTH_CLIENT_ID.apps.googleusercontent.com
-GOOGLE_REVERSED_CLIENT_ID=com.googleusercontent.apps.REPLACE_WITH_NUMERIC_ID
-FACEBOOK_APP_ID=REPLACE_WITH_FACEBOOK_APP_ID
-FACEBOOK_CLIENT_TOKEN=REPLACE_WITH_FACEBOOK_CLIENT_TOKEN
+// Social / Maps credentials for iOS builds (included by Flutter/Debug.xcconfig + Release.xcconfig).
+// Leave Google/Facebook EMPTY until you have real OAuth clients — App Store rejects
+// placeholders like REPLACE_WITH_* in CFBundleURLSchemes.
+//
+// When ready:
+// 1. Google Cloud → OAuth client (iOS) for bundle com.musamimuk.ios.app
+//    GOOGLE_IOS_CLIENT_ID=123-abc.apps.googleusercontent.com
+//    GOOGLE_REVERSED_CLIENT_ID=com.googleusercontent.apps.123-abc
+//    Then add that reversed ID as a CFBundleURLSchemes entry in Info.plist.
+// 2. Meta → App ID + Client Token → FACEBOOK_* and add fb{APP_ID} URL scheme in Info.plist.
+// 3. Sign in with Apple is capability-only (no values here).
+
+GOOGLE_IOS_CLIENT_ID=
+GOOGLE_REVERSED_CLIENT_ID=
+FACEBOOK_APP_ID=
+FACEBOOK_CLIENT_TOKEN=
 FACEBOOK_DISPLAY_NAME=Musamimuk
-// TEMP testing Maps key — replace before production / rotate in Google Cloud Console.
-GOOGLE_MAPS_API_KEY=AIzaSyDciNqktI9_WsAT2Wzfwf_r56tUCxzLexk
+// Maps — set a restricted iOS key before release (do not commit production keys).
+// Google Cloud → Credentials → API key restricted to iOS apps + bundle com.musamimuk.ios.app
+GOOGLE_MAPS_API_KEY=

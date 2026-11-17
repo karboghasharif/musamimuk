@@ -361,6 +361,8 @@ class PrintChatMessage {
     required this.from,
     required this.body,
     this.quoteId,
+    this.changeRequestId,
+    this.meta,
     this.thread = 'customer_shop',
     this.conversationId,
     this.orderId,
@@ -372,19 +374,37 @@ class PrintChatMessage {
   final String from;
   final String body;
   final int? quoteId;
+  final int? changeRequestId;
+  final Map<String, dynamic>? meta;
   final String thread;
   final int? conversationId;
   final int? orderId;
   final PrintChatAttachment? attachment;
   final String? createdAt;
 
+  bool get isChangeRequestCard =>
+      (meta?['type']?.toString() == 'order_change_request') ||
+      changeRequestId != null;
+
+  String? get changeRequestStatus =>
+      meta?['status']?.toString() ??
+      (isChangeRequestCard ? null : null);
+
   factory PrintChatMessage.fromJson(Map<String, dynamic> json) {
     final rawAttachment = json['attachment'];
+    final rawMeta = json['meta'];
     return PrintChatMessage(
       id: PrintSpec._asInt(json['id']) ?? 0,
       from: json['from']?.toString() ?? 'system',
       body: json['body']?.toString() ?? '',
       quoteId: PrintSpec._asInt(json['quote_id']),
+      changeRequestId: PrintSpec._asInt(
+        json['change_request_id'] ??
+            (rawMeta is Map ? rawMeta['change_request_id'] : null),
+      ),
+      meta: rawMeta is Map
+          ? rawMeta.cast<String, dynamic>()
+          : null,
       thread: json['thread']?.toString() ?? 'customer_shop',
       conversationId: PrintSpec._asInt(json['conversation_id']),
       orderId: PrintSpec._asInt(json['order_id']),
@@ -392,6 +412,70 @@ class PrintChatMessage {
           ? PrintChatAttachment.fromJson(rawAttachment.cast<String, dynamic>())
           : null,
       createdAt: json['created_at']?.toString(),
+    );
+  }
+}
+
+class PrintChangeRequest {
+  const PrintChangeRequest({
+    required this.id,
+    required this.status,
+    this.previousSpec,
+    this.requestedSpec,
+    this.previousAmount,
+    this.proposedAmount,
+    this.deltaAmount,
+    this.designerNote,
+    this.shopNote,
+    this.expiresAt,
+    this.createdAt,
+    this.decidedAt,
+    this.paymentId,
+    this.messageId,
+  });
+
+  final int id;
+  final String status;
+  final PrintSpec? previousSpec;
+  final PrintSpec? requestedSpec;
+  final double? previousAmount;
+  final double? proposedAmount;
+  final double? deltaAmount;
+  final String? designerNote;
+  final String? shopNote;
+  final String? expiresAt;
+  final String? createdAt;
+  final String? decidedAt;
+  final int? paymentId;
+  final int? messageId;
+
+  bool get isOpen =>
+      status == 'pending' || status == 'awaiting_customer_payment';
+
+  bool get needsCustomerPayment => status == 'awaiting_customer_payment';
+
+  factory PrintChangeRequest.fromJson(Map<String, dynamic> json) {
+    final prev = json['previous_spec'];
+    final next = json['requested_spec'];
+    return PrintChangeRequest(
+      id: PrintSpec._asInt(json['id']) ?? 0,
+      status: json['status']?.toString() ?? 'pending',
+      previousSpec: prev is Map
+          ? PrintSpec.fromJson(prev.cast<String, dynamic>())
+          : null,
+      requestedSpec: next is Map
+          ? PrintSpec.fromJson(next.cast<String, dynamic>())
+          : null,
+      previousAmount: PrintShopSummary._asDouble(json['previous_amount']),
+      proposedAmount: PrintShopSummary._asDouble(json['proposed_amount']),
+      deltaAmount: PrintShopSummary._asDouble(json['delta_amount']),
+      designerNote: json['designer_note']?.toString(),
+      shopNote: json['shop_note']?.toString(),
+      expiresAt: json['expires_at']?.toString(),
+      createdAt: json['created_at']?.toString(),
+      decidedAt: json['decided_at']?.toString(),
+      paymentId: PrintSpec._asInt(json['payment_id']),
+      messageId: PrintSpec._asInt(json['message_id']),
     );
   }
 }
@@ -510,6 +594,8 @@ class PrintOrder {
     this.dropoffAddress,
     this.conversationId,
     this.riderConversationId,
+    this.hasPendingChangeRequest = false,
+    this.activeChangeRequest,
   });
 
   final int id;
@@ -543,6 +629,23 @@ class PrintOrder {
   final String? dropoffAddress;
   final int? conversationId;
   final int? riderConversationId;
+  final bool hasPendingChangeRequest;
+  final PrintChangeRequest? activeChangeRequest;
+
+  bool get canRequestChange {
+    const allowed = {
+      'accepted',
+      'printing',
+      'print_complete',
+      'quality_check',
+    };
+    return shopId != null &&
+        allowed.contains(status) &&
+        !hasPendingChangeRequest &&
+        activeChangeRequest == null &&
+        (dispute == null ||
+            (dispute!.status != 'open' && dispute!.status != 'shop_replied'));
+  }
 
   PrintQuote? get offeredQuote {
     for (final quote in quotes) {
@@ -643,6 +746,13 @@ class PrintOrder {
       dropoffAddress: dropoff is Map ? dropoff['address']?.toString() : null,
       conversationId: PrintSpec._asInt(json['conversation_id']),
       riderConversationId: PrintSpec._asInt(json['rider_conversation_id']),
+      hasPendingChangeRequest: json['has_pending_change_request'] == true ||
+          json['active_change_request'] is Map,
+      activeChangeRequest: json['active_change_request'] is Map
+          ? PrintChangeRequest.fromJson(
+              (json['active_change_request'] as Map).cast<String, dynamic>(),
+            )
+          : null,
     );
   }
 }

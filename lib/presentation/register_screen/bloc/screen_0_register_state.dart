@@ -11,6 +11,8 @@ class Screen0RegisterState extends Equatable {
     this.accountType = Screen0RegisterBloc.accountTypeDesigner,
     this.screen0RegisterModelObj,
     this.isLoading = false,
+    this.isLoadingGoogle = false,
+    this.hasExistingSession = false,
     this.registerError,
     this.registerSuccess = false,
   });
@@ -24,6 +26,9 @@ class Screen0RegisterState extends Equatable {
   /// designer | shop | rider — account signup intent (KYC follows for shop/rider).
   String accountType;
   bool isLoading;
+  bool isLoadingGoogle;
+  /// True when a non-guest session is already active (e.g. Google shop user).
+  bool hasExistingSession;
   String? registerError;
   bool registerSuccess;
   @override
@@ -37,6 +42,8 @@ class Screen0RegisterState extends Equatable {
         accountType,
         screen0RegisterModelObj,
         isLoading,
+        isLoadingGoogle,
+        hasExistingSession,
         registerError,
         registerSuccess,
       ];
@@ -50,6 +57,8 @@ class Screen0RegisterState extends Equatable {
     String? accountType,
     Screen0RegisterModel? screen0RegisterModelObj,
     bool? isLoading,
+    bool? isLoadingGoogle,
+    bool? hasExistingSession,
     String? registerError,
     bool? registerSuccess,
   }) {
@@ -68,6 +77,8 @@ class Screen0RegisterState extends Equatable {
       screen0RegisterModelObj:
           screen0RegisterModelObj ?? this.screen0RegisterModelObj,
       isLoading: isLoading ?? this.isLoading,
+      isLoadingGoogle: isLoadingGoogle ?? this.isLoadingGoogle,
+      hasExistingSession: hasExistingSession ?? this.hasExistingSession,
       registerError: registerError,
       registerSuccess: registerSuccess ?? this.registerSuccess,
     );

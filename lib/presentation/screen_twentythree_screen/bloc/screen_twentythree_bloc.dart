@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:equatable/equatable.dart';
 import 'package:flutter/material.dart';
 import '../../../core/app_export.dart';
 import '../../../core/deeplink/app_deep_link_service.dart';
 import '../../../data/repositories/app_version_repository.dart';
 import '../../force_update/force_update_screen.dart';
+import '../../print/print_mode_switch.dart';
 import '../models/screen_twentythree_model.dart';
 part 'screen_twentythree_event.dart';
 part 'screen_twentythree_state.dart';
@@ -41,6 +44,11 @@ class ScreenTwentythreeBloc
         (_) => false,
       );
       return;
+    }
+
+    // Warm shop/rider flags so the mode switcher is ready after cold start.
+    if (PrefUtils().isLoggedIn() && !PrefUtils().isGuestAccount()) {
+      unawaited(refreshPrintProfileModeCache());
     }
 
     await Future.delayed(const Duration(milliseconds: 3000));

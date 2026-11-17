@@ -289,7 +289,11 @@ class _PrintChatScreenState extends State<PrintChatScreen> {
     if (_conversation != null) return _conversation!.messages;
     if (_order != null) {
       return _order!.messages
-          .where((m) => m.thread == widget.thread && m.from != 'system')
+          .where(
+            (m) =>
+                m.thread == widget.thread &&
+                (m.from != 'system' || m.isChangeRequestCard),
+          )
           .toList();
     }
     return const [];
@@ -375,6 +379,18 @@ class _PrintChatScreenState extends State<PrintChatScreen> {
                     itemCount: _messages.length,
                     itemBuilder: (context, index) {
                       final msg = _messages[index];
+                      if (msg.isChangeRequestCard) {
+                        return _ChangeRequestChatCard(
+                          message: msg,
+                          viewer: widget.viewer,
+                          busy: _busy,
+                          orderId: orderId ??
+                              msg.orderId ??
+                              _order?.id ??
+                              _conversation?.lastOrderId,
+                          onDecided: () => _reload(scroll: false),
+                        );
+                      }
                       final mine = _isMine(msg);
                       return Align(
                         alignment:
@@ -538,6 +554,172 @@ class _PrintChatScreenState extends State<PrintChatScreen> {
                 ),
               ],
             ),
+    );
+  }
+}
+
+class _ChangeRequestChatCard extends StatefulWidget {
+  const _ChangeRequestChatCard({
+    required this.message,
+    required this.viewer,
+    required this.busy,
+    required this.orderId,
+    required this.onDecided,
+  });
+
+  final PrintChatMessage message;
+  final String viewer;
+  final bool busy;
+  final int? orderId;
+  final VoidCallback onDecided;
+
+  @override
+  State<_ChangeRequestChatCard> createState() => _ChangeRequestChatCardState();
+}
+
+class _ChangeRequestChatCardState extends State<_ChangeRequestChatCard> {
+  bool _acting = false;
+
+  int? get _crId =>
+      widget.message.changeRequestId ??
+      PrintChatScreen._optionalInt(widget.message.meta?['change_request_id']);
+
+  String get _status =>
+      widget.message.meta?['status']?.toString() ??
+      widget.message.changeRequestStatus ??
+      'pending';
+
+  Future<void> _accept() async {
+    final orderId = widget.orderId;
+    final crId = _crId;
+    if (orderId == null || crId == null || _acting || widget.busy) return;
+    setState(() => _acting = true);
+    final result = await PrintRepository().acceptChangeRequest(
+      orderId: orderId,
+      changeRequestId: crId,
+    );
+    if (!mounted) return;
+    setState(() => _acting = false);
+    if (result is PrintFailure<PrintOrder>) {
+      showAppToast(result.message, type: ToastificationType.error);
+      return;
+    }
+    showAppToast('msg_print_change_accepted'.tr);
+    widget.onDecided();
+  }
+
+  Future<void> _reject() async {
+    final orderId = widget.orderId;
+    final crId = _crId;
+    if (orderId == null || crId == null || _acting || widget.busy) return;
+    final noteCtrl = TextEditingController();
+    final note = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppDs.surfaceRaised,
+        title: Text(
+          'lbl_print_reject'.tr,
+          style: const TextStyle(color: Colors.white),
+        ),
+        content: TextField(
+          controller: noteCtrl,
+          maxLines: 3,
+          style: const TextStyle(color: Colors.white),
+          decoration: InputDecoration(
+            hintText: 'msg_print_change_reject_hint'.tr,
+            hintStyle: const TextStyle(color: Colors.white54),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('lbl_print_decline'.tr),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, noteCtrl.text.trim()),
+            child: Text('lbl_print_reject'.tr),
+          ),
+        ],
+      ),
+    );
+    noteCtrl.dispose();
+    if (note == null || note.length < 3 || !mounted) return;
+
+    setState(() => _acting = true);
+    final result = await PrintRepository().rejectChangeRequest(
+      orderId: orderId,
+      changeRequestId: crId,
+      shopNote: note,
+    );
+    if (!mounted) return;
+    setState(() => _acting = false);
+    if (result is PrintFailure<PrintOrder>) {
+      showAppToast(result.message, type: ToastificationType.error);
+      return;
+    }
+    showAppToast('msg_print_change_rejected'.tr);
+    widget.onDecided();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final canDecide = widget.viewer == 'shop' && _status == 'pending';
+    return Align(
+      alignment: Alignment.center,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.sizeOf(context).width * 0.9,
+        ),
+        child: Container(
+          width: double.infinity,
+          margin: EdgeInsets.only(bottom: 10.v),
+          padding: EdgeInsets.all(14.h),
+          decoration: BoxDecoration(
+            color: AppDs.surfaceRaised,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppDs.printGold.withValues(alpha: 0.5)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'lbl_print_change_request'.tr,
+                style: const TextStyle(
+                  color: AppDs.printGold,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12,
+                ),
+              ),
+              SizedBox(height: 4.v),
+              Text(
+                widget.message.body,
+                style: const TextStyle(color: Colors.white, height: 1.35),
+              ),
+              if (canDecide) ...[
+                SizedBox(height: 12.v),
+                Row(
+                  children: [
+                    Expanded(
+                      child: PrintGoldButton(
+                        label: 'lbl_print_accept'.tr,
+                        loading: _acting,
+                        onPressed: _acting ? null : _accept,
+                      ),
+                    ),
+                    SizedBox(width: 8.h),
+                    Expanded(
+                      child: PrintGhostButton(
+                        label: 'lbl_print_reject'.tr,
+                        onPressed: _acting ? null : _reject,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

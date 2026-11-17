@@ -44,18 +44,52 @@ String apiSiteOrigin() {
   return '${u.scheme}://${u.host}$port';
 }
 
-/// Resolves `file_url`, `image_url`, or `file_path` from JSON to a loadable URL.
-String apiResolveDesignFileUrl(Map<String, dynamic> json) {
-  String resolveToAbsolute(String raw) {
-    final trimmed = raw.trim();
-    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-      return trimmed;
-    }
-    final origin = apiSiteOrigin();
-    final clean = trimmed.replaceFirst(RegExp(r'^/+'), '');
-    return '$origin/$clean';
+/// Turns a relative or absolute media path into a loadable network URL.
+///
+/// - Resolves relative `storage/...` paths against the API site origin
+/// - Percent-encodes path segments (spaces / arabic filenames)
+/// - Normalizes `/public/storage` → `/storage` (CloudPanel public docroot)
+String apiResolveMediaUrl(String? raw) {
+  var trimmed = (raw ?? '').trim().replaceAll('\\', '');
+  if (trimmed.isEmpty) return '';
+
+  // Protocol-relative.
+  if (trimmed.startsWith('//')) {
+    trimmed = 'https:$trimmed';
   }
 
+  Uri? uri;
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    uri = Uri.tryParse(trimmed);
+  } else {
+    final clean = trimmed.replaceFirst(RegExp(r'^/+'), '');
+    uri = Uri.tryParse('${apiSiteOrigin()}/$clean');
+  }
+  if (uri == null || uri.host.isEmpty) return trimmed;
+
+  var path = uri.path.replaceAll('/public/storage', '/storage');
+  if (path.contains('/public/storage')) {
+    path = path.replaceAll('/public/storage', '/storage');
+  }
+  // Encode each segment so spaces and non-ASCII stay valid in Image.network.
+  final segments = path
+      .split('/')
+      .map((segment) {
+        if (segment.isEmpty) return segment;
+        try {
+          return Uri.encodeComponent(Uri.decodeComponent(segment));
+        } catch (_) {
+          return Uri.encodeComponent(segment);
+        }
+      })
+      .toList();
+  final encodedPath = segments.join('/');
+
+  return uri.replace(path: encodedPath).toString();
+}
+
+/// Resolves `file_url`, `image_url`, or `file_path` from JSON to a loadable URL.
+String apiResolveDesignFileUrl(Map<String, dynamic> json) {
   for (final key in [
     'file_url',
     'image_url',
@@ -65,7 +99,7 @@ String apiResolveDesignFileUrl(Map<String, dynamic> json) {
   ]) {
     final raw = json[key]?.toString().trim();
     if (raw != null && raw.isNotEmpty) {
-      return resolveToAbsolute(raw);
+      return apiResolveMediaUrl(raw);
     }
   }
 
@@ -73,7 +107,7 @@ String apiResolveDesignFileUrl(Map<String, dynamic> json) {
 }
 
 /// Legacy helper kept for call sites; server files are served at `/storage/...`.
-String normalizePublicStorageUrl(String url) => url.trim();
+String normalizePublicStorageUrl(String url) => apiResolveMediaUrl(url);
 
 String? apiExtractMessage(dynamic data) {
   if (data is! Map) return null;

@@ -137,9 +137,9 @@ class Screen16OnlineDesignsBloc
         );
         return;
       }
-      // Online Designs is a public catalog — never show private saves.
+      // Online Designs is a public catalog — only approved public designs.
       _allDesigns = (result as AdminDesignListSuccess).items
-          .where((e) => !e.isPrivateDesign)
+          .where((e) => e.isPublicDesign)
           .toList();
       final categories = _distinctCategories(_allDesigns);
       _validateCategorySelection(categories);

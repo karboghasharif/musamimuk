@@ -11,7 +11,7 @@ import 'bloc/screen_1_home_bloc.dart';
 import 'models/screen_1_home_model.dart';
 import 'widgets/home_ai_studio_section.dart';
 
-/// Musamimuk (مصممك) tutorials on YouTube.
+/// Musamimuk (مساميمك) tutorials on YouTube.
 const String _kTutorialsYoutubeChannelUrl =
     'https://www.youtube.com/channel/UCy3n3823yqIwG6FK2ebWrGg';
 
@@ -190,8 +190,8 @@ class Screen1HomeScreen extends StatelessWidget {
             bottomNavigationBar: _HomeBottomNavBar(isGuest: isGuest),
             floatingActionButtonLocation:
                 FloatingActionButtonLocation.centerDocked,
-            floatingActionButton: _HomeNewDesignFab(
-              onPressed: () => onTapBtnPlusone(context),
+            floatingActionButton: _HomeNearestShopsFab(
+              onPressed: () => onTapNearestShops(context),
             ),
           ),
         );
@@ -298,15 +298,39 @@ class Screen1HomeScreen extends StatelessWidget {
             ),
           ),
         ),
-        CustomIconButton(
-          height: 44.adaptSize,
-          width: 44.adaptSize,
-          padding: EdgeInsets.all(8.h),
-          decoration: IconButtonStyleHelper.fillBlueGray,
-          onTap: () {
-            NavigatorService.pushNamed(AppRoutes.profileScreen);
-          },
-          child: CustomImageView(imagePath: ImageConstant.imgLockGray900),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CustomIconButton(
+              height: 44.adaptSize,
+              width: 44.adaptSize,
+              padding: EdgeInsets.all(10.h),
+              decoration: IconButtonStyleHelper.fillBlueGray,
+              onTap: () {
+                NavigatorService.pushNamed(AppRoutes.notificationsScreen);
+              },
+              child: Icon(
+                Icons.notifications_outlined,
+                size: 22.adaptSize,
+                color: appTheme.gray900,
+              ),
+            ),
+            SizedBox(width: 8.h),
+            CustomIconButton(
+              height: 44.adaptSize,
+              width: 44.adaptSize,
+              padding: EdgeInsets.all(10.h),
+              decoration: IconButtonStyleHelper.fillBlueGray,
+              onTap: () {
+                NavigatorService.pushNamed(AppRoutes.profileScreen);
+              },
+              child: Icon(
+                Icons.person_outline_rounded,
+                size: 22.adaptSize,
+                color: appTheme.gray900,
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -314,6 +338,10 @@ class Screen1HomeScreen extends StatelessWidget {
 
   void onTapBtnPlusone(BuildContext context) {
     NavigatorService.pushNamed(AppRoutes.screen2NewDesignScreen);
+  }
+
+  void onTapNearestShops(BuildContext context) {
+    NavigatorService.pushNamed(AppRoutes.printShopsScreen);
   }
 
   void onTapTxtNewdesign(BuildContext context) {
@@ -349,8 +377,8 @@ class Screen1HomeScreen extends StatelessWidget {
   }
 }
 
-class _HomeNewDesignFab extends StatelessWidget {
-  const _HomeNewDesignFab({required this.onPressed});
+class _HomeNearestShopsFab extends StatelessWidget {
+  const _HomeNearestShopsFab({required this.onPressed});
 
   final VoidCallback onPressed;
 
@@ -359,7 +387,7 @@ class _HomeNewDesignFab extends StatelessWidget {
     final primary = theme.colorScheme.primary;
 
     return Tooltip(
-      message: 'lbl_new_design'.tr,
+      message: 'lbl_print_nearest_shops'.tr,
       child: SizedBox(
         width: 60.adaptSize,
         height: 60.adaptSize,
@@ -370,7 +398,7 @@ class _HomeNewDesignFab extends StatelessWidget {
           backgroundColor: primary,
           foregroundColor: AppDs.onAccent,
           shape: const CircleBorder(),
-          child: Icon(Icons.add_rounded, size: 32.adaptSize),
+          child: Icon(Icons.storefront_rounded, size: 28.adaptSize),
         ),
       ),
     );

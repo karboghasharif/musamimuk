@@ -54,43 +54,194 @@ class AiStudioChrome {
         vertical: AppDs.space1.v + 2,
       ),
       decoration: BoxDecoration(
-        color: accent.withValues(alpha: 0.14),
+        color: accent.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(AppDs.radiusFull.adaptSize),
-        border: Border.all(color: accent.withValues(alpha: 0.4)),
+        border: Border.all(color: accent.withValues(alpha: 0.35)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(Icons.auto_awesome_rounded, size: 14.adaptSize, color: accent),
           SizedBox(width: 6.h),
-          AppText(
-            label,
-            variant: AppTextVariant.caption,
-            color: accent,
+          Flexible(
+            child: AppText(
+              label,
+              variant: AppTextVariant.caption,
+              color: accent,
+              maxLines: 1,
+            ),
           ),
         ],
       ),
     );
   }
 
+  /// Compact top meta row: provider badge + optional picker + coin cost.
+  static Widget toolbar({
+    required EditorAiProviderKind kind,
+    Widget? providerPicker,
+    Widget? coinHint,
+  }) {
+    return Row(
+      children: [
+        Flexible(child: poweredBy(kind)),
+        if (providerPicker != null) ...[
+          SizedBox(width: AppDs.space2.h),
+          providerPicker,
+        ],
+        const Spacer(),
+        ?coinHint,
+      ],
+    );
+  }
+
+  static Widget sectionLabel(String text) {
+    return Text(
+      text,
+      style: TextStyle(
+        color: AppDs.textOnDarkSecondary,
+        fontSize: 12.fSize,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.2,
+      ),
+    );
+  }
+
+  /// Horizontal suggestion strip — saves vertical space vs stacked chips.
   static Widget suggestionChips({
     required List<String> suggestions,
     required ValueChanged<String> onTap,
+  }) {
+    return SizedBox(
+      height: 40.v,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: suggestions.length,
+        separatorBuilder: (_, _) => SizedBox(width: AppDs.space2.h),
+        itemBuilder: (context, index) {
+          final tip = suggestions[index];
+          return ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: 260.h),
+            child: Material(
+              color: AppDs.atelierInk,
+              shape: const StadiumBorder(
+                side: BorderSide(color: hairline),
+              ),
+              child: InkWell(
+                onTap: () => onTap(tip),
+                customBorder: const StadiumBorder(),
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: AppDs.space3.h,
+                    vertical: AppDs.space2.v,
+                  ),
+                  child: Center(
+                    child: Text(
+                      tip,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: AppDs.textOnDarkPrimary,
+                        fontSize: 12.fSize,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  /// Large preview / drop zone used by Upscale, Inpaint, Vision.
+  static Widget previewStage({
+    required Widget child,
+    double height = 220,
+    VoidCallback? onTap,
+  }) {
+    final stage = DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppDs.atelierInk,
+        borderRadius: BorderRadius.circular(AppDs.radiusLg.adaptSize),
+        border: Border.all(color: hairline),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppDs.radiusLg.adaptSize),
+        child: SizedBox(
+          height: height.v,
+          width: double.infinity,
+          child: child,
+        ),
+      ),
+    );
+    if (onTap == null) return stage;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppDs.radiusLg.adaptSize),
+        child: stage,
+      ),
+    );
+  }
+
+  static Widget emptyPreviewHint({
+    required IconData icon,
+    required String message,
+  }) {
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.all(AppDs.space4.h),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 36.adaptSize, color: accent.withValues(alpha: 0.85)),
+            SizedBox(height: AppDs.space3.v),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: AppDs.textOnDarkSecondary,
+                fontSize: 13.fSize,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static Widget segmentChoice<T>({
+    required T value,
+    required List<(T, String)> options,
+    required ValueChanged<T> onChanged,
+    bool enabled = true,
   }) {
     return Wrap(
       spacing: AppDs.space2.h,
       runSpacing: AppDs.space2.v,
       children: [
-        for (final tip in suggestions)
-          ActionChip(
-            label: Text(tip, maxLines: 1, overflow: TextOverflow.ellipsis),
-            onPressed: () => onTap(tip),
-            backgroundColor: AppDs.atelierInk,
-            side: const BorderSide(color: hairline),
+        for (final option in options)
+          ChoiceChip(
+            label: Text(option.$2),
+            selected: value == option.$1,
+            onSelected: !enabled
+                ? null
+                : (_) => onChanged(option.$1),
+            selectedColor: accent,
+            checkmarkColor: onAccent,
             labelStyle: TextStyle(
-              color: AppDs.textOnDarkPrimary,
+              color: value == option.$1 ? onAccent : AppDs.textOnDarkPrimary,
               fontSize: 12.fSize,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w700,
+            ),
+            backgroundColor: AppDs.atelierInk,
+            side: BorderSide(
+              color: value == option.$1 ? accent : hairline,
             ),
           ),
       ],

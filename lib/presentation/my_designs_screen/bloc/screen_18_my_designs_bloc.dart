@@ -168,7 +168,7 @@ class Screen18MyDesignsBloc
               text1: e.name,
               text2: _formatDesignDate(e.createdAt),
               id: e.id.toString(),
-              isPrivate: e.isPrivateDesign,
+              isPrivate: e.isNonPublicDesign,
               visibility: e.visibility,
               designDataRaw: e.designDataRaw,
               width: e.width,
@@ -478,9 +478,19 @@ class Screen18MyDesignsBloc
     final source = switch (activeTab) {
       MyDesignsVisibilityTab.local => _localPlaylistCache,
       MyDesignsVisibilityTab.public =>
-        _allPlaylistCache.where((e) => !e.isPrivate).toList(),
+        _allPlaylistCache
+            .where(
+              (e) =>
+                  (e.visibility ?? '').toLowerCase().trim() == 'public',
+            )
+            .toList(),
       MyDesignsVisibilityTab.private =>
-        _allPlaylistCache.where((e) => e.isPrivate).toList(),
+        _allPlaylistCache
+            .where(
+              (e) =>
+                  (e.visibility ?? '').toLowerCase().trim() != 'public',
+            )
+            .toList(),
     };
 
     final byFolder = switch (activeFolder) {

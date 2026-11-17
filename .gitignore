@@ -22,3 +22,9 @@ build/
 # Firebase Admin SDK private keys — never commit
 *firebase-adminsdk*.json
 *.mobileprovision
+# Apple APNs / signing private keys — never commit
+*.p8
+AuthKey_*.p8
+android/key.properties
+*.jks
+upload-keystore.jks

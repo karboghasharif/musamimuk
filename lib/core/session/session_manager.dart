@@ -303,6 +303,42 @@ class SessionManager {
     });
   }
 
+  /// Prefer the hub a website/app print account was created for.
+  ///
+  /// Keeps an already-chosen shop/rider mode; on first login (Design default)
+  /// preselects Shop or Rider when the account has exactly one of those.
+  String _preferredWorkMode(Set<String> available) {
+    final current = PrefUtils().getWorkMode();
+    if (available.contains(current) &&
+        current != PrefUtils.workModeNormal) {
+      return current;
+    }
+    final hasShop = available.contains(PrefUtils.workModeShop);
+    final hasRider = available.contains(PrefUtils.workModeRider);
+    if (hasShop && !hasRider) return PrefUtils.workModeShop;
+    if (hasRider && !hasShop) return PrefUtils.workModeRider;
+    if (available.contains(current)) return current;
+    return PrefUtils.workModeNormal;
+  }
+
+  Future<void> _persistWorkModeSelection(
+    String mode,
+    Set<String> available,
+  ) async {
+    final prefs = PrefUtils();
+    // Persist ownership so Design ↔ Shop/Rider switching works after login
+    // even if a later `/me` refresh briefly fails.
+    if (mode == PrefUtils.workModeShop ||
+        available.contains(PrefUtils.workModeShop)) {
+      await prefs.setHasPrintShopProfile(true);
+    }
+    if (mode == PrefUtils.workModeRider ||
+        available.contains(PrefUtils.workModeRider)) {
+      await prefs.setHasPrintRiderProfile(true);
+    }
+    await prefs.setWorkMode(mode);
+  }
+
   /// After login: if the user has Design + Shop and/or Rider, ask which mode.
   /// Otherwise keep / enter the only available mode.
   Future<void> _enterWorkModeForPrintProfile() async {
@@ -314,31 +350,24 @@ class SessionManager {
       return;
     }
 
+    final preferred = _preferredWorkMode(available);
     final context = NavigatorService.navigatorKey.currentContext;
     if (context == null || !context.mounted) {
-      // Fall back to last saved mode if it is still allowed.
-      final current = PrefUtils().getWorkMode();
-      if (!available.contains(current)) {
-        await PrefUtils().setWorkMode(PrefUtils.workModeNormal);
-      }
+      // No UI host — enter the preferred hub (website shop/rider first login).
+      await _persistWorkModeSelection(preferred, available);
       return;
     }
 
     final selected = await showWorkModePicker(
       context,
       available: available,
-      current: available.contains(PrefUtils().getWorkMode())
-          ? PrefUtils().getWorkMode()
-          : null,
+      current: preferred,
       title: 'lbl_choose_work_mode'.tr,
       subtitle: 'msg_choose_work_mode'.tr,
     );
 
-    final mode = selected ??
-        (available.contains(PrefUtils().getWorkMode())
-            ? PrefUtils().getWorkMode()
-            : PrefUtils.workModeNormal);
-    await PrefUtils().setWorkMode(mode);
+    final mode = selected ?? preferred;
+    await _persistWorkModeSelection(mode, available);
   }
 
   /// Navigate to the intended page after login, or Home by default.

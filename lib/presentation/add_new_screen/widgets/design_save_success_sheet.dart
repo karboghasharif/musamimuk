@@ -168,9 +168,15 @@ Future<void> shareExportedDesignBytes(
 }
 
 /// Minimal success dialog: check icon, message, OK only.
-Future<void> showDesignSaveSuccessDialog(BuildContext context) async {
+Future<void> showDesignSaveSuccessDialog(
+  BuildContext context, {
+  String? message,
+}) async {
   if (!context.mounted) return;
   final loc = MaterialLocalizations.of(context);
+  final title = (message != null && message.trim().isNotEmpty)
+      ? message.trim()
+      : 'msg_design_saved_success'.tr;
 
   await showDialog<void>(
     context: context,
@@ -185,7 +191,7 @@ Future<void> showDesignSaveSuccessDialog(BuildContext context) async {
           size: 48,
         ),
         title: Text(
-          'msg_design_saved_success'.tr,
+          title,
           textAlign: TextAlign.center,
         ),
         actionsAlignment: MainAxisAlignment.center,

@@ -213,6 +213,110 @@ class PrintRepository {
     );
   }
 
+  Future<PrintResult<PrintOrder>> createChangeRequest({
+    required int orderId,
+    required Map<String, dynamic> spec,
+    String? note,
+  }) {
+    return _sendOrder(
+      () => _dio.post<Map<String, dynamic>>(
+        'print/orders/$orderId/change-requests',
+        data: {
+          'spec': spec,
+          if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
+        },
+      ),
+    );
+  }
+
+  Future<PrintResult<PrintOrder>> cancelChangeRequest({
+    required int orderId,
+    required int changeRequestId,
+  }) {
+    return _sendOrder(
+      () => _dio.post<Map<String, dynamic>>(
+        'print/orders/$orderId/change-requests/$changeRequestId/cancel',
+      ),
+    );
+  }
+
+  Future<PrintResult<PrintOrder>> acceptChangeRequest({
+    required int orderId,
+    required int changeRequestId,
+    String? shopNote,
+    double? shopTotal,
+  }) {
+    return _sendOrder(
+      () => _dio.post<Map<String, dynamic>>(
+        'print/orders/$orderId/change-requests/$changeRequestId/accept',
+        data: {
+          if (shopNote != null && shopNote.trim().isNotEmpty)
+            'shop_note': shopNote.trim(),
+          if (shopTotal != null) 'shop_total': shopTotal,
+        },
+      ),
+    );
+  }
+
+  Future<PrintResult<PrintOrder>> rejectChangeRequest({
+    required int orderId,
+    required int changeRequestId,
+    required String shopNote,
+  }) {
+    return _sendOrder(
+      () => _dio.post<Map<String, dynamic>>(
+        'print/orders/$orderId/change-requests/$changeRequestId/reject',
+        data: {'shop_note': shopNote.trim()},
+      ),
+    );
+  }
+
+  Future<PrintResult<PrintPaySession>> payChangeRequest({
+    required int orderId,
+    required int changeRequestId,
+    required String method,
+  }) async {
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        'print/orders/$orderId/change-requests/$changeRequestId/pay',
+        data: {'method': method},
+      );
+      final map = apiExtractPayloadMap(response.data);
+      if (response.data == null ||
+          !apiResponseIsSuccess(response.data!) ||
+          map == null) {
+        return PrintFailure(
+          apiExtractMessage(response.data) ?? 'Change payment failed.',
+        );
+      }
+      final meta = apiExtractMetaMap(response.data);
+      final stripeRaw = meta?['stripe'];
+      return PrintSuccess(
+        PrintPaySession(
+          order: PrintOrder.fromJson(map),
+          stripe: stripeRaw is Map
+              ? PrintStripeCheckout.fromJson(stripeRaw.cast<String, dynamic>())
+              : null,
+        ),
+      );
+    } on DioException catch (e) {
+      return PrintFailure(apiMessageFromDioException(e));
+    }
+  }
+
+  Future<PrintResult<PrintOrder>> confirmChangePay({
+    required int orderId,
+    required int changeRequestId,
+    required String paymentIntentId,
+  }) {
+    return _sendOrder(
+      () => _dio.post<Map<String, dynamic>>(
+        'print/orders/$orderId/change-requests/$changeRequestId/pay/confirm',
+        data: {'payment_intent_id': paymentIntentId},
+      ),
+    );
+  }
+
   Future<PrintResult<PrintStripeConnect>> startStripeConnect(
     String kind,
   ) async {

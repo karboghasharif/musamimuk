@@ -272,19 +272,35 @@ Widget musamiClipOverlayPortalToViewport({
   final bottomPad = bottom.isFinite && bottom > 0 ? bottom : 0.0;
   if (topPad <= 0 && bottomPad <= 0) return child;
 
-  // Positive padding shrinks the clip window; matching negative padding puts
-  // the child back in absolute overlay space so layer transforms stay aligned.
+  // Clip without shifting layout — Flutter forbids negative [Padding].
   return Positioned.fill(
-    child: Padding(
-      padding: EdgeInsets.only(top: topPad, bottom: bottomPad),
-      child: ClipRect(
-        child: Padding(
-          padding: EdgeInsets.only(top: -topPad, bottom: -bottomPad),
-          child: child,
-        ),
-      ),
+    child: ClipRect(
+      clipper: _MusamiOverlayInsetClipper(top: topPad, bottom: bottomPad),
+      child: child,
     ),
   );
+}
+
+class _MusamiOverlayInsetClipper extends CustomClipper<Rect> {
+  const _MusamiOverlayInsetClipper({
+    required this.top,
+    required this.bottom,
+  });
+
+  final double top;
+  final double bottom;
+
+  @override
+  Rect getClip(Size size) {
+    final t = top.clamp(0.0, size.height);
+    final b = bottom.clamp(0.0, size.height - t);
+    return Rect.fromLTRB(0, t, size.width, size.height - b);
+  }
+
+  @override
+  bool shouldReclip(covariant _MusamiOverlayInsetClipper oldClipper) {
+    return oldClipper.top != top || oldClipper.bottom != bottom;
+  }
 }
 
 /// Selection overlay + floating quick bar in the same overlay coordinate space.

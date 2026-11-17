@@ -1,14 +1,16 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:toastification/toastification.dart';
 
 import '../../core/app_export.dart';
 import '../../core/utils/app_toast.dart';
 import '../../core/utils/validation_functions.dart';
+import '../../widgets/google_brand_logo.dart';
 import 'bloc/screen_0_register_bloc.dart';
 import 'models/screen_0_register_model.dart';
 
 /// Register — same atelier direction as login (craft studio, ink + brass).
-/// Bloc / role flows unchanged; UI-only redesign.
+/// Supports Google + attaching shop/rider to an existing account.
 class Screen0RegisterScreen extends StatefulWidget {
   const Screen0RegisterScreen({super.key});
 
@@ -31,6 +33,12 @@ class _Screen0RegisterScreenState extends State<Screen0RegisterScreen> {
 
   void _refresh() {
     if (mounted) setState(() {});
+  }
+
+  bool _canContinueExisting(Screen0RegisterState state) {
+    return state.hasExistingSession &&
+        (state.accountType == Screen0RegisterBloc.accountTypeShop ||
+            state.accountType == Screen0RegisterBloc.accountTypeRider);
   }
 
   @override
@@ -58,10 +66,15 @@ class _Screen0RegisterScreenState extends State<Screen0RegisterScreen> {
         backgroundColor: AppDs.atelierInk,
         resizeToAvoidBottomInset: true,
         body: BlocBuilder<Screen0RegisterBloc, Screen0RegisterState>(
-          buildWhen: (prev, curr) => prev.isLoading != curr.isLoading,
+          buildWhen: (prev, curr) =>
+              prev.isLoading != curr.isLoading ||
+              prev.isLoadingGoogle != curr.isLoadingGoogle ||
+              prev.hasExistingSession != curr.hasExistingSession ||
+              prev.accountType != curr.accountType,
           builder: (context, state) {
+            final authBusy = state.isLoading || state.isLoadingGoogle;
             return AppLoadingOverlay(
-              isLoading: state.isLoading,
+              isLoading: authBusy,
               message: 'msg_signing_in'.tr,
               child: Stack(
                 fit: StackFit.expand,
@@ -95,20 +108,29 @@ class _Screen0RegisterScreenState extends State<Screen0RegisterScreen> {
                                     _buildBrandBlock(context),
                                     SizedBox(height: AppDs.space6.v),
                                     _buildAccountTypePicker(context),
+                                    if (_canContinueExisting(state)) ...[
+                                      SizedBox(height: AppDs.space4.v),
+                                      _buildExistingSessionBanner(context),
+                                    ],
                                     SizedBox(height: AppDs.space5.v),
-                                    _buildUserProfile(context),
-                                    SizedBox(height: AppDs.space3.v),
-                                    _buildEmailOrMobileField(context),
-                                    SizedBox(height: AppDs.space3.v),
-                                    _buildPasswordField(context),
-                                    _buildPasswordStrengthFeedback(),
-                                    SizedBox(height: AppDs.space3.v),
-                                    _buildPasswordConfirmationField(context),
-                                    _buildConfirmMatchFeedback(),
-                                    SizedBox(height: AppDs.space3.v),
-                                    _buildReferralCodeField(context),
-                                    SizedBox(height: AppDs.space6.v),
+                                    if (!_canContinueExisting(state)) ...[
+                                      _buildUserProfile(context),
+                                      SizedBox(height: AppDs.space3.v),
+                                      _buildEmailOrMobileField(context),
+                                      SizedBox(height: AppDs.space3.v),
+                                      _buildPasswordField(context),
+                                      _buildPasswordStrengthFeedback(),
+                                      SizedBox(height: AppDs.space3.v),
+                                      _buildPasswordConfirmationField(context),
+                                      _buildConfirmMatchFeedback(),
+                                      SizedBox(height: AppDs.space3.v),
+                                      _buildReferralCodeField(context),
+                                      SizedBox(height: AppDs.space6.v),
+                                    ],
                                     _buildRegisterButton(context),
+                                    SizedBox(height: AppDs.space4.v),
+                                    if (!_canContinueExisting(state))
+                                      _buildGoogleSection(context),
                                     SizedBox(height: AppDs.space4.v),
                                     _buildLoginPrompt(context),
                                   ],
@@ -544,21 +566,86 @@ class _Screen0RegisterScreenState extends State<Screen0RegisterScreen> {
     );
   }
 
+  Widget _buildExistingSessionBanner(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.all(AppDs.space3.h),
+      decoration: BoxDecoration(
+        color: AppDs.atelierBrass.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppDs.radiusMd),
+        border: Border.all(
+          color: AppDs.atelierBrass.withValues(alpha: 0.28),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.check_circle_outline_rounded,
+            size: AppDs.iconSm.adaptSize,
+            color: AppDs.atelierBrass,
+          ),
+          SizedBox(width: AppDs.space2.h),
+          Expanded(
+            child: AppText(
+              'msg_register_existing_session_hint'.tr,
+              variant: AppTextVariant.caption,
+              color: AppDs.textOnDarkSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGoogleSection(BuildContext context) {
+    if (kIsWeb) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AppLabeledDivider(label: 'msg_or_continue_with'.tr),
+        SizedBox(height: AppDs.space4.v),
+        BlocBuilder<Screen0RegisterBloc, Screen0RegisterState>(
+          buildWhen: (prev, curr) =>
+              prev.isLoading != curr.isLoading ||
+              prev.isLoadingGoogle != curr.isLoadingGoogle,
+          builder: (context, state) {
+            final authBusy = state.isLoading || state.isLoadingGoogle;
+            return _RegisterGoogleButton(
+              isLoading: state.isLoadingGoogle,
+              onPressed: authBusy
+                  ? null
+                  : () {
+                      context
+                          .read<Screen0RegisterBloc>()
+                          .add(RegisterWithGoogleEvent());
+                    },
+            );
+          },
+        ),
+      ],
+    );
+  }
+
   Widget _buildRegisterButton(BuildContext context) {
     return BlocBuilder<Screen0RegisterBloc, Screen0RegisterState>(
       buildWhen: (prev, curr) =>
           prev.isLoading != curr.isLoading ||
+          prev.isLoadingGoogle != curr.isLoadingGoogle ||
           prev.accountType != curr.accountType ||
+          prev.hasExistingSession != curr.hasExistingSession ||
           prev.registerError != curr.registerError,
       builder: (context, state) {
         final cs = Theme.of(context).colorScheme;
-        final label = switch (state.accountType) {
-          Screen0RegisterBloc.accountTypeShop =>
-            'lbl_register_continue_shop'.tr,
-          Screen0RegisterBloc.accountTypeRider =>
-            'lbl_register_continue_rider'.tr,
-          _ => 'lbl_register'.tr,
-        };
+        final label = _canContinueExisting(state)
+            ? 'lbl_continue_with_current_account'.tr
+            : switch (state.accountType) {
+                Screen0RegisterBloc.accountTypeShop =>
+                  'lbl_register_continue_shop'.tr,
+                Screen0RegisterBloc.accountTypeRider =>
+                  'lbl_register_continue_rider'.tr,
+                _ => 'lbl_register'.tr,
+              };
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
@@ -646,10 +733,18 @@ class _Screen0RegisterScreenState extends State<Screen0RegisterScreen> {
   }
 
   void _onTapRegister(BuildContext context) {
-    if (!(_formKey.currentState?.validate() ?? false)) return;
     final bloc = context.read<Screen0RegisterBloc>();
-    if (bloc.state.isLoading) return;
+    if (bloc.state.isLoading || bloc.state.isLoadingGoogle) return;
     GlobalLoadingController.instance.reset();
+
+    if (bloc.state.hasExistingSession &&
+        (bloc.state.accountType == Screen0RegisterBloc.accountTypeShop ||
+            bloc.state.accountType == Screen0RegisterBloc.accountTypeRider)) {
+      bloc.add(ContinueExistingSessionEvent());
+      return;
+    }
+
+    if (!(_formKey.currentState?.validate() ?? false)) return;
     final name = bloc.state.userProfileController?.text.trim() ?? '';
     final email = bloc.state.emailFieldController?.text.trim() ?? '';
     final password = bloc.state.passwordFieldController?.text ?? '';
@@ -666,6 +761,64 @@ class _Screen0RegisterScreenState extends State<Screen0RegisterScreen> {
       passwordConfirmation: passwordConfirmation,
       referralCode: referralCode,
     ));
+  }
+}
+
+class _RegisterGoogleButton extends StatelessWidget {
+  const _RegisterGoogleButton({
+    required this.onPressed,
+    this.isLoading = false,
+  });
+
+  final VoidCallback? onPressed;
+  final bool isLoading;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final enabled = !isLoading && onPressed != null;
+
+    return Semantics(
+      button: true,
+      label: 'lbl_continue_with_google'.tr,
+      enabled: enabled,
+      child: AppScaleTap(
+        enabled: enabled,
+        onTap: onPressed,
+        child: Container(
+          height: AppDs.buttonHeight.v,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: AppDs.surfaceRaised,
+            borderRadius: BorderRadius.circular(AppDs.radiusMd),
+            border: Border.all(color: AppDs.atelierHairline(0.12)),
+          ),
+          child: isLoading
+              ? SizedBox(
+                  width: AppDs.iconMd.adaptSize,
+                  height: AppDs.iconMd.adaptSize,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppDs.accentYellow,
+                  ),
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    GoogleBrandLogo(size: AppDs.iconMd.adaptSize),
+                    SizedBox(width: AppDs.space2.h),
+                    Text(
+                      'Google',
+                      style: AppTypography.secondary(theme).copyWith(
+                        color: AppDs.textOnDarkPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+        ),
+      ),
+    );
   }
 }
 

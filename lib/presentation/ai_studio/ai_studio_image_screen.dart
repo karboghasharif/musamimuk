@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:toastification/toastification.dart';
 
 import '../../core/app_export.dart';
+import '../../core/config/editor_ai_config.dart';
 import '../../core/utils/app_toast.dart';
 import '../../data/models/editor_ai_api_models.dart';
 import '../../data/models/wallet_models.dart';
@@ -107,14 +108,13 @@ class _AiStudioImageScreenState extends State<AiStudioImageScreen> {
         body: ListView(
           padding: EdgeInsets.all(AppDs.space4.h),
           children: [
-            Row(
-              children: [
-                AiStudioChrome.poweredByChatGpt(context),
-                const Spacer(),
-                BlocBuilderCoinHint(feature: WalletFeatureCost.aiOpenaiImages),
-              ],
+            AiStudioChrome.toolbar(
+              kind: EditorAiProviderKind.openAi,
+              coinHint: BlocBuilderCoinHint(
+                feature: WalletFeatureCost.aiOpenaiImages,
+              ),
             ),
-            SizedBox(height: AppDs.space4.v),
+            SizedBox(height: AppDs.space3.v),
             AppText(
               'msg_ai_image_subtitle'.tr,
               variant: AppTextVariant.secondary,
@@ -126,6 +126,8 @@ class _AiStudioImageScreenState extends State<AiStudioImageScreen> {
               onSubmitted: _busy ? null : _generate,
             ),
             SizedBox(height: AppDs.space3.v),
+            AiStudioChrome.sectionLabel('lbl_try_these'.tr),
+            SizedBox(height: AppDs.space2.v),
             AiStudioChrome.suggestionChips(
               suggestions: _suggestions,
               onTap: (tip) {
@@ -134,35 +136,16 @@ class _AiStudioImageScreenState extends State<AiStudioImageScreen> {
               },
             ),
             SizedBox(height: AppDs.space4.v),
-            AppText('lbl_ai_image_size'.tr, variant: AppTextVariant.caption),
+            AiStudioChrome.sectionLabel('lbl_ai_image_size'.tr),
             SizedBox(height: AppDs.space2.v),
-            Wrap(
-              spacing: AppDs.space2.h,
-              children: [
+            AiStudioChrome.segmentChoice<String>(
+              value: _size,
+              enabled: !_busy,
+              options: [
                 for (final size in OpenAiImageRequest.allowedSizes)
-                  ChoiceChip(
-                    label: Text(size),
-                    selected: _size == size,
-                    onSelected: _busy
-                        ? null
-                        : (_) => setState(() => _size = size),
-                    selectedColor: AiStudioChrome.accent,
-                    checkmarkColor: AiStudioChrome.onAccent,
-                    labelStyle: TextStyle(
-                      color: _size == size
-                          ? AiStudioChrome.onAccent
-                          : AppDs.textOnDarkPrimary,
-                      fontSize: 12.fSize,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    backgroundColor: AppDs.atelierInk,
-                    side: BorderSide(
-                      color: _size == size
-                          ? AiStudioChrome.accent
-                          : AiStudioChrome.hairline,
-                    ),
-                  ),
+                  (size, size),
               ],
+              onChanged: (v) => setState(() => _size = v),
             ),
             SizedBox(height: AppDs.space4.v),
             AppPrimaryButton(
@@ -172,22 +155,14 @@ class _AiStudioImageScreenState extends State<AiStudioImageScreen> {
             ),
             SizedBox(height: AppDs.space5.v),
             if (_busy)
-              const AppLoadingBlock(message: null)
+              AiStudioChrome.previewStage(
+                height: 220,
+                child: const Center(child: AppLoadingBlock(message: null)),
+              )
             else if (_imageBytes != null) ...[
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius:
-                      BorderRadius.circular(AppDs.radiusLg.adaptSize),
-                  border: Border.all(color: AiStudioChrome.hairline),
-                ),
-                child: ClipRRect(
-                  borderRadius:
-                      BorderRadius.circular(AppDs.radiusLg.adaptSize),
-                  child: AspectRatio(
-                    aspectRatio: _size == '1536x1024' ? 1536 / 1024 : 1,
-                    child: Image.memory(_imageBytes!, fit: BoxFit.cover),
-                  ),
-                ),
+              AiStudioChrome.previewStage(
+                height: _size == '1536x1024' ? 180 : 240,
+                child: Image.memory(_imageBytes!, fit: BoxFit.contain),
               ),
               SizedBox(height: AppDs.space3.v),
               Row(

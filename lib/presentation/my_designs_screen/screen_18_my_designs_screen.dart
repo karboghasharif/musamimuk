@@ -80,11 +80,15 @@ class Screen18MyDesignsScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                AppPageHeader(
-                  title: 'lbl_my_designs'.tr,
-                  subtitle: 'msg_my_designs_visibility_hint'.tr,
+                Text(
+                  'msg_my_designs_visibility_hint'.tr,
+                  style: TextStyle(
+                    color: AppDs.textOnDarkSecondary,
+                    fontSize: 13.fSize,
+                    height: 1.35,
+                  ),
                 ),
-                SizedBox(height: AppDs.space4.v),
+                SizedBox(height: AppDs.space3.v),
                 BlocSelector<Screen18MyDesignsBloc, Screen18MyDesignsState,
                     TextEditingController?>(
                   selector: (state) => state.searchController,

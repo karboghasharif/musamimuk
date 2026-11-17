@@ -1,16 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../../core/app_export.dart';
 import '../../core/network/api_utils.dart';
+import '../../core/network/authenticated_image.dart';
 import '../../data/models/print_models.dart';
 import '../../data/repositories/print_repository.dart';
+import 'print_location_picker.dart';
 import 'print_ui.dart';
 
+/// Designer nearest-shops browser (25 km). Opened from home center FAB.
 class PrintShopsScreen extends StatefulWidget {
   const PrintShopsScreen({super.key, this.orderId = 0, this.request});
 
   final int orderId;
   final Map<String, dynamic>? request;
+
+  static const nearestRadiusKm = 25.0;
 
   static Widget builder(BuildContext context) {
     final args = ModalRoute.of(context)?.settings.arguments;
@@ -27,24 +33,28 @@ class PrintShopsScreen extends StatefulWidget {
 }
 
 class _PrintShopsScreenState extends State<PrintShopsScreen> {
-  static const _jeddahLat = 21.54;
-  static const _jeddahLng = 39.17;
-
   final _repo = PrintRepository();
   final _search = TextEditingController();
   List<PrintShopSummary> _shops = const [];
   bool _loading = true;
-  bool _mapView = false;
-  bool _openNow = false;
-  bool _minRating4 = false;
+  bool _locating = true;
+  bool _openNow = true;
   String _sort = 'trusted';
-  int? _minLevel;
   String? _error;
+  double _lat = kPrintMapFallback.latitude;
+  double _lng = kPrintMapFallback.longitude;
+
+  static const _sortOptions = <(String, IconData)>[
+    ('trusted', Icons.verified_user_rounded),
+    ('fastest', Icons.timer_outlined),
+    ('price', Icons.payments_outlined),
+    ('distance', Icons.place_outlined),
+  ];
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _bootstrap();
   }
 
   @override
@@ -53,19 +63,34 @@ class _PrintShopsScreenState extends State<PrintShopsScreen> {
     super.dispose();
   }
 
+  Future<void> _bootstrap() async {
+    setState(() {
+      _locating = true;
+      _loading = true;
+      _error = null;
+    });
+    final gps = await printAcquireGps();
+    if (!mounted) return;
+    if (gps != null) {
+      _lat = gps.lat;
+      _lng = gps.lng;
+    }
+    setState(() => _locating = false);
+    await _load();
+  }
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
       _error = null;
     });
     final result = await _repo.searchShops(
-      lat: _jeddahLat,
-      lng: _jeddahLng,
+      lat: _lat,
+      lng: _lng,
+      distance: PrintShopsScreen.nearestRadiusKm,
       openNow: _openNow,
-      rating: _minRating4 ? 4 : null,
       q: _search.text,
       sort: _sort,
-      level: _minLevel,
     );
     if (!mounted) return;
     if (result is PrintFailure<List<PrintShopSummary>>) {
@@ -95,108 +120,122 @@ class _PrintShopsScreenState extends State<PrintShopsScreen> {
   @override
   Widget build(BuildContext context) {
     return PrintScaffold(
-      title: 'lbl_print_shops'.tr,
+      title: 'lbl_print_nearest_shops'.tr,
       actions: [
         IconButton(
-          onPressed: () => setState(() => _mapView = !_mapView),
-          icon: Icon(
-            _mapView ? Icons.list : Icons.map_outlined,
-            color: AppDs.printGold,
-          ),
+          onPressed: _loading || _locating ? null : _bootstrap,
+          tooltip: 'lbl_print_use_current_location'.tr,
+          icon: const Icon(Icons.my_location_rounded, color: AppDs.printGold),
         ),
       ],
       body: Column(
         children: [
           Padding(
             padding: EdgeInsets.fromLTRB(16.h, 8.v, 16.h, 0),
-            child: TextField(
-              controller: _search,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: 'lbl_print_search_shops'.tr,
-                hintStyle: const TextStyle(color: AppDs.textOnDarkSecondary),
-                filled: true,
-                fillColor: AppDs.surfaceRaised,
-                prefixIcon: const Icon(Icons.search, color: AppDs.printGold),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              onSubmitted: (_) => _load(),
-            ),
-          ),
-          SwitchListTile(
-            title: Text(
-              'lbl_print_open_now'.tr,
-              style: const TextStyle(color: Colors.white),
-            ),
-            value: _openNow,
-            onChanged: (v) {
-              setState(() => _openNow = v);
-              _load();
-            },
-          ),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: EdgeInsets.symmetric(horizontal: 12.h),
             child: Row(
               children: [
-                for (final sort in [
-                  'trusted',
-                  'fastest',
-                  'price',
-                  'distance',
-                  'level',
-                ])
-                  Padding(
-                    padding: EdgeInsets.only(right: 8.h),
-                    child: ChoiceChip(
-                      label: Text('lbl_print_sort_$sort'.tr),
-                      selected: _sort == sort,
-                      selectedColor: AppDs.printGold,
-                      labelStyle: TextStyle(
-                        color: _sort == sort ? Colors.black : Colors.white,
+                Expanded(
+                  child: TextField(
+                    controller: _search,
+                    style: const TextStyle(color: Colors.white),
+                    textInputAction: TextInputAction.search,
+                    decoration: InputDecoration(
+                      hintText: 'lbl_print_search_shops_hint'.tr,
+                      hintStyle: const TextStyle(
+                        color: AppDs.textOnDarkSecondary,
                       ),
-                      onSelected: (_) {
-                        setState(() => _sort = sort);
-                        _load();
-                      },
-                    ),
-                  ),
-                for (final level in [2, 3, 4, 5])
-                  Padding(
-                    padding: EdgeInsets.only(right: 8.h),
-                    child: FilterChip(
-                      label: Text('lbl_print_level_$level'.tr),
-                      selected: _minLevel == level,
-                      selectedColor: AppDs.printGold,
-                      labelStyle: TextStyle(
-                        color: _minLevel == level ? Colors.black : Colors.white,
+                      filled: true,
+                      fillColor: AppDs.surfaceRaised,
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 12.h,
+                        vertical: 12.v,
                       ),
-                      onSelected: (selected) {
-                        setState(() => _minLevel = selected ? level : null);
-                        _load();
-                      },
+                      prefixIcon: const Icon(
+                        Icons.search_rounded,
+                        color: AppDs.printGold,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide.none,
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide.none,
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(
+                          color: AppDs.printGold,
+                          width: 1.2,
+                        ),
+                      ),
                     ),
+                    onSubmitted: (_) => _load(),
                   ),
-                Padding(
-                  padding: EdgeInsets.only(right: 8.h),
-                  child: FilterChip(
-                    label: Text('lbl_print_filter_rating'.tr),
-                    selected: _minRating4,
-                    selectedColor: AppDs.printGold,
-                    labelStyle: TextStyle(
-                      color: _minRating4 ? Colors.black : Colors.white,
-                    ),
-                    onSelected: (selected) {
-                      setState(() => _minRating4 = selected);
-                      _load();
-                    },
-                  ),
+                ),
+                SizedBox(width: 10.h),
+                _OpenNowPill(
+                  active: _openNow,
+                  onTap: () {
+                    setState(() => _openNow = !_openNow);
+                    _load();
+                  },
                 ),
               ],
             ),
           ),
+          SizedBox(height: 12.v),
+          SizedBox(
+            height: 40.v,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: EdgeInsets.symmetric(horizontal: 16.h),
+              itemCount: _sortOptions.length,
+              separatorBuilder: (_, _) => SizedBox(width: 8.h),
+              itemBuilder: (context, index) {
+                final (sort, icon) = _sortOptions[index];
+                final selected = _sort == sort;
+                return Material(
+                  color: selected ? AppDs.printGold : AppDs.surfaceRaised,
+                  borderRadius: BorderRadius.circular(22),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(22),
+                    onTap: () {
+                      if (_sort == sort) return;
+                      setState(() => _sort = sort);
+                      _load();
+                    },
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 14.h,
+                        vertical: 8.v,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            icon,
+                            size: 16,
+                            color: selected ? Colors.black : AppDs.printGold,
+                          ),
+                          SizedBox(width: 6.h),
+                          Text(
+                            'lbl_print_sort_$sort'.tr,
+                            style: TextStyle(
+                              color: selected ? Colors.black : Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12.fSize,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          SizedBox(height: 8.v),
           Expanded(child: _body()),
         ],
       ),
@@ -204,132 +243,435 @@ class _PrintShopsScreenState extends State<PrintShopsScreen> {
   }
 
   Widget _body() {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+    if (_loading || _locating) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(color: AppDs.printGold),
+            SizedBox(height: 12.v),
+            Text(
+              _locating
+                  ? 'msg_print_locating'.tr
+                  : 'lbl_print_nearest_shops'.tr,
+              style: const TextStyle(color: AppDs.textOnDarkSecondary),
+            ),
+          ],
+        ),
+      );
     }
     if (_error != null) {
       return Center(
-        child: Text(_error!, style: const TextStyle(color: Colors.white70)),
+        child: Padding(
+          padding: EdgeInsets.all(24.h),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _error!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white70),
+              ),
+              SizedBox(height: 12.v),
+              TextButton(
+                onPressed: _load,
+                child: Text('lbl_retry'.tr),
+              ),
+            ],
+          ),
+        ),
       );
     }
     if (_shops.isEmpty) {
       return Center(
-        child: Text(
-          'msg_print_no_shops'.tr,
-          style: const TextStyle(color: Colors.white70),
+        child: Padding(
+          padding: EdgeInsets.all(24.h),
+          child: Text(
+            'msg_print_no_shops_nearby'.tr,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white70, height: 1.4),
+          ),
         ),
       );
     }
-    if (_mapView) {
-      return _MapCanvas(shops: _shops, onTap: _openShop);
-    }
-    return ListView.separated(
-      padding: EdgeInsets.all(16.h),
-      itemCount: _shops.length,
-      separatorBuilder: (_, __) => SizedBox(height: 10.v),
-      itemBuilder: (context, index) {
-        final shop = _shops[index];
-        return ListTile(
-          onTap: () => _openShop(shop),
-          tileColor: AppDs.surfaceRaised,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-          title: Text(
-            shop.name,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          subtitle: Text(
-            [
-              if (shop.verified) 'lbl_print_verified'.tr,
-              printLocalizedLabel(shop.levelLabel, shop.levelLabelAr),
-              shop.district ?? '',
-              if (shop.distanceKm != null)
-                '${shop.distanceKm!.toStringAsFixed(1)} km',
-              printSar(shop.startingPrice),
-            ].where((e) => e.isNotEmpty).join(' · '),
-            style: const TextStyle(color: AppDs.textOnDarkSecondary),
-          ),
-          trailing: shop.verified
-              ? const Icon(Icons.verified, color: AppDs.printGold)
-              : null,
-        );
-      },
+    return RefreshIndicator(
+      color: AppDs.printGold,
+      onRefresh: _bootstrap,
+      child: ListView.separated(
+        padding: EdgeInsets.fromLTRB(16.h, 8.v, 16.h, 24.v),
+        itemCount: _shops.length,
+        separatorBuilder: (_, _) => SizedBox(height: 12.v),
+        itemBuilder: (context, index) {
+          return _NearestShopCard(
+            shop: _shops[index],
+            onTap: () => _openShop(_shops[index]),
+          );
+        },
+      ),
     );
   }
 }
 
-class _MapCanvas extends StatelessWidget {
-  const _MapCanvas({required this.shops, required this.onTap});
+class _OpenNowPill extends StatelessWidget {
+  const _OpenNowPill({required this.active, required this.onTap});
 
-  final List<PrintShopSummary> shops;
-  final ValueChanged<PrintShopSummary> onTap;
+  final bool active;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    const minLat = 21.46;
-    const maxLat = 21.58;
-    const minLng = 39.14;
-    const maxLng = 39.21;
-    return Padding(
-      padding: EdgeInsets.all(16.h),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          return Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFF1B3A2F),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Stack(
-              children: [
-                Center(
-                  child: Text(
-                    'Jeddah',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.15),
-                      fontSize: 42.fSize,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
+    return Material(
+      color: active ? AppDs.printGold : AppDs.surfaceRaised,
+      borderRadius: BorderRadius.circular(22),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(22),
+        onTap: onTap,
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: 12.h, vertical: 12.v),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.circle,
+                size: 8,
+                color: active ? Colors.black : const Color(0xFF4CAF50),
+              ),
+              SizedBox(width: 6.h),
+              Text(
+                'lbl_print_open_now'.tr,
+                style: TextStyle(
+                  color: active ? Colors.black : Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12.fSize,
                 ),
-                ...shops.where((s) => s.lat != null && s.lng != null).map((shop) {
-                  final x =
-                      ((shop.lng! - minLng) / (maxLng - minLng)).clamp(0.08, 0.92) *
-                      constraints.maxWidth;
-                  final y =
-                      (1 - ((shop.lat! - minLat) / (maxLat - minLat)).clamp(0.08, 0.92)) *
-                      constraints.maxHeight;
-                  return Positioned(
-                    left: x - 18,
-                    top: y - 18,
-                    child: GestureDetector(
-                      onTap: () => onTap(shop),
-                      child: Column(
-                        children: [
-                          Icon(
-                            Icons.location_on,
-                            color: shop.verified ? AppDs.printGold : Colors.white,
-                            size: 32,
-                          ),
-                          Text(
-                            shop.name,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                            ),
-                          ),
-                        ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NearestShopCard extends StatelessWidget {
+  const _NearestShopCard({required this.shop, required this.onTap});
+
+  final PrintShopSummary shop;
+  final VoidCallback onTap;
+
+  static final _ordersFmt = NumberFormat.decimalPattern();
+
+  String get _distanceLabel {
+    final km = shop.distanceKm;
+    if (km == null) return '—';
+    return '${km.toStringAsFixed(1)} KM';
+  }
+
+  String get _distanceInline {
+    final km = shop.distanceKm;
+    if (km == null) return '';
+    return '${km.toStringAsFixed(1)} km';
+  }
+
+  String get _initial {
+    final name = shop.name.trim();
+    if (name.isEmpty) return 'P';
+    final parts = name.split(RegExp(r'\s+'));
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return name.substring(0, name.length >= 2 ? 2 : 1).toUpperCase();
+  }
+
+  IconData _serviceIcon(String service) {
+    final s = service.toLowerCase();
+    if (s.contains('card') || s.contains('business')) {
+      return Icons.badge_outlined;
+    }
+    if (s.contains('banner') || s.contains('poster')) {
+      return Icons.flag_outlined;
+    }
+    if (s.contains('sticker') || s.contains('label')) {
+      return Icons.sticky_note_2_outlined;
+    }
+    if (s.contains('pack') || s.contains('box')) {
+      return Icons.inventory_2_outlined;
+    }
+    if (s.contains('book') || s.contains('magazine')) {
+      return Icons.menu_book_outlined;
+    }
+    return Icons.print_outlined;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final levelText = printLocalizedLabel(shop.levelLabel, shop.levelLabelAr);
+    final locationBits = [
+      if ((shop.district ?? '').trim().isNotEmpty) shop.district!.trim(),
+      if (_distanceInline.isNotEmpty) _distanceInline,
+    ].join(' · ');
+    final services = shop.services.take(4).toList();
+    final portfolio = shop.portfolio.take(4).toList();
+
+    return Material(
+      color: AppDs.surfaceRaised,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Padding(
+          padding: EdgeInsets.all(14.h),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 48.adaptSize,
+                    height: 48.adaptSize,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: AppDs.printGold.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: AppDs.printGold.withValues(alpha: 0.45),
                       ),
                     ),
-                  );
-                }),
+                    child: Text(
+                      _initial,
+                      style: TextStyle(
+                        color: AppDs.printGold,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 14.fSize,
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 12.h),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                shop.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 15.fSize,
+                                ),
+                              ),
+                            ),
+                            if (shop.verified) ...[
+                              SizedBox(width: 4.h),
+                              Icon(
+                                Icons.verified_rounded,
+                                color: AppDs.printGold,
+                                size: 16.adaptSize,
+                              ),
+                            ],
+                          ],
+                        ),
+                        if (locationBits.isNotEmpty) ...[
+                          SizedBox(height: 4.v),
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.place_outlined,
+                                size: 13.adaptSize,
+                                color: AppDs.textOnDarkSecondary,
+                              ),
+                              SizedBox(width: 3.h),
+                              Expanded(
+                                child: Text(
+                                  locationBits,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: AppDs.textOnDarkSecondary,
+                                    fontSize: 12.fSize,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  SizedBox(width: 8.h),
+                  Container(
+                    constraints: BoxConstraints(minWidth: 56.h),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 8.h,
+                      vertical: 8.v,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2A2A2A),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      _distanceLabel,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 11.fSize,
+                        height: 1.1,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 10.v),
+              Row(
+                children: [
+                  Icon(
+                    Icons.emoji_events_rounded,
+                    size: 15.adaptSize,
+                    color: AppDs.printGold,
+                  ),
+                  SizedBox(width: 5.h),
+                  Expanded(
+                    child: Text(
+                      levelText.isNotEmpty
+                          ? 'Level ${shop.level} / $levelText'
+                          : 'Level ${shop.level}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12.fSize,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 4.v),
+              Row(
+                children: [
+                  Icon(
+                    Icons.military_tech_outlined,
+                    size: 15.adaptSize,
+                    color: AppDs.printGold,
+                  ),
+                  SizedBox(width: 5.h),
+                  Expanded(
+                    child: Text(
+                      'msg_print_orders_completed'.tr.replaceAll(
+                        '{count}',
+                        _ordersFmt.format(shop.completedOrders),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12.fSize,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              if (services.isNotEmpty) ...[
+                SizedBox(height: 10.v),
+                Wrap(
+                  spacing: 6.h,
+                  runSpacing: 6.v,
+                  children: [
+                    for (final service in services)
+                      Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 10.h,
+                          vertical: 6.v,
+                        ),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: AppDs.printGold.withValues(alpha: 0.55),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              _serviceIcon(service),
+                              size: 13,
+                              color: AppDs.printGold,
+                            ),
+                            SizedBox(width: 4.h),
+                            Text(
+                              service,
+                              style: TextStyle(
+                                color: AppDs.printGold,
+                                fontSize: 11.fSize,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
               ],
-            ),
-          );
-        },
+              if (portfolio.isNotEmpty) ...[
+                SizedBox(height: 12.v),
+                Text(
+                  'lbl_print_portfolio'.tr.toUpperCase(),
+                  style: TextStyle(
+                    color: AppDs.textOnDarkSecondary,
+                    fontSize: 10.fSize,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                SizedBox(height: 8.v),
+                SizedBox(
+                  height: 64.v,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: portfolio.length,
+                    separatorBuilder: (_, _) => SizedBox(width: 8.h),
+                    itemBuilder: (context, index) {
+                      final item = portfolio[index];
+                      final url = item.imageUrl?.trim() ?? '';
+                      return ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: SizedBox(
+                          width: 72.h,
+                          height: 64.v,
+                          child: url.isEmpty
+                              ? Container(
+                                  color: const Color(0xFF2A2A2A),
+                                  child: const Icon(
+                                    Icons.image_outlined,
+                                    color: Colors.white38,
+                                  ),
+                                )
+                              : Image(
+                                  image: musamiAuthenticatedNetworkImage(url),
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, _, _) => Container(
+                                    color: const Color(0xFF2A2A2A),
+                                    child: const Icon(
+                                      Icons.broken_image_outlined,
+                                      color: Colors.white38,
+                                    ),
+                                  ),
+                                ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }

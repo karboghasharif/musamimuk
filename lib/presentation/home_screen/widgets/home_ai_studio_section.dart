@@ -48,6 +48,7 @@ class HomeAiStudioSection extends StatelessWidget {
       _AiStudioAction(
         label: 'lbl_ai_generate_videos'.tr,
         icon: Icons.play_circle_outline_rounded,
+        badge: 'msg_coming_soon'.tr,
         onTap: () => _comingSoonVideo(context),
       ),
       _AiStudioAction(
@@ -217,11 +218,14 @@ class _AiStudioAction {
     required this.label,
     required this.icon,
     required this.onTap,
+    this.badge,
   });
 
   final String label;
   final IconData icon;
   final VoidCallback onTap;
+  /// Optional status chip (e.g. "Coming soon") so users are not promised a live feature.
+  final String? badge;
 }
 
 class _AiStudioTile extends StatelessWidget {
@@ -231,6 +235,7 @@ class _AiStudioTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final badge = action.badge?.trim();
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -241,27 +246,63 @@ class _AiStudioTile extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Container(
-                width: 48.adaptSize,
-                height: 48.adaptSize,
-                decoration: BoxDecoration(
-                  color: AppDs.atelierInk,
-                  borderRadius: BorderRadius.circular(AppDs.radiusMd),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.1),
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Container(
+                    width: 48.adaptSize,
+                    height: 48.adaptSize,
+                    decoration: BoxDecoration(
+                      color: AppDs.atelierInk,
+                      borderRadius: BorderRadius.circular(AppDs.radiusMd),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.1),
+                      ),
+                    ),
+                    child: Icon(
+                      action.icon,
+                      color: badge == null
+                          ? AppDs.accentYellow
+                          : AppDs.accentYellow.withValues(alpha: 0.55),
+                      size: 22.adaptSize,
+                    ),
                   ),
-                ),
-                child: Icon(
-                  action.icon,
-                  color: AppDs.accentYellow,
-                  size: 22.adaptSize,
-                ),
+                  if (badge != null && badge.isNotEmpty)
+                    Positioned(
+                      top: -6.v,
+                      right: -10.h,
+                      child: Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 5.h,
+                          vertical: 2.v,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppDs.surfaceRaised,
+                          borderRadius: BorderRadius.circular(AppDs.radiusFull),
+                          border: Border.all(
+                            color: AppDs.accentYellow.withValues(alpha: 0.45),
+                          ),
+                        ),
+                        child: Text(
+                          badge,
+                          style: TextStyle(
+                            color: AppDs.accentYellow,
+                            fontSize: 8.fSize,
+                            fontWeight: FontWeight.w700,
+                            height: 1.1,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
               SizedBox(height: AppDs.space2.v),
               AppText(
                 action.label,
                 variant: AppTextVariant.caption,
-                color: AppDs.textOnDarkPrimary,
+                color: badge == null
+                    ? AppDs.textOnDarkPrimary
+                    : AppDs.textOnDarkSecondary,
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,

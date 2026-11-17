@@ -6,15 +6,23 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../core/design_system/app_design_tokens.dart';
+import '../core/network/api_utils.dart';
 import '../core/network/authenticated_image.dart';
 
 extension ImageTypeExtension on String {
   ImageType get imageType {
-    if (startsWith('http') || startsWith('https')) {
+    final value = trim();
+    if (value.startsWith('http://') ||
+        value.startsWith('https://') ||
+        value.startsWith('//') ||
+        value.startsWith('/storage/') ||
+        value.startsWith('storage/') ||
+        value.startsWith('/public/storage/') ||
+        value.startsWith('public/storage/')) {
       return ImageType.network;
-    } else if (endsWith('.svg')) {
+    } else if (value.endsWith('.svg')) {
       return ImageType.svg;
-    } else if (startsWith('file://')) {
+    } else if (value.startsWith('file://')) {
       return ImageType.file;
     } else {
       return ImageType.png;
@@ -116,12 +124,13 @@ class CustomImageView extends StatelessWidget {
             color: color,
           );
         case ImageType.network:
+          final networkUrl = apiResolveMediaUrl(path);
           return CachedNetworkImage(
             height: height,
             width: width,
             fit: fit,
-            imageUrl: path,
-            httpHeaders: musamiAuthenticatedHeadersForUrl(path),
+            imageUrl: networkUrl,
+            httpHeaders: musamiAuthenticatedHeadersForUrl(networkUrl),
             cacheManager: MusamiImageCache.instance,
             color: color,
             fadeInDuration: AppDs.motionNormal,
@@ -141,11 +150,16 @@ class CustomImageView extends StatelessWidget {
                 ),
               ),
             ),
-            errorWidget: (context, url, error) => Image.asset(
-              placeHolder,
+            errorWidget: (context, url, error) => Container(
               height: height,
               width: width,
-              fit: fit ?? BoxFit.cover,
+              color: AppDs.atelierInk,
+              alignment: Alignment.center,
+              child: Icon(
+                Icons.broken_image_outlined,
+                size: 28,
+                color: Colors.white.withValues(alpha: 0.4),
+              ),
             ),
           );
         case ImageType.png:

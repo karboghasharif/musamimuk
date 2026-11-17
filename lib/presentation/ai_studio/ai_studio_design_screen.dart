@@ -77,7 +77,7 @@ class _AiStudioDesignScreenState extends State<AiStudioDesignScreen> {
         body: ListView(
           padding: EdgeInsets.all(AppDs.space4.h),
           children: [
-            AiStudioChrome.poweredByChatGpt(context),
+            AiStudioChrome.toolbar(kind: EditorAiProviderKind.openAi),
             SizedBox(height: AppDs.space3.v),
             AppText(
               'msg_ai_design_subtitle'.tr,
@@ -87,10 +87,12 @@ class _AiStudioDesignScreenState extends State<AiStudioDesignScreen> {
             AiStudioPromptField(
               controller: _promptCtrl,
               hint: 'msg_ai_design_prompt_hint'.tr,
-              minLines: 4,
-              maxLines: 8,
+              minLines: 3,
+              maxLines: 6,
             ),
             SizedBox(height: AppDs.space3.v),
+            AiStudioChrome.sectionLabel('lbl_try_these'.tr),
+            SizedBox(height: AppDs.space2.v),
             AiStudioChrome.suggestionChips(
               suggestions: _suggestions,
               onTap: (tip) {
@@ -99,9 +101,9 @@ class _AiStudioDesignScreenState extends State<AiStudioDesignScreen> {
               },
             ),
             SizedBox(height: AppDs.space4.v),
-            AppText('lbl_select_size'.tr, variant: AppTextVariant.title),
+            AiStudioChrome.sectionLabel('lbl_select_size'.tr),
             SizedBox(height: AppDs.space2.v),
-            ...kDesignSizePresets.take(8).map((preset) {
+            ...kDesignSizePresets.take(6).map((preset) {
               final selected = _preset.name == preset.name &&
                   _preset.width == preset.width &&
                   _preset.height == preset.height;
@@ -121,25 +123,47 @@ class _AiStudioDesignScreenState extends State<AiStudioDesignScreen> {
                       width: selected ? 1.4 : 1,
                     ),
                   ),
-                  child: ListTile(
+                  child: InkWell(
                     onTap: () => setState(() => _preset = preset),
-                    title: Text(
-                      preset.name,
-                      style: const TextStyle(
-                        color: AppDs.textOnDarkPrimary,
-                        fontWeight: FontWeight.w700,
+                    borderRadius:
+                        BorderRadius.circular(AppDs.radiusMd.adaptSize),
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: AppDs.space3.h,
+                        vertical: AppDs.space3.v,
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  preset.name,
+                                  style: const TextStyle(
+                                    color: AppDs.textOnDarkPrimary,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                SizedBox(height: 2.v),
+                                Text(
+                                  '${preset.width} × ${preset.height}',
+                                  style: const TextStyle(
+                                    color: AppDs.textOnDarkSecondary,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (selected)
+                            const Icon(
+                              Icons.check_circle_rounded,
+                              color: AiStudioChrome.accent,
+                            ),
+                        ],
                       ),
                     ),
-                    subtitle: Text(
-                      '${preset.width} × ${preset.height} · ${preset.category}',
-                      style: const TextStyle(color: AppDs.textOnDarkSecondary),
-                    ),
-                    trailing: selected
-                        ? const Icon(
-                            Icons.check_circle_rounded,
-                            color: AiStudioChrome.accent,
-                          )
-                        : null,
                   ),
                 ),
               );

@@ -194,7 +194,10 @@ class _PrintRiderHomeScreenState extends State<PrintRiderHomeScreen> {
       return PrintScaffold(
         title: 'lbl_print_rider_mode'.tr,
         showBack: false,
-        actions: const [PrintModeButton()],
+        actions: const [
+          PrintExitToDesignerButton(compact: true),
+          PrintModeButton(),
+        ],
         body: const Center(child: CircularProgressIndicator()),
       );
     }
@@ -203,7 +206,10 @@ class _PrintRiderHomeScreenState extends State<PrintRiderHomeScreen> {
       return PrintScaffold(
         title: 'lbl_print_rider_mode'.tr,
         showBack: false,
-        actions: const [PrintModeButton()],
+        actions: const [
+          PrintExitToDesignerButton(compact: true),
+          PrintModeButton(),
+        ],
         body: Stack(
           fit: StackFit.expand,
           children: [
@@ -246,6 +252,8 @@ class _PrintRiderHomeScreenState extends State<PrintRiderHomeScreen> {
                   ),
                   PrintDocumentList(documents: rider.documents),
                 ],
+                SizedBox(height: AppDs.space5.v),
+                const PrintExitToDesignerButton(),
               ],
             ),
           ],
@@ -262,7 +270,10 @@ class _PrintRiderHomeScreenState extends State<PrintRiderHomeScreen> {
     return PrintScaffold(
       title: rider.name,
       showBack: false,
-      actions: const [PrintModeButton()],
+      actions: const [
+        PrintExitToDesignerButton(compact: true),
+        PrintModeButton(),
+      ],
       bottom: NavigationBar(
         backgroundColor: AppDs.surfaceRaised,
         indicatorColor: AppDs.printGold.withValues(alpha: 0.25),
@@ -559,6 +570,8 @@ class _PrintRiderHomeScreenState extends State<PrintRiderHomeScreen> {
                   icon: Icons.upload_file_outlined,
                   onPressed: () => _uploadDocsSheet(rider),
                 ),
+                SizedBox(height: AppDs.space3.v),
+                const PrintExitToDesignerButton(),
               ],
             ],
           ),
@@ -897,7 +910,10 @@ class _PrintRiderRegisterScreenState extends State<PrintRiderRegisterScreen> {
     return PrintScaffold(
       title: 'lbl_print_register_rider'.tr,
       showBack: false,
-      actions: const [PrintModeButton()],
+      actions: const [
+        PrintExitToDesignerButton(compact: true),
+        PrintModeButton(),
+      ],
       bottom: PrintKycNavBar(
         canGoBack: _step > 1,
         primaryLabel: _step == _totalSteps

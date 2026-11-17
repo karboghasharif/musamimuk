@@ -27,6 +27,17 @@ class MusamiImageCache {
   );
 }
 
+/// Public static files under `/storage/...` (and `/public/storage/...`) are
+/// served by nginx without Passport. Attaching a Bearer token can make some
+/// hosts/WAFs reject the request, so skip auth for those paths.
+bool musamiIsPublicStorageUri(Uri uri) {
+  final path = uri.path.toLowerCase();
+  return path.startsWith('/storage/') ||
+      path.startsWith('/public/storage/') ||
+      path == '/storage' ||
+      path == '/public/storage';
+}
+
 /// Headers needed to load [url]: the session bearer token for Musamimuk hosts,
 /// or provider-specific headers for third-party online asset hosts.
 Map<String, String> musamiAuthenticatedHeadersForUrl(
@@ -37,6 +48,9 @@ Map<String, String> musamiAuthenticatedHeadersForUrl(
   if (uri == null) return const {};
   if (!isTrustedMusamimukUri(uri)) {
     return OnlineAssetConfig.headersForHost(uri.host);
+  }
+  if (musamiIsPublicStorageUri(uri)) {
+    return const {};
   }
   token ??= PrefUtils().getToken();
   if (token == null || token.isEmpty) return const {};

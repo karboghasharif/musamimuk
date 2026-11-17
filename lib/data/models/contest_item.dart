@@ -53,11 +53,8 @@ class ContestItem {
 
   factory ContestItem.fromJson(Map<String, dynamic> json) {
     final cat = json['category'];
-    final fileUrlRaw = apiParseString(json['file_url']);
-    final imageUrlRaw = apiParseString(json['image_url']);
-    final directUrl = fileUrlRaw.isNotEmpty ? fileUrlRaw : imageUrlRaw;
-    final resolvedUrl =
-        directUrl.isNotEmpty ? directUrl : apiResolveDesignFileUrl(json);
+    // Always normalize — API may return relative storage paths or unescaped names.
+    final resolvedUrl = apiResolveDesignFileUrl(json);
     final prize = _parsePrize(json);
     final countdownRaw = json['countdown'];
     final countdown = countdownRaw != null

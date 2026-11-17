@@ -75,7 +75,7 @@ class _DesignSaveFormDialog extends StatefulWidget {
 class _DesignSaveFormDialogState extends State<_DesignSaveFormDialog> {
   late final TextEditingController _nameCtrl;
   late DesignExportFileType _fileType;
-  String _visibility = 'public';
+  String _visibility = 'private';
 
   List<DesignExportFileType> _orderedFileTypesForUi() {
     if (!widget.showFileType) return const [];
@@ -123,7 +123,7 @@ class _DesignSaveFormDialogState extends State<_DesignSaveFormDialog> {
     final w = widget.initialWidth.clamp(16, 8192);
     final h = widget.initialHeight.clamp(16, 8192);
     final fileType = widget.showFileType ? _fileType : DesignExportFileType.jpg;
-    final visibility = widget.showVisibility ? _visibility : 'public';
+    final visibility = widget.showVisibility ? _visibility : 'private';
 
     Navigator.of(context, rootNavigator: true).pop(
       DesignSaveFormResult(
@@ -222,6 +222,16 @@ class _DesignSaveFormDialogState extends State<_DesignSaveFormDialog> {
                       onChanged: (v) => setState(() => _visibility = v),
                     ),
                   ),
+                  if (_visibility == 'public') ...[
+                    SizedBox(height: AppDs.space2.v),
+                    Text(
+                      'msg_public_requires_admin_review'.tr,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: _SaveDialogLook.label.withValues(alpha: 0.65),
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
                 ],
                 SizedBox(height: AppDs.space6.v),
                 Row(

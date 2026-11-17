@@ -119,19 +119,15 @@ class _AiStudioChatScreenState extends State<AiStudioChatScreen> {
                 AppDs.space4.h,
                 AppDs.space2.v,
               ),
-              child: Row(
-                children: [
-                  AiStudioChrome.poweredBy(_providerKind),
-                  SizedBox(width: AppDs.space2.h),
-                  AiStudioProviderPicker(
-                    value: _providerKind,
-                    onChanged: (kind) => setState(() => _providerKind = kind),
-                  ),
-                  const Spacer(),
-                  BlocBuilderCoinHint(
-                    feature: AiStudioChrome.editorFeatureFor(_providerKind),
-                  ),
-                ],
+              child: AiStudioChrome.toolbar(
+                kind: _providerKind,
+                providerPicker: AiStudioProviderPicker(
+                  value: _providerKind,
+                  onChanged: (kind) => setState(() => _providerKind = kind),
+                ),
+                coinHint: BlocBuilderCoinHint(
+                  feature: AiStudioChrome.editorFeatureFor(_providerKind),
+                ),
               ),
             ),
             if (_turns.isEmpty)
@@ -145,6 +141,8 @@ class _AiStudioChatScreenState extends State<AiStudioChatScreen> {
                       variant: AppTextVariant.secondary,
                     ),
                     SizedBox(height: AppDs.space3.v),
+                    AiStudioChrome.sectionLabel('lbl_try_these'.tr),
+                    SizedBox(height: AppDs.space2.v),
                     AiStudioChrome.suggestionChips(
                       suggestions: _suggestions,
                       onTap: (tip) => _send(tip),

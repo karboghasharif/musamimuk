@@ -185,7 +185,26 @@ class PlaylistItemWidget extends StatelessWidget {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (playlistItemModelObj.isPrivate)
+                        if ((playlistItemModelObj.visibility ?? '')
+                                .toLowerCase()
+                                .trim() ==
+                            'pending_review')
+                          Padding(
+                            padding: EdgeInsets.only(right: 4.h),
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius:
+                                    BorderRadius.circular(6.adaptSize),
+                              ),
+                              child: Icon(
+                                Icons.hourglass_top_rounded,
+                                size: 16.adaptSize,
+                                color: Colors.white,
+                              ),
+                            ),
+                          )
+                        else if (playlistItemModelObj.isPrivate)
                           Padding(
                             padding: EdgeInsets.only(right: 4.h),
                             child: DecoratedBox(

@@ -96,7 +96,8 @@ class DesignRepository {
   /// [imageBytes] – final image (e.g. from pro_image_editor).
   /// [title] – maps to API field `name`.
   /// [categoryId] – when omitted, the first category from `GET design/category` is used.
-  /// [visibility] – `"public"` or `"private"` (default `"public"`).
+  /// [visibility] – `"public"` or `"private"` (default `"private"`).
+  /// Requesting `"public"` queues the design for admin review (`pending_review`).
   /// [filename] – multipart filename (e.g. `design.png`, `design.jpg`, `design.pdf`).
   ///
   /// Endpoint: POST `design/add` (multipart/form-data): `file`, `category_id`, `name`,
@@ -110,7 +111,7 @@ class DesignRepository {
     int? categoryId,
     String? tags,
     int? subCategoryId,
-    String visibility = 'public',
+    String visibility = 'private',
     String? filename,
     String? designData,
     List<String> assetIds = const [],

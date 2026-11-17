@@ -28,6 +28,9 @@ class _PrintEarningsCardState extends State<PrintEarningsCard> {
   }
 
   Future<void> _load() async {
+    // Sync Connect flags from Stripe before reading the wallet.
+    await _repo.refreshStripeConnect(widget.kind);
+    if (!mounted) return;
     final result = widget.kind == 'rider'
         ? await _repo.riderEarnings()
         : await _repo.shopEarnings();
@@ -38,6 +41,11 @@ class _PrintEarningsCardState extends State<PrintEarningsCard> {
   }
 
   Future<void> _withdraw() async {
+    // Always refresh in case onboarding finished while this screen was open.
+    await _repo.refreshStripeConnect(widget.kind);
+    if (!mounted) return;
+    await _load();
+    if (!mounted) return;
     final earnings = _earnings;
     if (earnings == null) return;
     final stripe = earnings.stripe;
@@ -60,13 +68,21 @@ class _PrintEarningsCardState extends State<PrintEarningsCard> {
       }
       if (connect.payoutsEnabled) {
         await _load();
+        if (!mounted) return;
+      } else {
+        showAppToast(
+          'msg_print_stripe_connect_required'.tr,
+          type: ToastificationType.error,
+        );
+        return;
       }
     }
     if (!mounted) return;
+    final fresh = _earnings ?? earnings;
     final ok = await showPrintWithdrawSheet(
       context: context,
       kind: widget.kind,
-      earnings: earnings,
+      earnings: fresh,
     );
     if (ok) _load();
   }

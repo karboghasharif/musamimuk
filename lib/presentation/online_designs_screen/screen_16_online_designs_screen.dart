@@ -40,11 +40,6 @@ class Screen16OnlineDesignsScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              AppPageHeader(
-                title: 'lbl_online_designs'.tr,
-                subtitle: 'msg_search_online_t'.tr,
-              ),
-              SizedBox(height: AppDs.space4.v),
               BlocSelector<
                 Screen16OnlineDesignsBloc,
                 Screen16OnlineDesignsState,

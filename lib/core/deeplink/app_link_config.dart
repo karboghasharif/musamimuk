@@ -14,8 +14,8 @@ abstract final class AppLinkConfig {
   /// Apple Developer Team ID for `apple-app-site-association` (`appID`).
   static const String iosTeamId = '3FZZ5UHWCA';
 
-  /// Numeric App Store Connect app id (`id1234567890`). Fill after first listing.
-  static const String iosAppStoreId = '';
+  /// Numeric App Store Connect app id (from ASC URL `/apps/{id}/…`).
+  static const String iosAppStoreId = '6830824845';
 
   /// Play Store listing used when the Android app is not installed.
   static const String playStoreUrl =

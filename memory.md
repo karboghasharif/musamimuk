@@ -2,8 +2,8 @@
 
 Living reference for agents and developers. Prefer this file for orientation; deep-dive docs live under `docs/`.
 
-**Last updated:** 2026-08-15  
-**App version:** `1.0.5+22` (`pubspec.yaml`)  
+**Last updated:** 2026-11-16  
+**App version:** `1.0.10+29` (`pubspec.yaml`)  
 **Package ID (Android / Play):** `com.musamimuk.app`  
 **Bundle ID (iOS / App Store):** `com.musamimuk.ios.app` (Team `3FZZ5UHWCA`)  
 **API root:** `https://srv1813447.hstgr.cloud/api/v1/`

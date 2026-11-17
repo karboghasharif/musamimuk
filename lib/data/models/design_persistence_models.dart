@@ -13,7 +13,7 @@ class DesignSaveRequest {
     this.subCategoryId,
     this.width,
     this.height,
-    this.visibility = 'public',
+    this.visibility = 'private',
     this.designData,
     this.assetIds = const [],
   });

@@ -505,23 +505,34 @@ class _EnhancedRemoveBackgroundScreenState
       );
     }
 
+    final hasResult = _processedImage != null;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (_processedImage != null) ...[
+        if (hasResult)
           AppPrimaryButton(
             label: 'lbl_download'.tr,
             onPressed: _isProcessing ? null : _saveImage,
+          )
+        else
+          AppPrimaryButton(
+            label: _isProcessing
+                ? 'msg_removing_background'.tr
+                : 'msg_remove_background'.tr,
+            onPressed: _isProcessing ? null : _removeBackground,
           ),
-          SizedBox(height: AppDs.space3.v),
-        ],
-        AppPrimaryButton(
-          label: _isProcessing
-              ? 'msg_removing_background'.tr
-              : 'msg_remove_background'.tr,
-          onPressed: _isProcessing ? null : _removeBackground,
-        ),
         SizedBox(height: AppDs.space2.v),
+        if (hasResult)
+          TextButton(
+            onPressed: _isProcessing ? null : _removeBackground,
+            child: Text(
+              'msg_remove_background'.tr,
+              style: AppTypography.body(theme).copyWith(
+                color: AppDs.textOnDarkSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
         TextButton.icon(
           onPressed: _isProcessing ? null : _selectImage,
           icon: Icon(Icons.swap_horiz_rounded, color: theme.colorScheme.primary),

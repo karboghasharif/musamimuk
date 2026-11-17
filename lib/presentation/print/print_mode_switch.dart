@@ -7,6 +7,7 @@ import '../../data/models/print_models.dart';
 import '../../data/repositories/print_repository.dart';
 import '../subscription/push_auth_sync.dart';
 import 'print_open_orders_sync.dart';
+import 'print_ui.dart';
 
 /// Opens the normal design app, the print shop, or the print rider.
 ///
@@ -31,6 +32,16 @@ Future<void> showPrintModeSheet(BuildContext context) async {
     unawaited(refreshPrintProfileModeCache());
   }
 
+  // Never trap users inside shop/rider — Design must always be reachable.
+  if (current == PrefUtils.workModeShop ||
+      current == PrefUtils.workModeRider) {
+    available = {
+      ...available,
+      PrefUtils.workModeNormal,
+      current,
+    };
+  }
+
   if (!host.mounted) return;
   // Nothing to switch when the account only has Design (or one mode).
   if (available.length <= 1) return;
@@ -46,6 +57,11 @@ Future<void> showPrintModeSheet(BuildContext context) async {
   await applyWorkMode(selected);
 }
 
+/// Leave shop/rider and open the normal design app.
+Future<void> exitToDesignerApp() async {
+  await applyWorkMode(PrefUtils.workModeNormal);
+}
+
 /// Modes from local prefs only (no network). Always includes Design.
 Set<String> cachedAvailableWorkModes() {
   final prefs = PrefUtils();
@@ -56,6 +72,8 @@ Set<String> cachedAvailableWorkModes() {
   if (prefs.hasPrintShopProfile()) modes.add(PrefUtils.workModeShop);
   if (prefs.hasPrintRiderProfile()) modes.add(PrefUtils.workModeRider);
   final current = prefs.getWorkMode();
+  // Active hub always counts so the switcher never disappears mid-session
+  // (e.g. first-time KYC before /me confirms the profile flag).
   if (current == PrefUtils.workModeShop) modes.add(PrefUtils.workModeShop);
   if (current == PrefUtils.workModeRider) modes.add(PrefUtils.workModeRider);
   return modes;
@@ -78,13 +96,19 @@ Future<void> refreshPrintProfileModeCache({
     final shop = results[0];
     if (shop is PrintSuccess<PrintShopSummary?>) {
       final hasShop = shop.data != null && shop.data!.id > 0;
-      await prefs.setHasPrintShopProfile(hasShop);
+      // Keep an optimistic flag while the user is actively in shop mode
+      // (first-time KYC before the profile row exists).
+      if (hasShop || prefs.getWorkMode() != PrefUtils.workModeShop) {
+        await prefs.setHasPrintShopProfile(hasShop);
+      }
     }
 
     final rider = results[1];
     if (rider is PrintSuccess<PrintRiderProfile?>) {
       final hasRider = rider.data != null && rider.data!.id > 0;
-      await prefs.setHasPrintRiderProfile(hasRider);
+      if (hasRider || prefs.getWorkMode() != PrefUtils.workModeRider) {
+        await prefs.setHasPrintRiderProfile(hasRider);
+      }
     }
   } on TimeoutException {
     // Keep existing cache.
@@ -247,18 +271,58 @@ Future<void> applyWorkMode(String mode) async {
   await NavigatorService.pushNamedAndRemoveUntil(route);
 }
 
+/// App-bar control: open the Design / Shop / Rider picker.
+///
+/// Always visible inside shop or rider hubs so users can leave even during
+/// first-time KYC (when profile flags may not be cached yet).
 class PrintModeButton extends StatelessWidget {
   const PrintModeButton({super.key});
 
   @override
   Widget build(BuildContext context) {
-    if (cachedAvailableWorkModes().length <= 1) {
+    final current = PrefUtils().getWorkMode();
+    final inPrintHub = current == PrefUtils.workModeShop ||
+        current == PrefUtils.workModeRider;
+    if (!inPrintHub && cachedAvailableWorkModes().length <= 1) {
       return const SizedBox.shrink();
     }
     return IconButton(
       tooltip: 'lbl_switch_mode'.tr,
       onPressed: () => showPrintModeSheet(context),
       icon: const Icon(Icons.swap_horiz, color: AppDs.printGold),
+    );
+  }
+}
+
+/// Explicit “Back to designer” action for pending KYC / register / profile.
+class PrintExitToDesignerButton extends StatelessWidget {
+  const PrintExitToDesignerButton({
+    super.key,
+    this.compact = false,
+  });
+
+  /// When true, renders a small app-bar TextButton instead of a full-width CTA.
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    if (compact) {
+      return TextButton(
+        onPressed: exitToDesignerApp,
+        child: Text(
+          'lbl_print_exit_to_designer'.tr,
+          style: TextStyle(
+            color: AppDs.printGold,
+            fontWeight: FontWeight.w700,
+            fontSize: 12.fSize,
+          ),
+        ),
+      );
+    }
+    return PrintGhostButton(
+      label: 'lbl_print_exit_to_designer'.tr,
+      icon: Icons.design_services_outlined,
+      onPressed: exitToDesignerApp,
     );
   }
 }
