@@ -1,7 +1,6 @@
 plugins {
     id("com.android.application")
-    // Required while android.builtInKotlin=false (Flutter migrator for existing apps).
-    id("org.jetbrains.kotlin.android")
+    id("kotlin-android")
     id("dev.flutter.flutter-gradle-plugin")
     id("com.google.gms.google-services")
 }
@@ -36,6 +35,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_17.toString()
+    }
+
     defaultConfig {
         applicationId = "com.musamimuk.app"
         // RevenueCat Paywalls require API 24+.
@@ -59,12 +62,6 @@ android {
         release {
             signingConfig = signingConfigs.getByName("release")
         }
-    }
-}
-
-kotlin {
-    compilerOptions {
-        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
     }
 }
 
