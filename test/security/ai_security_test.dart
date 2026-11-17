@@ -46,12 +46,14 @@ void main() {
       ),
       {'Authorization': 'Bearer user-token'},
     );
+    // Public /storage paths are served without Passport; Bearer must stay off
+    // so WAFs/nginx do not reject the image request.
     expect(
       musamiAuthenticatedHeadersForUrl(
         'https://srv1813447.hstgr.cloud/storage/designs/demo.jpg',
         token: 'user-token',
       ),
-      {'Authorization': 'Bearer user-token'},
+      isEmpty,
     );
     expect(
       musamiAuthenticatedHeadersForUrl(

@@ -101,11 +101,11 @@ class AddNewState extends Equatable {
     isResizingCanvas,
   ];
   AddNewState copyWith({
-    final Uint8List? transparentBytes,
+    Uint8List? transparentBytes,
     AddNewModel? screen3AddNewModelObj,
     File? pickedImage,
     String? showbottomContainer,
-    final GlobalKey<ProImageEditorState>? editorKey,
+    GlobalKey<ProImageEditorState>? editorKey,
     TextEditingController? valueoneController,
     TextEditingController? valueTwoController,
     SelectionPopupModel? selectedDropDownValue,

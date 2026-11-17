@@ -39,6 +39,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: "3.50.0"
           cache: true
 
       - name: Pub get
@@ -60,12 +61,16 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
-          cat > android/key.properties <<EOF
-          storePassword=$ANDROID_KEYSTORE_PASSWORD
-          keyPassword=$ANDROID_KEY_PASSWORD
-          keyAlias=$ANDROID_KEY_ALIAS
-          storeFile=upload-keystore.jks
-          EOF
+          if [ -z "$ANDROID_KEYSTORE_PASSWORD" ] || [ -z "$ANDROID_KEY_PASSWORD" ] || [ -z "$ANDROID_KEY_ALIAS" ]; then
+            echo "Missing one of ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_PASSWORD / ANDROID_KEY_ALIAS"
+            exit 1
+          fi
+          printf '%s\n' \
+            "storePassword=${ANDROID_KEYSTORE_PASSWORD}" \
+            "keyPassword=${ANDROID_KEY_PASSWORD}" \
+            "keyAlias=${ANDROID_KEY_ALIAS}" \
+            "storeFile=upload-keystore.jks" \
+            > android/key.properties
 
       - name: Build App Bundle
         run: flutter build appbundle --release
