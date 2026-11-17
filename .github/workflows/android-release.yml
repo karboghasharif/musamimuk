@@ -202,3 +202,5 @@ jobs:
           releaseFiles: build/app/outputs/bundle/release/app-release.aab
           track: ${{ github.event.inputs.track || 'production' }}
           status: completed
+          # Required when Play Console has draft changes / review sending disabled.
+          changesNotSentForReview: true
