@@ -28,3 +28,22 @@ AuthKey_*.p8
 android/key.properties
 *.jks
 upload-keystore.jks
+
+# Added by Grok Bot: keep secrets and large binaries out of GitHub
+.env
+.env.local
+.env.production
+*.p8
+*.p12
+*.pem
+*.jks
+*.keystore
+*.mobileprovision.bak*
+*.zip
+/*.mp4
+/*.MP4
+/*.mov
+/*.MOV
+/*.jpg
+/*.JPG
+/*.jpeg
