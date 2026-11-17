@@ -60,6 +60,12 @@ android {
             signingConfig = signingConfigs.getByName("release")
         }
     }
+
+    lint {
+        // Avoid AGP 9 lintVital AnalyzeRelease crashes on Flutter plugin modules.
+        checkReleaseBuilds = false
+        abortOnError = false
+    }
 }
 
 kotlin {
