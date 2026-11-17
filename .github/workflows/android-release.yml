@@ -44,15 +44,26 @@ jobs:
           flutter-version: "3.50.0"
           cache: true
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install NDK
-        # Prefetch so bundleRelease does not stall mid-build on first NDK fetch.
+      - name: Prefetch NDK
+        # ubuntu-latest already ships Android SDK; avoid android-actions/setup-android.
+        # Flutter 3.50 default: ndkVersion 28.2.13676358 (r28c).
         run: |
           set -euo pipefail
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "ndk;28.2.13676358"
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [ -z "$SDK_ROOT" ]; then
+            echo "ANDROID_HOME / ANDROID_SDK_ROOT not set on runner"
+            exit 1
+          fi
+          SM="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager 2>/dev/null | head -n 1 || true)"
+          if [ -z "$SM" ]; then
+            echo "sdkmanager not found under $SDK_ROOT/cmdline-tools"
+            ls -la "$SDK_ROOT" || true
+            exit 1
+          fi
+          echo "Using sdkmanager: $SM"
+          yes | "$SM" --licenses >/dev/null || true
+          "$SM" "ndk;28.2.13676358"
+          ls -la "$SDK_ROOT/ndk" || true
 
       - name: Pub get
         run: flutter pub get
@@ -136,6 +147,7 @@ jobs:
           PY
 
       - name: Build App Bundle
+        id: build_aab
         env:
           GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx6g
         run: |
@@ -143,11 +155,15 @@ jobs:
           flutter build appbundle --release --no-pub 2>&1 | tee aab-build.log
 
       - name: Annotate AAB failure
-        if: failure()
+        if: failure() && steps.build_aab.outcome == 'failure'
         run: |
           python3 <<'PY'
           from pathlib import Path
-          log = Path("aab-build.log").read_text(errors="replace")
+          path = Path("aab-build.log")
+          if not path.is_file():
+              print("::error title=AAB build failed::aab-build.log was not created")
+              raise SystemExit(0)
+          log = path.read_text(errors="replace")
           keys = ("cannot find symbol", "What went wrong", "FAILURE:", "error:", "Execution failed", "A problem occurred")
           lines = log.splitlines()
           hits = []
@@ -157,13 +173,12 @@ jobs:
                   end = min(len(lines), i + 8)
                   hits.append("\n".join(lines[start:end]))
           blob = "\n---\n".join(hits[-6:]) if hits else log[-4000:]
-          # Keep annotation readable for the Actions UI / public API.
           blob = blob[-3500:].replace("%", "%25").replace("\r", "").replace("\n", "%0A")
           print(f"::error title=AAB build failed::{blob}")
           PY
 
       - name: Upload AAB build log on failure
-        if: failure()
+        if: failure() && steps.build_aab.outcome == 'failure'
         uses: actions/upload-artifact@v4
         with:
           name: aab-build-log
