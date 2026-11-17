@@ -72,9 +72,59 @@ jobs:
             "storeFile=upload-keystore.jks" \
             > android/key.properties
 
+      - name: Patch file_picker AGP9 Kotlin skip
+        # file_picker 11 skips kotlin-android when AGP≥9; with Flutter's builtInKotlin=false that
+        # leaves FilePickerPlugin uncompiled. Force-apply kotlin-android regardless of AGP.
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          import json, pathlib, re, urllib.parse
+          cfg = json.loads(pathlib.Path(".dart_tool/package_config.json").read_text())
+          pkg = next(p for p in cfg["packages"] if p["name"] == "file_picker")
+          root = pkg["rootUri"]
+          if root.startswith("file:"):
+              root_path = pathlib.Path(urllib.parse.unquote(urllib.parse.urlparse(root).path))
+          else:
+              root_path = (pathlib.Path(".dart_tool") / root).resolve()
+          path = root_path / "android" / "build.gradle"
+          if not path.is_file():
+              raise SystemExit(f"file_picker android/build.gradle not found: {path}")
+          text = path.read_text()
+          text2 = re.sub(
+              r"if\s*\(\s*!isAgp9OrAbove\s*\)\s*\{\s*apply plugin:\s*'org\.jetbrains\.kotlin\.android'\s*\}",
+              "apply plugin: 'org.jetbrains.kotlin.android'",
+              text,
+              count=1,
+              flags=re.S,
+          )
+          if text2 == text and "apply plugin: 'org.jetbrains.kotlin.android'" not in text:
+              text2 = text.replace(
+                  "apply plugin: 'com.android.library'",
+                  "apply plugin: 'com.android.library'\napply plugin: 'org.jetbrains.kotlin.android'",
+                  1,
+              )
+          # Keep kotlinOptions even on AGP 9 once kotlin-android is forced on.
+          text2 = re.sub(
+              r"if\s*\(\s*!isAgp9OrAbove\s*\)\s*\{\s*kotlinOptions\s*\{",
+              "kotlinOptions {",
+              text2,
+              count=1,
+              flags=re.S,
+          )
+          # Drop the matching closing brace that belonged to the removed if ().
+          text2 = re.sub(
+              r"(kotlinOptions\s*\{[^}]*\})\s*\}",
+              r"\1",
+              text2,
+              count=1,
+              flags=re.S,
+          )
+          path.write_text(text2)
+          print(f"patched {path}")
+          PY
+
       - name: Build App Bundle
-        # Flutter 3.50 wants AGP ≥9.1.1; we stay on 8.9.2 so file_picker 11 Kotlin compiles.
-        run: flutter build appbundle --release --android-skip-build-dependency-validation
+        run: flutter build appbundle --release
 
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4

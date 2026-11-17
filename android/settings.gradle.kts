@@ -19,10 +19,9 @@ pluginManagement {
 
 plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
-    // AGP 8.9.x keeps kotlin-android plugins (e.g. file_picker 11) compiling.
-    // Flutter 3.50 wants AGP ≥9.1.1 — CI/build uses --android-skip-build-dependency-validation.
-    id("com.android.application") version "8.9.2" apply false
-    id("org.jetbrains.kotlin.android") version "2.1.0" apply false
+    // Flutter 3.50 defaults (AGP 9.3.1 requires Gradle ≥ 9.5.0).
+    id("com.android.application") version "9.3.1" apply false
+    id("org.jetbrains.kotlin.android") version "2.4.20" apply false
     id("com.google.gms.google-services") version "4.4.4" apply false
 }
 
