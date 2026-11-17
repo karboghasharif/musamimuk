@@ -124,7 +124,38 @@ jobs:
           PY
 
       - name: Build App Bundle
-        run: flutter build appbundle --release
+        run: |
+          set -o pipefail
+          flutter build appbundle --release 2>&1 | tee aab-build.log
+
+      - name: Annotate AAB failure
+        if: failure()
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          log = Path("aab-build.log").read_text(errors="replace")
+          keys = ("cannot find symbol", "What went wrong", "FAILURE:", "error:", "Execution failed", "A problem occurred")
+          lines = log.splitlines()
+          hits = []
+          for i, line in enumerate(lines):
+              if any(k in line for k in keys):
+                  start = max(0, i - 2)
+                  end = min(len(lines), i + 8)
+                  hits.append("\n".join(lines[start:end]))
+          blob = "\n---\n".join(hits[-6:]) if hits else log[-4000:]
+          # Keep annotation readable for the Actions UI / public API.
+          blob = blob[-3500:].replace("%", "%25").replace("\r", "").replace("\n", "%0A")
+          print(f"::error title=AAB build failed::{blob}")
+          PY
+
+      - name: Upload AAB build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aab-build-log
+          path: aab-build.log
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
