@@ -3,6 +3,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+// pro_image_editor 14.x TextField/Scaffold use material_ui MaterialLocalizations
+// (separate type from Flutter's). Must register its delegate on MaterialApp.
+import 'package:material_ui/material_ui.dart' as material_ui;
 import 'package:musamimuk/presentation/add_new_screen/bloc/add_new_bloc.dart';
 import 'package:toastification/toastification.dart';
 import 'core/app_export.dart';
@@ -159,6 +162,9 @@ class MyApp extends StatelessWidget {
                         localizationsDelegates: const [
                           AppLocalizationDelegate(),
                           GlobalMaterialLocalizations.delegate,
+                          // Required by pro_image_editor text/crop editors
+                          // (material_ui TextField asserts this type).
+                          material_ui.GlobalMaterialLocalizations.delegate,
                           GlobalWidgetsLocalizations.delegate,
                           GlobalCupertinoLocalizations.delegate,
                         ],

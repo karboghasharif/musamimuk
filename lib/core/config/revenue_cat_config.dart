@@ -38,11 +38,7 @@ class RevenueCatConfig {
   static const String coinSku120 = 'coins_120';
   static const String coinSku500 = 'coins_500';
 
-  static const Set<String> coinProductIds = {
-    coinSku50,
-    coinSku120,
-    coinSku500,
-  };
+  static const Set<String> coinProductIds = {coinSku50, coinSku120, coinSku500};
 
   /// Optional Offering identifier for coin packs (falls back to searching all offerings).
   static const String coinsOfferingId = 'coins';
@@ -51,7 +47,7 @@ class RevenueCatConfig {
   static const String testApiKey = 'test_VzTVhnnwaszleFgTGCxdaVTuYqY';
 
   /// Replace with App Store public SDK key before release (`appl_…`).
-  static const String appleApiKey = '';
+  static const String appleApiKey = 'appl_TTcGvaAkpMEVIKcOjvfchGJZjKS';
 
   /// Google Play public SDK key (`goog_…`).
   static const String googleApiKey = 'goog_TBLPplEYjOqbfUbTAKcPcMMmIYy';

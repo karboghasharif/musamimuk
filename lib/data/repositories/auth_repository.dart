@@ -324,10 +324,10 @@ class AuthRepository {
     }
   }
 
-  /// GET user/logout (best-effort).
+  /// POST user/logout (best-effort). API only accepts POST.
   Future<String?> logout() async {
     try {
-      final response = await _api.dio.get<Map<String, dynamic>>(
+      final response = await _api.dio.post<Map<String, dynamic>>(
         'user/logout',
         options: Options(
           extra: const {

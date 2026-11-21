@@ -17,4 +17,8 @@ FACEBOOK_CLIENT_TOKEN=
 FACEBOOK_DISPLAY_NAME=Musamimuk
 // Maps — set a restricted iOS key before release (do not commit production keys).
 // Google Cloud → Credentials → API key restricted to iOS apps + bundle com.musamimuk.ios.app
+// Prefer putting secrets in SocialAuth.local.xcconfig (gitignored) — see include below.
 GOOGLE_MAPS_API_KEY=
+
+// Optional local overrides (GOOGLE_MAPS_API_KEY, OAuth clients). Not committed.
+#include? "SocialAuth.local.xcconfig"

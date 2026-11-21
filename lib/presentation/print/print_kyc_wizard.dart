@@ -1785,10 +1785,10 @@ String? requiredText(String? value) {
   return null;
 }
 
-/// Saudi IBAN: SA + 22 digits (spaces / Arabic digits ignored via [SaudiIban]).
+/// Saudi IBAN: optional at registration. If filled, must be SA + 22 digits
+/// (spaces / Arabic digits ignored via [SaudiIban]).
 String? saudiIbanText(String? value) {
-  final required = requiredText(value);
-  if (required != null) return required;
+  if (value == null || value.trim().isEmpty) return null;
   return switch (SaudiIban.validationFailure(value)) {
     null => null,
     SaudiIban.reasonFormat => 'msg_print_iban_format'.tr,

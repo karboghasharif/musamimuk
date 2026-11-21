@@ -18,6 +18,7 @@ build/
 /android/local.properties
 /ios/Flutter/Generated.xcconfig
 /ios/Flutter/flutter_export_environment.sh
+/ios/Runner/SocialAuth.local.xcconfig
 
 # Firebase Admin SDK private keys — never commit
 *firebase-adminsdk*.json

@@ -7,6 +7,7 @@ import 'package:toastification/toastification.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/app_export.dart';
+import '../../core/config/google_maps_config.dart';
 import '../../core/utils/app_toast.dart';
 import 'print_kyc_wizard.dart';
 import 'print_places_service.dart';
@@ -121,6 +122,9 @@ class _PrintLocationPickerState extends State<PrintLocationPicker> {
   bool _syncingFields = false;
   bool _locating = false;
   bool _geocoding = false;
+  bool _mapsReady = false;
+  bool _mapsConfigured = false;
+  bool _myLocationEnabled = false;
   Timer? _geocodeDebounce;
 
   @override
@@ -132,14 +136,34 @@ class _PrintLocationPickerState extends State<PrintLocationPicker> {
     widget.lngController.addListener(_onFieldEdited);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (existing != null) {
-        unawaited(_fillAddressFromPin(existing, force: true));
-        return;
-      }
-      if (widget.autoLocate) {
-        unawaited(_locateToCurrent(showToast: false, forceAddress: true));
-      }
+      unawaited(_bootstrap(existing));
     });
+  }
+
+  Future<void> _bootstrap(LatLng? existing) async {
+    await GoogleMapsConfig.ensureLoaded();
+    if (!mounted) return;
+    setState(() {
+      _mapsConfigured = GoogleMapsConfig.isConfigured;
+      _mapsReady = true;
+    });
+    // myLocationEnabled without permission can crash Google Maps on iOS.
+    unawaited(_enableMyLocationIfPermitted());
+    if (existing != null) {
+      unawaited(_fillAddressFromPin(existing, force: true));
+      return;
+    }
+    if (widget.autoLocate) {
+      unawaited(_locateToCurrent(showToast: false, forceAddress: true));
+    }
+  }
+
+  Future<void> _enableMyLocationIfPermitted() async {
+    final permission = await Geolocator.checkPermission();
+    final allowed = permission == LocationPermission.whileInUse ||
+        permission == LocationPermission.always;
+    if (!mounted || !allowed) return;
+    setState(() => _myLocationEnabled = true);
   }
 
   @override
@@ -261,6 +285,9 @@ class _PrintLocationPickerState extends State<PrintLocationPicker> {
       setState(() => _locating = false);
       return;
     }
+    if (!_myLocationEnabled) {
+      setState(() => _myLocationEnabled = true);
+    }
     final pin = LatLng(fix.lat, fix.lng);
     await _applyPin(
       pin,
@@ -359,118 +386,144 @@ class _PrintLocationPickerState extends State<PrintLocationPicker> {
           borderRadius: BorderRadius.circular(AppDs.radiusLg),
           child: SizedBox(
             height: 240.v,
-            child: Stack(
-              children: [
-                GoogleMap(
-                  initialCameraPosition: CameraPosition(
-                    target: _pin,
-                    zoom: 15,
-                  ),
-                  markers: {
-                    Marker(
-                      markerId: const MarkerId('print_pin'),
-                      position: _pin,
-                      draggable: true,
-                      icon: BitmapDescriptor.defaultMarkerWithHue(
-                        BitmapDescriptor.hueYellow,
+            child: !_mapsReady
+                ? ColoredBox(
+                    color: AppDs.surfaceRaised,
+                    child: Center(
+                      child: SizedBox(
+                        width: 28.adaptSize,
+                        height: 28.adaptSize,
+                        child: const CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: AppDs.accentYellow,
+                        ),
                       ),
-                      infoWindow: InfoWindow(
-                        title: 'lbl_print_map_pin'.tr,
-                      ),
-                      onDragEnd: (pos) => _applyPin(pos),
                     ),
-                  },
-                  myLocationEnabled: true,
-                  myLocationButtonEnabled: false,
-                  zoomControlsEnabled: false,
-                  mapToolbarEnabled: false,
-                  compassEnabled: false,
-                  onMapCreated: (c) async {
-                    _mapController = c;
-                    await c.animateCamera(
-                      CameraUpdate.newLatLngZoom(_pin, 16),
-                    );
-                  },
-                  onTap: (pos) => _applyPin(pos),
-                ),
-                PositionedDirectional(
-                  top: AppDs.space2.v,
-                  end: AppDs.space2.h,
-                  child: Column(
-                    children: [
-                      _MapIconButton(
-                        tooltip: 'lbl_print_search_location'.tr,
-                        icon: Icons.search_rounded,
-                        onPressed: _openSearch,
-                      ),
-                      SizedBox(height: AppDs.space2.v),
-                      _MapIconButton(
-                        tooltip: 'lbl_print_use_current_location'.tr,
-                        icon: Icons.my_location_rounded,
-                        loading: _locating,
-                        onPressed: _locating
+                  )
+                : !_mapsConfigured
+                    ? _MapUnavailableFallback(
+                        locating: _locating,
+                        onLocate: _locating
                             ? null
                             : () => _locateToCurrent(
                                   showToast: true,
                                   forceAddress: true,
                                 ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (_locating || _geocoding)
-                  Positioned.fill(
-                    child: ColoredBox(
-                      color: Colors.black.withValues(alpha: 0.35),
-                      child: Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            SizedBox(
-                              width: 28.adaptSize,
-                              height: 28.adaptSize,
-                              child: const CircularProgressIndicator(
-                                strokeWidth: 2.5,
-                                color: AppDs.accentYellow,
+                      )
+                    : Stack(
+                        children: [
+                          GoogleMap(
+                            initialCameraPosition: CameraPosition(
+                              target: _pin,
+                              zoom: 15,
+                            ),
+                            markers: {
+                              Marker(
+                                markerId: const MarkerId('print_pin'),
+                                position: _pin,
+                                draggable: true,
+                                icon: BitmapDescriptor.defaultMarkerWithHue(
+                                  BitmapDescriptor.hueYellow,
+                                ),
+                                infoWindow: InfoWindow(
+                                  title: 'lbl_print_map_pin'.tr,
+                                ),
+                                onDragEnd: (pos) => _applyPin(pos),
+                              ),
+                            },
+                            // Only after permission — avoids iOS native crash.
+                            myLocationEnabled: _myLocationEnabled,
+                            myLocationButtonEnabled: false,
+                            zoomControlsEnabled: false,
+                            mapToolbarEnabled: false,
+                            compassEnabled: false,
+                            onMapCreated: (c) async {
+                              _mapController = c;
+                              await c.animateCamera(
+                                CameraUpdate.newLatLngZoom(_pin, 16),
+                              );
+                            },
+                            onTap: (pos) => _applyPin(pos),
+                          ),
+                          PositionedDirectional(
+                            top: AppDs.space2.v,
+                            end: AppDs.space2.h,
+                            child: Column(
+                              children: [
+                                _MapIconButton(
+                                  tooltip: 'lbl_print_search_location'.tr,
+                                  icon: Icons.search_rounded,
+                                  onPressed: _openSearch,
+                                ),
+                                SizedBox(height: AppDs.space2.v),
+                                _MapIconButton(
+                                  tooltip: 'lbl_print_use_current_location'.tr,
+                                  icon: Icons.my_location_rounded,
+                                  loading: _locating,
+                                  onPressed: _locating
+                                      ? null
+                                      : () => _locateToCurrent(
+                                            showToast: true,
+                                            forceAddress: true,
+                                          ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (_locating || _geocoding)
+                            Positioned.fill(
+                              child: ColoredBox(
+                                color: Colors.black.withValues(alpha: 0.35),
+                                child: Center(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      SizedBox(
+                                        width: 28.adaptSize,
+                                        height: 28.adaptSize,
+                                        child: const CircularProgressIndicator(
+                                          strokeWidth: 2.5,
+                                          color: AppDs.accentYellow,
+                                        ),
+                                      ),
+                                      SizedBox(height: AppDs.space2.v),
+                                      AppText(
+                                        _locating
+                                            ? 'msg_print_locating'.tr
+                                            : 'msg_print_resolving_address'.tr,
+                                        variant: AppTextVariant.caption,
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
                             ),
-                            SizedBox(height: AppDs.space2.v),
-                            AppText(
-                              _locating
-                                  ? 'msg_print_locating'.tr
-                                  : 'msg_print_resolving_address'.tr,
-                              variant: AppTextVariant.caption,
-                              textAlign: TextAlign.center,
+                          Positioned(
+                            left: AppDs.space2.h,
+                            right: AppDs.space2.h,
+                            bottom: AppDs.space2.v,
+                            child: IgnorePointer(
+                              child: Container(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: AppDs.space3.h,
+                                  vertical: AppDs.space2.v,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppDs.atelierInk.withValues(alpha: 0.82),
+                                  borderRadius:
+                                      BorderRadius.circular(AppDs.radiusMd),
+                                ),
+                                child: AppText(
+                                  'msg_print_map_drag_hint'.tr,
+                                  variant: AppTextVariant.caption,
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                    ),
-                  ),
-                Positioned(
-                  left: AppDs.space2.h,
-                  right: AppDs.space2.h,
-                  bottom: AppDs.space2.v,
-                  child: IgnorePointer(
-                    child: Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: AppDs.space3.h,
-                        vertical: AppDs.space2.v,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppDs.atelierInk.withValues(alpha: 0.82),
-                        borderRadius: BorderRadius.circular(AppDs.radiusMd),
-                      ),
-                      child: AppText(
-                        'msg_print_map_drag_hint'.tr,
-                        variant: AppTextVariant.caption,
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
           ),
         ),
         SizedBox(height: AppDs.space3.v),
@@ -518,6 +571,48 @@ class _PrintLocationPickerState extends State<PrintLocationPicker> {
           validator: requiredText,
         ),
       ],
+    );
+  }
+}
+
+class _MapUnavailableFallback extends StatelessWidget {
+  const _MapUnavailableFallback({
+    required this.locating,
+    required this.onLocate,
+  });
+
+  final bool locating;
+  final VoidCallback? onLocate;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: AppDs.surfaceRaised,
+      child: Padding(
+        padding: EdgeInsets.all(AppDs.space4.h),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.map_outlined,
+              color: AppDs.atelierBrass,
+              size: (AppDs.iconMd * 1.5).adaptSize,
+            ),
+            SizedBox(height: AppDs.space2.v),
+            AppText(
+              'msg_print_map_unavailable'.tr,
+              variant: AppTextVariant.secondary,
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: AppDs.space3.v),
+            AppPrimaryButton(
+              label: 'lbl_print_use_current_location'.tr,
+              isLoading: locating,
+              onPressed: onLocate,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

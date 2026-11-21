@@ -264,6 +264,7 @@ class _PrintShopRegisterScreenState extends State<PrintShopRegisterScreen> {
                 controller: _iban,
                 label: 'lbl_print_iban'.tr,
                 prefixIcon: Icons.account_balance_outlined,
+                helper: 'msg_print_iban_hint'.tr,
                 validator: saudiIbanText,
               ),
               PrintKycTextField(

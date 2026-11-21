@@ -59,3 +59,29 @@ Intuitive interface designed for everyone—from beginners to pros. No design ex
 Upgrade for access to all design assets, more storage, and exclusive elements.
 
 Download Musamimuk and start creating today.
+
+
+
+AIzaSyDciNqktI9_WsAT2Wzfwf_r56tUCxzLexk
+
+
+
+chat is not working in musamimuk 
+
+notification not working
+
+Notes in order 
+
+
+after order review must be give
+
+the review should be show 
+
+Check the dispute 
+
+shift timing with multiple shift 
+
+
+custom services in in shop registration
+
+Website regestration for shop

@@ -41,6 +41,11 @@
 	<string>Musamimuk converts your speech to text when you use voice input on the Add Text screen.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Musamimuk uses your location to place your print shop or rider map pin.</string>
+	<!-- Required by Maps / Geolocator link even when we only request When In Use (ASC 90683). -->
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Musamimuk uses your location to place your print shop or rider map pin and show nearby print shops.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>Musamimuk uses your location to place your print shop or rider map pin and show nearby print shops.</string>
 	<!-- Google Maps SDK — value from SocialAuth.xcconfig GOOGLE_MAPS_API_KEY -->
 	<key>GMSApiKey</key>
 	<string>$(GOOGLE_MAPS_API_KEY)</string>

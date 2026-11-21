@@ -14,17 +14,19 @@ class PrintKyc {
 
   static const riderNationalId = 'national_id';
   static const riderDriverLicense = 'driver_license';
+  /// Saudi vehicle registration document (استمارة).
   static const riderVehicleRegistration = 'vehicle_registration';
+  static const riderVehiclePhoto = 'vehicle_photo';
   static const riderIbanCertificate = 'iban_certificate';
   static const riderSelfieWithId = 'selfie_with_id';
 
   static const shopRequiredKinds = [
     shopCommercialRegistration,
     shopNationalId,
-    shopIbanCertificate,
   ];
 
   static const shopOptionalKinds = [
+    shopIbanCertificate,
     shopVatCertificate,
     shopPhoto,
   ];
@@ -32,10 +34,12 @@ class PrintKyc {
   static const riderRequiredKinds = [
     riderNationalId,
     riderDriverLicense,
-    riderIbanCertificate,
   ];
 
   static const riderOptionalKinds = [
+    riderVehicleRegistration,
+    riderVehiclePhoto,
+    riderIbanCertificate,
     riderSelfieWithId,
   ];
 
