@@ -202,5 +202,6 @@ jobs:
           releaseFiles: build/app/outputs/bundle/release/app-release.aab
           track: ${{ github.event.inputs.track || 'production' }}
           status: completed
-          # Required when Play Console has draft changes / review sending disabled.
-          changesNotSentForReview: true
+          # Do NOT set changesNotSentForReview — Play Console currently auto-sends
+          # changes for review ("must not be set"). If Console is switched to manual
+          # review sending again, add: changesNotSentForReview: true
