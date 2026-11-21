@@ -3,9 +3,8 @@ final Map<String, String> arSa = {
   "lbl_sign_up_now": "سجّل الآن",
   "msg_don_t_have_an_account": "ليس لديك حساب؟ سجّل الآن",
   "msg_don_t_have_an_account2": "ليس لديك حساب؟",
-  "msg_login_to_musamimuk":
-      "تصاميمك، قوالبك، واستوديو الذكاء — مرتبطة بحسابك.",
-  "lbl_musamimuk_brand": "مساميمك",
+  "msg_login_to_musamimuk": "تصاميمك، قوالبك، واستوديو الذكاء — مرتبطة بحسابك.",
+  "lbl_musamimuk_brand": "مصممك",
   "msg_login_welcome": "مرحباً بعودتك",
   "lbl_name": "الاسم",
   "lbl_name_or_username": "الاسم أو اسم المستخدم",
@@ -21,8 +20,7 @@ final Map<String, String> arSa = {
   "lbl_passwords_match": "كلمتا المرور متطابقتان",
   "lbl_passwords_do_not_match": "غير متطابقتين",
   "lbl_complete_profile": "أكمل ملفك",
-  "msg_complete_profile_subtitle":
-      "أضف الدولة أو صورة أو نبذة — كلها اختيارية. يمكنك تعديلها لاحقاً من الملف الشخصي.",
+  "msg_complete_profile_subtitle": "أضف الدولة أو صورة أو نبذة — كلها اختيارية. يمكنك تعديلها لاحقاً من الملف الشخصي.",
   "lbl_optional_info": "نبذة عنك (اختياري)",
   "lbl_skip_for_now": "تخطّ الآن",
   "lbl_continue": "متابعة",
@@ -81,8 +79,7 @@ final Map<String, String> arSa = {
   "lbl_account_actions": "الحساب",
   "lbl_delete_account": "حذف الحساب",
   "msg_delete_account_title": "حذف حسابك؟",
-  "msg_delete_account_warning":
-      "سيؤدي ذلك إلى تسجيل خروجك وإزالة بياناتك من هذا الجهاز. قد تظل تصاميمك أو ملفك على خوادمنا حتى يتوفر حذف كامل للحساب.\n\nلا يمكن التراجع عن ذلك من التطبيق. هل أنت متأكد أنك تريد المتابعة؟",
+  "msg_delete_account_warning": "سيؤدي ذلك إلى تسجيل خروجك وإزالة بياناتك من هذا الجهاز. قد تظل تصاميمك أو ملفك على خوادمنا حتى يتوفر حذف كامل للحساب.\n\nلا يمكن التراجع عن ذلك من التطبيق. هل أنت متأكد أنك تريد المتابعة؟",
   "msg_delete_account_session_cleared":
       "تم تسجيل خروجك. تواصل مع الدعم إذا كنت بحاجة لإزالة حسابك من الخادم.",
   "lbl_plan": "الخطة",
@@ -136,8 +133,7 @@ final Map<String, String> arSa = {
   "msg_ai_design_prompt_hint":
       "مثال: بانر LinkedIn قابل للتحرير بنص تركوازي وصورة دائرية…",
   "msg_ai_design_using_example": "نستخدم مثالاً — يمكنك تعديله في أي وقت.",
-  "msg_ai_video_coming_soon":
-      "توليد الفيديو قريباً. جرّب الصور أو التصاميم أو المحادثة أو الرؤية الآن.",
+  "msg_ai_video_coming_soon": "توليد الفيديو قريباً. جرّب الصور أو التصاميم أو المحادثة أو الرؤية الآن.",
   "lbl_ai_upscale": "تكبير الدقة",
   "lbl_ai_inpaint": "تعديل بالفرشاة",
   "lbl_ai_upscale_2x": "٢×",
@@ -169,7 +165,8 @@ final Map<String, String> arSa = {
       "التكبير والتعديل بالفرشاة يعملان على طبقات الصور فقط.",
   "msg_ai_image_tool_capture_failed":
       "تعذر قراءة صورة هذه الطبقة. جرّب صورة أخرى.",
-  "msg_ai_image_tool_failed": "فشل أداة الصورة بالذكاء الاصطناعي. حاول مرة أخرى.",
+  "msg_ai_image_tool_failed":
+      "فشل أداة الصورة بالذكاء الاصطناعي. حاول مرة أخرى.",
   "msg_could_not_open_link": "تعذر فتح الرابط",
   "msg_upgrade_to_access": "ترقية للوصول إلى الأصول المميزة",
   "lbl_5_month": "٥ دولارات/شهر",
@@ -286,8 +283,7 @@ final Map<String, String> arSa = {
   "lbl_layer_type_paint": "رسم",
   "lbl_layer_type_sticker": "ملصق",
   "lbl_layer_type_other": "طبقة",
-  "msg_layer_order_hint":
-      "اسحب المقبض بجانب الطبقة لإعادة الترتيب. أعلى القائمة = الأمام على اللوحة.",
+  "msg_layer_order_hint": "اسحب المقبض بجانب الطبقة لإعادة الترتيب. أعلى القائمة = الأمام على اللوحة.",
   "lbl_layer_frontmost": "في المقدمة",
   "lbl_layer_backmost": "في الخلف",
   "lbl_layer_filters": "المرشحات",
@@ -446,8 +442,7 @@ final Map<String, String> arSa = {
   "lbl_zoom_reset": "ملائمة",
   "lbl_canvas_lock": "قفل التكبير",
   "lbl_canvas_unlock": "فتح التكبير",
-  "msg_my_designs_visibility_hint":
-      "التصاميم العامة تظهر بعد موافقة المشرف. قيد المراجعة والخاصة تبقى هنا فقط.",
+  "msg_my_designs_visibility_hint": "التصاميم العامة تظهر بعد موافقة المشرف. قيد المراجعة والخاصة تبقى هنا فقط.",
   "msg_no_public_designs":
       "لا توجد تصاميم عامة معتمدة بعد. احفظ كعام لإرسالها للمراجعة.",
   "msg_no_private_designs":
@@ -599,16 +594,13 @@ final Map<String, String> arSa = {
   "msg_take_part_in_the": "شارك في مسابقة التصميم\nواحصل على الجوائز",
   "lbl_about_us": "من نحن",
   "lbl_about_us_heading": "من نحن",
-  "msg_about_subtitle": "ما هو تطبيق مساميمك",
-  "msg_about_intro":
-      "يساعدك مساميمك على إنشاء تصاميم مميزة مع إزالة الخلفية بالذكاء الاصطناعي وأدوات النص والأشكال والقوالب والمزيد. سواء كنت مبتدئًا أو محترفًا، مُحرّرنا مُصمَّم لتحويل أفكارك إلى صور جاهزة.",
+  "msg_about_subtitle": "ما هو تطبيق مصممك",
+  "msg_about_intro": "يساعدك مصممك على إنشاء تصاميم مميزة مع إزالة الخلفية بالذكاء الاصطناعي وأدوات النص والأشكال والقوالب والمزيد. سواء كنت مبتدئًا أو محترفًا، مُحرّرنا مُصمَّم لتحويل أفكارك إلى صور جاهزة.",
   "lbl_our_mission": "مهمتنا",
-  "msg_about_mission_body":
-      "نؤمن بأن الإبداع يجب أن يكون متاحًا للجميع. مهمتنا تزويدك بأدوات قوية وبسيطة لتصميم منشورات التواصل والأغلفة والرسومات — مباشرة من هاتفك.",
-  "lbl_why_choose_musamimuk": "لماذا مساميمك؟",
-  "msg_about_why_body":
-      "من رموز QR والقوالب عبر الإنترنت إلى المسابقات والأصول المميزة، يجمع مساميمك بين مُحرّر سهل الاستخدام وميزات تحتاجها فعليًا. نستمع لمجتمعنا ونستمر في التحسين لتُركّز على إبداعك.",
-  "msg_about_thanks": "شكرًا لاختيارك مساميمك. نتطلع لرؤية ما ستُبدعه!",
+  "msg_about_mission_body": "نؤمن بأن الإبداع يجب أن يكون متاحًا للجميع. مهمتنا تزويدك بأدوات قوية وبسيطة لتصميم منشورات التواصل والأغلفة والرسومات — مباشرة من هاتفك.",
+  "lbl_why_choose_musamimuk": "لماذا مصممك؟",
+  "msg_about_why_body": "من رموز QR والقوالب عبر الإنترنت إلى المسابقات والأصول المميزة، يجمع مصممك بين مُحرّر سهل الاستخدام وميزات تحتاجها فعليًا. نستمع لمجتمعنا ونستمر في التحسين لتُركّز على إبداعك.",
+  "msg_about_thanks": "شكرًا لاختيارك مصممك. نتطلع لرؤية ما ستُبدعه!",
   "lbl_help_and_support": "المساعدة والدعم",
   "msg_help_and_support_subtitle":
       "هل تحتاج مساعدة؟ تواصل معنا عبر الهاتف أو البريد الإلكتروني.",
@@ -618,7 +610,7 @@ final Map<String, String> arSa = {
   "lbl_online_designs2": "تصاميم عبر الإنترنت ",
   "lbl_rate_app": "قيّم التطبيق",
   "msg_rate_app_dialog_body":
-      "هل تود فتح مساميمك على متجر Google Play لترك تقييم؟",
+      "هل تود فتح مصممك على متجر Google Play لترك تقييم؟",
   "lbl_open_play_store": "فتح متجر Play",
   "lbl_open_app_store": "فتح متجر App Store",
   "lbl_cv": " سيرة",
@@ -777,18 +769,13 @@ final Map<String, String> arSa = {
   "msg_guest_feature_locked": "الرجاء إنشاء حساب مجاني لاستخدام هذه الميزة.",
   "msg_google_sign_in_failed":
       "فشل تسجيل الدخول عبر Google. تحقق من إعدادات الجهاز وحاول مرة أخرى.",
-  "msg_google_sign_in_web":
-      "تسجيل الدخول عبر Google غير مهيأ على الويب في هذا الإصدار. استخدم التطبيق على الجوال أو البريد.",
-  "msg_google_sign_in_misconfigured":
-      "تسجيل الدخول عبر Google غير مُعدّ لهذا البناء. أضف عميل OAuth حقيقيًا (وSHA-1 لأندرويد) ثم أعد البناء.",
-  "msg_google_sign_in_no_token":
-      "لم يُرجع Google رمز تسجيل الدخول. تحقق من إعداد OAuth (معرّف عميل الويب / SHA-1) وحاول مرة أخرى.",
-  "msg_apple_sign_in_failed":
-      "فشل تسجيل الدخول عبر Apple. حاول مرة أخرى.",
+  "msg_google_sign_in_web": "تسجيل الدخول عبر Google غير مهيأ على الويب في هذا الإصدار. استخدم التطبيق على الجوال أو البريد.",
+  "msg_google_sign_in_misconfigured": "تسجيل الدخول عبر Google غير مُعدّ لهذا البناء. أضف عميل OAuth حقيقيًا (وSHA-1 لأندرويد) ثم أعد البناء.",
+  "msg_google_sign_in_no_token": "لم يُرجع Google رمز تسجيل الدخول. تحقق من إعداد OAuth (معرّف عميل الويب / SHA-1) وحاول مرة أخرى.",
+  "msg_apple_sign_in_failed": "فشل تسجيل الدخول عبر Apple. حاول مرة أخرى.",
   "msg_apple_sign_in_unavailable":
       "تسجيل الدخول عبر Apple غير متاح على هذا الجهاز.",
-  "msg_social_login_coming_soon":
-      "تسجيل الدخول عبر الشبكات الاجتماعية سيُتاح لاحقاً. استخدم البريد وكلمة المرور الآن.",
+  "msg_social_login_coming_soon": "تسجيل الدخول عبر الشبكات الاجتماعية سيُتاح لاحقاً. استخدم البريد وكلمة المرور الآن.",
   "lbl_home": "الرئيسية",
   "lbl_islamic": "إسلامي",
   "lbl_jonathan_saul": "جوناثان سول",
@@ -915,7 +902,7 @@ final Map<String, String> arSa = {
       "اشترِ المزيد من العملات لمتابعة استخدام هذه الميزة.",
   "msg_insufficient_coins_detail":
       "هذه الميزة تكلف {required} عملة. لديك {balance}.",
-  "msg_guest_coins_locked": "أنشئ حساباً مجانياً لشراء وإنفاق عملات مساميمك.",
+  "msg_guest_coins_locked": "أنشئ حساباً مجانياً لشراء وإنفاق عملات مصممك.",
   "msg_coin_store_subtitle":
       "اشترِ باقات العملات لاستخدام أدوات الذكاء الاصطناعي وإزالة الخلفية.",
   "msg_coin_packages_empty": "لا تتوفر باقات عملات حالياً.",
@@ -931,10 +918,10 @@ final Map<String, String> arSa = {
   "lbl_plan_lifetime": "مدى الحياة",
   "lbl_plan_yearly": "سنوي",
   "lbl_plan_monthly": "شهري",
-  "msg_subscription_active_title": "أنت على مساميمك برو",
+  "msg_subscription_active_title": "أنت على مصممك برو",
   "msg_subscription_active_subtitle":
-      "شكراً لدعمك لمساميمك. يمكنك إدارة خطتك في أي وقت.",
-  "msg_subscription_unlocked": "تم تفعيل مساميمك برو.",
+      "شكراً لدعمك لمصممك. يمكنك إدارة خطتك في أي وقت.",
+  "msg_subscription_unlocked": "تم تفعيل مصممك برو.",
   "msg_subscription_error": "حدث خطأ في شاشة الاشتراك.",
   "msg_subscription_unavailable": "الاشتراكات غير متاحة في هذا الإصدار بعد.",
   "msg_subscription_restore_failed": "تعذر استعادة المشتريات.",
@@ -947,8 +934,7 @@ final Map<String, String> arSa = {
   "lbl_image_fit_stretch": "تمديد",
   "lbl_image_aspect_free": "حجم حر",
   "lbl_image_aspect_locked": "قفل النسبة",
-  "msg_image_fit_stretch_on":
-      "تمديد — الصورة تملأ الإطار (قد تتشوّه)",
+  "msg_image_fit_stretch_on": "تمديد — الصورة تملأ الإطار (قد تتشوّه)",
   "msg_image_fit_crop_on": "قص — الإطار يقص دون تشويه الصورة",
   "msg_image_aspect_lock_on": "النسبة مقفلة — العرض والارتفاع متناسبان",
   "msg_image_aspect_lock_off": "حجم حر — العرض والارتفاع مستقلان",
@@ -1043,8 +1029,7 @@ final Map<String, String> arSa = {
   "msg_pinterest_restricted": "البحث العام محدود لهذا المصدر.",
   "lbl_print_my_design": "اطبع تصميمي",
   "lbl_print_settings": "إعدادات الطباعة",
-  "msg_print_settings_intro":
-      "ابنِ بطاقة العمل التي ستُسعّر المطابع على أساسها — المقاس والمخزون والحبر وطريقة الاستلام.",
+  "msg_print_settings_intro": "ابنِ بطاقة العمل التي ستُسعّر المطابع على أساسها — المقاس والمخزون والحبر وطريقة الاستلام.",
   "lbl_print_size": "المقاس",
   "msg_print_size_hint": "اختر الورقة التي ستقصّها المطبعة.",
   "lbl_print_size_business_card": "بطاقة عمل",
@@ -1053,13 +1038,15 @@ final Map<String, String> arSa = {
   "lbl_print_size_a3": "A3",
   "lbl_print_size_banner": "بنر",
   "lbl_print_size_custom": "مخصص",
-  "msg_print_custom_size_required": "أدخل العرض والارتفاع بالمليمتر للمقاس المخصص.",
+  "msg_print_custom_size_required":
+      "أدخل العرض والارتفاع بالمليمتر للمقاس المخصص.",
   "lbl_print_width_mm": "العرض (مم)",
   "lbl_print_height_mm": "الارتفاع (مم)",
   "lbl_print_quantity": "الكمية",
   "lbl_print_copies": "نسخة",
   "lbl_print_paper": "الورق",
-  "msg_print_paper_hint": "اختر وزناً أو مخزوناً خاصاً — المطبعة تسعّر سطراً واحداً للورق.",
+  "msg_print_paper_hint":
+      "اختر وزناً أو مخزوناً خاصاً — المطبعة تسعّر سطراً واحداً للورق.",
   "lbl_print_paper_weight": "الوزن",
   "lbl_print_paper_stock": "المخزون",
   "lbl_print_paper_80gsm": "80 جم",
@@ -1088,8 +1075,7 @@ final Map<String, String> arSa = {
       "أخبر المطبعة بأي تفاصيل لا تغطيها الخيارات. تظهر لهم قبل التسعير.",
   "msg_print_designer_notes_custom_hint":
       "اخترت تشطيباً مخصصاً — صف بالضبط ما تحتاجه حتى تستطيع المطبعة تسعيره.",
-  "msg_print_custom_notes_required":
-      "أضف ملاحظات للمطبعة تصف التشطيب المخصص.",
+  "msg_print_custom_notes_required": "أضف ملاحظات للمطبعة تصف التشطيب المخصص.",
   "lbl_print_finish_lamination": "تغليف",
   "lbl_print_finish_cutting": "قص",
   "lbl_print_finish_folding": "طي",
@@ -1169,19 +1155,16 @@ final Map<String, String> arSa = {
       "المتاح {available} ر.س · الحد الأدنى {min} ر.س لكل تحويل",
   "msg_referral_withdraw_sent":
       "تم طلب السحب. سنحوّل المبلغ إلى آيبانك بعد المراجعة.",
-  "msg_referral_share":
-      "انضم لمساميمك عبر دعوتي: {url}\nبعد التثبيت أنشئ حسابًا وأدخل الرمز: {code}",
+  "msg_referral_share": "انضم لمصممك عبر دعوتي: {url}\nبعد التثبيت أنشئ حسابًا وأدخل الرمز: {code}",
   "lbl_referral_code_optional": "رمز الإحالة (اختياري)",
   "msg_referral_code_hint": "إذا دعاك أحد، أدخل رمزه هنا.",
-  "msg_referral_cash_intro":
-      "المؤثرون المعتمدون يحصلون على {reward} ر.س لكل تسجيل حقيقي. تُصرف بعد {hold} أيام. الحد الأدنى للسحب {min} ر.س عبر تحويل آيبان سعودي.",
+  "msg_referral_cash_intro": "المؤثرون المعتمدون يحصلون على {reward} ر.س لكل تسجيل حقيقي. تُصرف بعد {hold} أيام. الحد الأدنى للسحب {min} ر.س عبر تحويل آيبان سعودي.",
   "msg_referral_status_pending": "الطلب قيد موافقة الإدارة.",
   "msg_referral_status_rejected": "تم رفض الطلب. حدّث الآيبان وقدّم مرة أخرى.",
   "msg_referral_status_suspended": "تم إيقاف الوصول للبرنامج. تواصل مع الدعم.",
   "lbl_print_message_shop": "راسل المطبعة",
   "lbl_print_view_order": "عرض الطلب",
-  "msg_print_quote_on_order":
-      "عرض السعر جاهز. اقبل أو ارفض من شاشة الطلب.",
+  "msg_print_quote_on_order": "عرض السعر جاهز. اقبل أو ارفض من شاشة الطلب.",
   "lbl_print_hello_shop": "مرحباً، أود طباعة هذا التصميم.",
   "lbl_print_accept": "قبول",
   "lbl_print_decline": "رفض",
@@ -1253,8 +1236,7 @@ final Map<String, String> arSa = {
   "lbl_print_shop_mode": "المطبعة",
   "lbl_switch_mode": "تبديل الوضع",
   "lbl_choose_work_mode": "اختر الوضع",
-  "msg_choose_work_mode":
-      "لديك أكثر من نوع حساب. أي وضع تريد فتحه؟",
+  "msg_choose_work_mode": "لديك أكثر من نوع حساب. أي وضع تريد فتحه؟",
   "lbl_register_as": "أريد الانضمام كـ",
   "lbl_register_as_designer": "مصمم",
   "lbl_register_as_shop": "مطبعة",
@@ -1264,18 +1246,14 @@ final Map<String, String> arSa = {
   "msg_register_as_rider_desc": "وصّل الطلبات واكسب",
   "lbl_register_continue_shop": "إنشاء حساب وإعداد المطبعة",
   "lbl_register_continue_rider": "إنشاء حساب وإعداد المندوب",
-  "msg_register_as_shop_hint":
-      "الخطوة التالية: إكمال وثائق توثيق المطبعة. مسجّل مسبقاً عبر Google؟ تابع بنفس الحساب دون بريد جديد.",
-  "msg_register_as_rider_hint":
-      "الخطوة التالية: إكمال وثائق توثيق المندوب. لديك حساب مطبعة أو Google؟ تابع بنفس تسجيل الدخول دون إنشاء بريد ثانٍ.",
-  "msg_email_exists_use_login_or_google":
-      "هذا البريد لديه حساب مسبقاً. سجّل الدخول بكلمة المرور أو تابع مع Google ثم أكمل إعداد المطبعة/المندوب.",
+  "msg_register_as_shop_hint": "الخطوة التالية: إكمال وثائق توثيق المطبعة. مسجّل مسبقاً عبر Google؟ تابع بنفس الحساب دون بريد جديد.",
+  "msg_register_as_rider_hint": "الخطوة التالية: إكمال وثائق توثيق المندوب. لديك حساب مطبعة أو Google؟ تابع بنفس تسجيل الدخول دون إنشاء بريد ثانٍ.",
+  "msg_email_exists_use_login_or_google": "هذا البريد لديه حساب مسبقاً. سجّل الدخول بكلمة المرور أو تابع مع Google ثم أكمل إعداد المطبعة/المندوب.",
   "msg_session_required": "يرجى تسجيل الدخول أولاً.",
   "msg_register_pick_shop_or_rider":
       "اختر مطبعة أو مندوب للمتابعة بالحساب الحالي.",
   "lbl_continue_with_current_account": "المتابعة بهذا الحساب",
-  "msg_register_existing_session_hint":
-      "أنت مسجّل الدخول بالفعل. اختر مطبعة أو مندوب ثم تابع — سنربط الملف بنفس الحساب.",
+  "msg_register_existing_session_hint": "أنت مسجّل الدخول بالفعل. اختر مطبعة أو مندوب ثم تابع — سنربط الملف بنفس الحساب.",
   "lbl_mode_normal": "تطبيق التصميم",
   "lbl_mode_shop": "المطبعة",
   "lbl_mode_rider": "مندوب الطباعة",
@@ -1288,7 +1266,7 @@ final Map<String, String> arSa = {
   "lbl_print_phone": "الجوال",
   "lbl_print_cr": "السجل التجاري",
   "lbl_print_vat": "الرقم الضريبي",
-  "lbl_print_iban": "الآيبان (اختياري)",
+  "lbl_print_iban": "الآيبان",
   "lbl_print_address": "العنوان",
   "lbl_print_district": "الحي",
   "lbl_print_submit": "إرسال للتوثيق",
@@ -1346,10 +1324,9 @@ final Map<String, String> arSa = {
   "msg_print_doc_too_large": "يجب ألا يتجاوز الملف 5 ميجابايت.",
   "msg_print_doc_pick_failed": "تعذر قراءة الملف.",
   "msg_print_location_required": "أدخل خط العرض وخط الطول لموقعك.",
-  "msg_print_map_pin_help": "استخدم GPS أو اسحب الدبوس على الخريطة أو افتح في خرائط Google.",
+  "msg_print_map_pin_help":
+      "استخدم GPS أو اسحب الدبوس على الخريطة أو افتح في خرائط Google.",
   "msg_print_map_drag_hint": "اضغط أو اسحب الدبوس لتحديد موقعك",
-  "msg_print_map_unavailable":
-      "معاينة الخريطة غير متاحة. استخدم موقعك الحالي أو أدخل الإحداثيات أدناه.",
   "msg_print_locating": "جاري تحديد موقعك الحالي…",
   "msg_print_resolving_address": "جاري جلب العنوان…",
   "lbl_print_map_pin": "موقعك",
@@ -1376,8 +1353,7 @@ final Map<String, String> arSa = {
   "lbl_print_shift_hours": "ساعات العمل",
   "lbl_print_shift_n": "الوردية {n}",
   "lbl_print_open_days": "أيام العمل",
-  "msg_print_hours_shifts_hint":
-      "هل تحتاج استراحة منتصف اليوم؟ أضف وردية ثانية (مثل ٩:٠٠–١٣:٠٠ و١٦:٠٠–٢٢:٠٠).",
+  "msg_print_hours_shifts_hint": "هل تحتاج استراحة منتصف اليوم؟ أضف وردية ثانية (مثل ٩:٠٠–١٣:٠٠ و١٦:٠٠–٢٢:٠٠).",
   "lbl_print_add_service": "إضافة",
   "lbl_print_custom_service_hint": "اسم خدمة مخصصة",
   "msg_print_add_custom_service_hint":
@@ -1391,8 +1367,7 @@ final Map<String, String> arSa = {
   "lbl_print_step_documents": "مستندات التوثيق",
   "lbl_print_step_review": "مراجعة وإرسال",
   "msg_print_review_header": "أوشكت على الانتهاء — راجع بياناتك.",
-  "msg_print_review_intro":
-      "راجع كل الأقسام أدناه. استخدم تعديل للرجوع وتصحيح أي شيء قبل الإرسال للتوثيق.",
+  "msg_print_review_intro": "راجع كل الأقسام أدناه. استخدم تعديل للرجوع وتصحيح أي شيء قبل الإرسال للتوثيق.",
   "lbl_print_edit_section": "تعديل",
   "lbl_print_docs_attached_list": "المرفق",
   "lbl_print_tap_to_preview": "اضغط للمعاينة",
@@ -1400,8 +1375,7 @@ final Map<String, String> arSa = {
   "lbl_print_open_document": "فتح المستند",
   "msg_print_doc_preview_file_only":
       "لا تتوفر معاينة لهذا النوع. الملف جاهز للرفع.",
-  "msg_print_doc_preview_external":
-      "يفتح هذا النوع خارج التطبيق.",
+  "msg_print_doc_preview_external": "يفتح هذا النوع خارج التطبيق.",
   "msg_print_doc_open_failed": "تعذر فتح المستند.",
   "msg_print_docs_missing_review": "مستندات مطلوبة ناقصة:",
   "msg_print_no_services_selected": "لم يتم اختيار خدمات",
@@ -1419,6 +1393,7 @@ final Map<String, String> arSa = {
   "lbl_print_upload_docs": "رفع / استبدال المستندات",
   "lbl_print_service_areas": "مناطق الخدمة",
   "msg_print_areas_required": "اختر منطقة توصيل واحدة واحدةً على الأقل.",
+  "msg_print_areas_global": "تغطي جميع مناطق التوصيل (كل نطاقات المسافة). يمكن عرض الطلبات من أي منطقة عليك.",
   "msg_print_areas_loading": "جاري تحميل مناطق التوصيل…",
   "lbl_print_open_in_maps": "افتح في الخرائط",
   "lbl_print_notices": "إشعارات الطباعة",
@@ -1431,8 +1406,7 @@ final Map<String, String> arSa = {
   "msg_print_marketplace_disabled": "سوق الطباعة غير متاح مؤقتًا.",
   "msg_print_iban_invalid":
       "أدخل رقم آيبان سعودي صالحًا (SA ثم 22 رقمًا مع مجموع تحقق صحيح).",
-  "msg_print_iban_format":
-      "استخدم SA متبوعًا بـ 22 رقمًا بالضبط (24 حرفًا إجمالًا). المسافات مسموحة.",
+  "msg_print_iban_format": "استخدم SA متبوعًا بـ 22 رقمًا بالضبط (24 حرفًا إجمالًا). المسافات مسموحة.",
   "msg_print_iban_checksum":
       "فشل التحقق من رقم الآيبان. راجع كل رقم مع كشف حسابك البنكي.",
   "msg_print_iban_hint": "مثال: SA03 8000 0000 6080 1016 7519",
@@ -1445,7 +1419,6 @@ final Map<String, String> arSa = {
   "lbl_print_doc_shop_photo": "صورة المطبعة",
   "lbl_print_doc_driver_license": "رخصة القيادة",
   "lbl_print_doc_vehicle_registration": "استمارة المركبة",
-  "lbl_print_doc_vehicle_photo": "صورة المركبة",
   "lbl_print_doc_selfie_with_id": "صورة شخصية مع الهوية",
   "lbl_print_doc_status_uploaded": "مرفوع",
   "lbl_print_doc_status_accepted": "مقبول",
@@ -1511,7 +1484,8 @@ final Map<String, String> arSa = {
   "lbl_print_rider_step_drop": "تسليم",
   "msg_print_rider_go_online_hint":
       "أنت خارج البث. اتصل لاستقبال نداءات التوصيل القريبة.",
-  "msg_print_online_active_hint": "ابقَ ضمن مناطق خدمتك. المهام الجديدة تظهر في المهام.",
+  "msg_print_online_active_hint":
+      "ابقَ ضمن مناطق خدمتك. المهام الجديدة تظهر في المهام.",
   "msg_print_online_idle_hint": "فعّل الاتصال لاستقبال مهام التوصيل القريبة.",
   "lbl_print_desk_waiting": "بانتظار",
   "lbl_print_desk_rating": "التقييم",
@@ -1520,8 +1494,7 @@ final Map<String, String> arSa = {
       "طلبات الطباعة الجديدة تظهر هنا. كن جاهزاً — العروض سريعة.",
   "msg_print_rider_jobs_empty":
       "اتصل بالإنترنت لاستقبال مهام التوصيل في مناطقك.",
-  "msg_print_reviews_empty_hint":
-      "تظهر التقييمات الموثّقة بعد إكمال الطلبات.",
+  "msg_print_reviews_empty_hint": "تظهر التقييمات الموثّقة بعد إكمال الطلبات.",
   "msg_print_no_jobs": "لا توجد مهام الآن.",
   "lbl_print_national_id": "رقم الهوية",
   "lbl_print_vehicle": "المركبة",
@@ -1533,7 +1506,8 @@ final Map<String, String> arSa = {
   "lbl_print_rider_action_pickup": "مسح رمز الاستلام",
   "lbl_print_rider_action_on_route": "في الطريق للعميل",
   "lbl_print_rider_action_arrive_customer": "وصلت للعميل",
-  "msg_print_no_riders": "لا يوجد مندوبون متصلون الآن. سيتم التعيين عند التوفر.",
+  "msg_print_no_riders":
+      "لا يوجد مندوبون متصلون الآن. سيتم التعيين عند التوفر.",
   "msg_print_register_rider":
       "سجّل كمندوب لتوصيل طلبات الطباعة. يلزم موافقة الإدارة.",
   "msg_print_rider_pending":
@@ -1583,8 +1557,7 @@ final Map<String, String> arSa = {
   "lbl_print_payout_stc": "STC Pay",
   "msg_print_withdraw_sent": "تم إرسال طلب السحب.",
   "lbl_print_stripe_connect": "ربط سحب Stripe",
-  "msg_print_stripe_connect_required":
-      "اربط Stripe من داخل التطبيق للسحب. إنشاء حساب متصل من لوحة Stripe فقط لا يربطه بمطبعتك/مندوبك.",
+  "msg_print_stripe_connect_required": "اربط Stripe من داخل التطبيق للسحب. إنشاء حساب متصل من لوحة Stripe فقط لا يربطه بمطبعتك/مندوبك.",
   "msg_print_stripe_connect_open":
       "أكمل تسجيل Stripe في المتصفح ثم عد إلى التطبيق.",
   "msg_print_pay_failed": "تعذر إكمال الدفع.",

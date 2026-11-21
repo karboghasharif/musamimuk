@@ -3,8 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-// pro_image_editor 14.x TextField/Scaffold use material_ui MaterialLocalizations
-// (separate type from Flutter's). Must register its delegate on MaterialApp.
+// pro_image_editor 14.x TextFields use material_ui MaterialLocalizations (not Flutter's).
 import 'package:material_ui/material_ui.dart' as material_ui;
 import 'package:musamimuk/presentation/add_new_screen/bloc/add_new_bloc.dart';
 import 'package:toastification/toastification.dart';
@@ -161,12 +160,14 @@ class MyApp extends StatelessWidget {
                         debugShowCheckedModeBanner: false,
                         localizationsDelegates: const [
                           AppLocalizationDelegate(),
+                          // Flutter Material / Cupertino (app chrome, sheets, etc.)
                           GlobalMaterialLocalizations.delegate,
-                          // Required by pro_image_editor text/crop editors
-                          // (material_ui TextField asserts this type).
-                          material_ui.GlobalMaterialLocalizations.delegate,
                           GlobalWidgetsLocalizations.delegate,
                           GlobalCupertinoLocalizations.delegate,
+                          // material_ui MaterialLocalizations for pro_image_editor
+                          // TextField (RoundedBackgroundTextField) — without this,
+                          // the text editor shows "No MaterialLocalizations found".
+                          material_ui.GlobalMaterialLocalizations.delegate,
                         ],
                         supportedLocales: const [Locale('en'), Locale('ar')],
                         locale: localeOverride,

@@ -42,8 +42,10 @@ class MusamiPageStrip extends StatelessWidget {
           child: SafeArea(
             top: false,
             bottom: false,
+            // Fixed height (not .v) — scaled .v children were overflowing the
+            // strip on 13" iPad by ~13px.
             child: SizedBox(
-              height: 64.v,
+              height: 56,
               child: Row(
                 children: [
                   SizedBox(width: 8.h),
@@ -51,8 +53,9 @@ class MusamiPageStrip extends StatelessWidget {
                     'lbl_pages'.tr,
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.85),
-                      fontSize: 11.fSize,
+                      fontSize: 11,
                       fontWeight: FontWeight.w700,
+                      height: 1.1,
                     ),
                   ),
                   SizedBox(width: 8.h),
@@ -78,8 +81,8 @@ class MusamiPageStrip extends StatelessWidget {
                             borderRadius: BorderRadius.circular(8),
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 160),
-                              width: 44.h,
-                              height: 52.v,
+                              width: 40,
+                              height: 44,
                               alignment: Alignment.center,
                               decoration: BoxDecoration(
                                 color: selected
@@ -101,7 +104,8 @@ class MusamiPageStrip extends StatelessWidget {
                                       ? AppDs.accentYellow
                                       : Colors.white,
                                   fontWeight: FontWeight.w700,
-                                  fontSize: 14.fSize,
+                                  fontSize: 14,
+                                  height: 1.1,
                                 ),
                               ),
                             ),
@@ -164,12 +168,13 @@ class _StripIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 40.h,
-      height: 40.v,
+      width: 36,
+      height: 40,
       child: IconButton(
         tooltip: tooltip,
         padding: EdgeInsets.zero,
         visualDensity: VisualDensity.compact,
+        constraints: const BoxConstraints.tightFor(width: 36, height: 40),
         onPressed: onPressed,
         icon: Icon(
           icon,

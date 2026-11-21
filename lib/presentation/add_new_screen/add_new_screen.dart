@@ -905,7 +905,9 @@ ReactiveWidget musamiPaintEditorBottomBar(
             Material(
               color: cfg.style.bottomBarBackground,
               child: SizedBox(
-                height: kToolbarHeight,
+                // Slightly taller than [kToolbarHeight] so icon+label never
+                // bottom-overflows on large-tablet text scale.
+                height: 64,
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -920,9 +922,13 @@ ReactiveWidget musamiPaintEditorBottomBar(
                     return FlatIconTextButton(
                       label: Text(
                         item.label,
-                        style: TextStyle(fontSize: 10, color: color),
+                        style: TextStyle(
+                          fontSize: 10,
+                          height: 1.1,
+                          color: color,
+                        ),
                       ),
-                      icon: Icon(item.icon, color: color),
+                      icon: Icon(item.icon, size: 22, color: color),
                       onPressed: () => editor.setMode(item.mode),
                     );
                   },
@@ -2452,195 +2458,93 @@ class _AddNewScreenState extends State<AddNewScreen>
                             ),
                           ),
                           Padding(
+                            // Fixed padding (not .v) so iPad height scaling cannot
+                            // push icon+label past the scaffold bottom inset.
                             padding: EdgeInsets.symmetric(
                               horizontal: 49.h,
-                              vertical: 10.v,
+                              vertical: 8,
                             ),
-                            child: SizedBox(
-                              height: 52,
-                              child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  InkWell(
-                                    borderRadius: BorderRadius.circular(20),
-                                    onTap: () {
-                                      BlocProvider.of<AddNewBloc>(context).add(
-                                        ShowContainerEvent(
-                                          ishow:
-                                              state.showbottomContainer == '1'
-                                              ? '0'
-                                              : '1',
-                                        ),
-                                      );
-                                    },
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        CustomIconButton(
-                                          height: 22.adaptSize,
-                                          width: 22.adaptSize,
-                                          child: CustomImageView(
-                                            imagePath:
-                                                state.showbottomContainer == '1'
-                                                ? ImageConstant
-                                                      .imgPlusSvgrepoCom
-                                                : ImageConstant
-                                                      .imgPlusSvgrepoComOnprimarycontainer,
-                                          ),
-                                        ),
-                                        SizedBox(height: 4.v),
-                                        Text(
-                                          "lbl_add_new".tr,
-                                          style:
-                                              state.showbottomContainer == '1'
-                                              ? CustomTextStyles
-                                                    .bodySmallYellowA400
-                                              : theme.textTheme.bodySmall,
-                                          overflow: TextOverflow.ellipsis,
-                                          maxLines: 1,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  InkWell(
-                                    onTap: () {
-                                      BlocProvider.of<AddNewBloc>(context).add(
-                                        ShowContainerEvent(
-                                          ishow:
-                                              state.showbottomContainer != '0'
-                                              ? '0'
-                                              : '2',
-                                        ),
-                                      );
-                                    },
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        CustomIconButton(
-                                          height: 22.adaptSize,
-                                          width: 22.adaptSize,
-                                          child: CustomImageView(
-                                            imagePath:
-                                                state.showbottomContainer == '2'
-                                                ? ImageConstant
-                                                      .imgSlideSizeSvgrepoComPrimary
-                                                : ImageConstant
-                                                      .imgSlideSizeSvgrepoCom,
-                                          ),
-                                        ),
-                                        SizedBox(height: 4.v),
-                                        Text(
-                                          "lbl_resize_paper".tr,
-                                          style:
-                                              state.showbottomContainer == '2'
-                                              ? CustomTextStyles
-                                                    .bodySmallYellowA400
-                                              : theme.textTheme.bodySmall,
-                                          overflow: TextOverflow.ellipsis,
-                                          maxLines: 1,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  InkWell(
-                                    onTap: () {
-                                      final wasTransparent =
-                                          state.isBackgroundTransparent;
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                _editorMainBottomTool(
+                                  label: 'lbl_add_new'.tr,
+                                  imagePath: state.showbottomContainer == '1'
+                                      ? ImageConstant.imgPlusSvgrepoCom
+                                      : ImageConstant
+                                            .imgPlusSvgrepoComOnprimarycontainer,
+                                  selected: state.showbottomContainer == '1',
+                                  onTap: () {
+                                    BlocProvider.of<AddNewBloc>(context).add(
+                                      ShowContainerEvent(
+                                        ishow: state.showbottomContainer == '1'
+                                            ? '0'
+                                            : '1',
+                                      ),
+                                    );
+                                  },
+                                ),
+                                _editorMainBottomTool(
+                                  label: 'lbl_resize_paper'.tr,
+                                  imagePath: state.showbottomContainer == '2'
+                                      ? ImageConstant
+                                            .imgSlideSizeSvgrepoComPrimary
+                                      : ImageConstant.imgSlideSizeSvgrepoCom,
+                                  selected: state.showbottomContainer == '2',
+                                  onTap: () {
+                                    BlocProvider.of<AddNewBloc>(context).add(
+                                      ShowContainerEvent(
+                                        ishow: state.showbottomContainer != '0'
+                                            ? '0'
+                                            : '2',
+                                      ),
+                                    );
+                                  },
+                                ),
+                                _editorMainBottomTool(
+                                  label: 'lbl_transparent_bg'.tr,
+                                  imagePath: state.isBackgroundTransparent
+                                      ? ImageConstant
+                                            .imgBlockchainSvgrepoComPrimary
+                                      : ImageConstant.imgBlockchainSvgrepoCom,
+                                  selected: state.isBackgroundTransparent,
+                                  onTap: () {
+                                    final wasTransparent =
+                                        state.isBackgroundTransparent;
+                                    BlocProvider.of<AddNewBloc>(
+                                      context,
+                                    ).add(MakeTransparentEvent());
+                                    if (state.showbottomContainer != '0') {
                                       BlocProvider.of<AddNewBloc>(
                                         context,
-                                      ).add(MakeTransparentEvent());
-                                      // Close other tool panels so the status bar is visible.
-                                      if (state.showbottomContainer != '0') {
-                                        BlocProvider.of<AddNewBloc>(
-                                          context,
-                                        ).add(ShowContainerEvent(ishow: '0'));
-                                      }
-                                      showAppToast(
-                                        wasTransparent
-                                            ? 'msg_transparent_bg_off'.tr
-                                            : 'msg_transparent_bg_on'.tr,
-                                        type: ToastificationType.success,
-                                      );
-                                    },
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        CustomIconButton(
-                                          height: 22.adaptSize,
-                                          width: 22.adaptSize,
-                                          child: CustomImageView(
-                                            imagePath:
-                                                state.isBackgroundTransparent
-                                                ? ImageConstant
-                                                      .imgBlockchainSvgrepoComPrimary
-                                                : ImageConstant
-                                                      .imgBlockchainSvgrepoCom,
-                                          ),
-                                        ),
-                                        SizedBox(height: 4.v),
-                                        Text(
-                                          "lbl_transparent_bg".tr,
-                                          style: state.isBackgroundTransparent
-                                              ? CustomTextStyles
-                                                    .bodySmallYellowA400
-                                              : theme.textTheme.bodySmall,
-                                          overflow: TextOverflow.ellipsis,
-                                          maxLines: 1,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  InkWell(
-                                    onTap: () {
-                                      BlocProvider.of<AddNewBloc>(context).add(
-                                        ShowContainerEvent(
-                                          ishow:
-                                              state.showbottomContainer == '4'
-                                              ? '0'
-                                              : '4',
-                                        ),
-                                      );
-                                    },
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        CustomIconButton(
-                                          height: 22.adaptSize,
-                                          width: 22.adaptSize,
-                                          child: CustomImageView(
-                                            imagePath:
-                                                state.showbottomContainer == '4'
-                                                ? ImageConstant
-                                                      .imgColorFillSvgrepoComPrimary
-                                                : ImageConstant
-                                                      .imgColorFillSvgrepoCom,
-                                          ),
-                                        ),
-                                        SizedBox(height: 4.v),
-                                        Text(
-                                          "lbl_bg_color".tr,
-                                          style:
-                                              state.showbottomContainer == '4'
-                                              ? CustomTextStyles
-                                                    .bodySmallYellowA400
-                                              : theme.textTheme.bodySmall,
-                                          overflow: TextOverflow.ellipsis,
-                                          maxLines: 1,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
+                                      ).add(ShowContainerEvent(ishow: '0'));
+                                    }
+                                    showAppToast(
+                                      wasTransparent
+                                          ? 'msg_transparent_bg_off'.tr
+                                          : 'msg_transparent_bg_on'.tr,
+                                      type: ToastificationType.success,
+                                    );
+                                  },
+                                ),
+                                _editorMainBottomTool(
+                                  label: 'lbl_bg_color'.tr,
+                                  imagePath: state.showbottomContainer == '4'
+                                      ? ImageConstant
+                                            .imgColorFillSvgrepoComPrimary
+                                      : ImageConstant.imgColorFillSvgrepoCom,
+                                  selected: state.showbottomContainer == '4',
+                                  onTap: () {
+                                    BlocProvider.of<AddNewBloc>(context).add(
+                                      ShowContainerEvent(
+                                        ishow: state.showbottomContainer == '4'
+                                            ? '0'
+                                            : '4',
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ],
                             ),
                           ),
                         ],
@@ -2654,6 +2558,47 @@ class _AddNewScreenState extends State<AddNewScreen>
           ),
         );
       },
+    );
+  }
+
+  /// Compact icon+label for the main editor bottom strip.
+  ///
+  /// Uses **fixed** logical sizes (not `.adaptSize` / `.v`) so tablets cannot
+  /// inflate the column past the available bottom chrome height.
+  Widget _editorMainBottomTool({
+    required String label,
+    required String imagePath,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    final baseStyle = selected
+        ? CustomTextStyles.bodySmallYellowA400
+        : theme.textTheme.bodySmall;
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Avoid [CustomIconButton]/[IconButton] 48px min tap target here —
+            // that alone overflowed the old fixed 52px strip on iPad.
+            SizedBox(
+              height: 22,
+              width: 22,
+              child: CustomImageView(imagePath: imagePath),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: baseStyle?.copyWith(fontSize: 11, height: 1.1),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
+          ],
+        ),
+      ),
     );
   }
 

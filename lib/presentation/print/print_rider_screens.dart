@@ -809,9 +809,14 @@ class _PrintRiderRegisterScreenState extends State<PrintRiderRegisterScreen> {
     final list = result is PrintSuccess<List<PrintDeliveryArea>>
         ? result.data
         : PrintDeliveryArea.seededDefaults;
+    final choices =
+        list.isNotEmpty ? list : PrintDeliveryArea.seededDefaults;
     setState(() {
-      _areaChoices =
-          list.isNotEmpty ? list : PrintDeliveryArea.seededDefaults;
+      _areaChoices = choices;
+      // Global coverage: riders serve every delivery fee-band.
+      _areas
+        ..clear()
+        ..addAll(choices.map((a) => a.code));
       _areasLoading = false;
     });
   }
@@ -833,9 +838,8 @@ class _PrintRiderRegisterScreenState extends State<PrintRiderRegisterScreen> {
   bool _validateStep() {
     if (_step == 2) {
       if (!(_formKey.currentState?.validate() ?? false)) return false;
-      if (_areas.isEmpty) {
-        showAppToast('msg_print_areas_required'.tr, type: ToastificationType.error);
-        return false;
+      if (_areas.isEmpty && _areaChoices.isNotEmpty) {
+        _areas.addAll(_areaChoices.map((a) => a.code));
       }
       return true;
     }
@@ -869,10 +873,9 @@ class _PrintRiderRegisterScreenState extends State<PrintRiderRegisterScreen> {
 
   Future<void> _submit() async {
     if (_saving) return;
-    if (_areas.isEmpty) {
-      showAppToast('msg_print_areas_required'.tr, type: ToastificationType.error);
-      return;
-    }
+    final coverageAreas = _areas.isNotEmpty
+        ? _areas.toList()
+        : _areaChoices.map((a) => a.code).toList();
     setState(() => _saving = true);
     final result = await _repo.registerRider(
       name: _name.text.trim(),
@@ -885,7 +888,7 @@ class _PrintRiderRegisterScreenState extends State<PrintRiderRegisterScreen> {
       district: _district.text.trim().isEmpty ? null : _district.text.trim(),
       lat: double.tryParse(_lat.text.trim()),
       lng: double.tryParse(_lng.text.trim()),
-      areas: _areas.toList(),
+      areas: coverageAreas,
       documents: _docs.values.whereType<PrintPickedDoc>().toList(),
     );
     if (!mounted) return;
@@ -1012,49 +1015,36 @@ class _PrintRiderRegisterScreenState extends State<PrintRiderRegisterScreen> {
                     ],
                   ),
                 )
-              else
+              else ...[
+                AppText(
+                  'msg_print_areas_global'.tr,
+                  variant: AppTextVariant.secondary,
+                ),
+                SizedBox(height: AppDs.space2.v),
                 Wrap(
                   spacing: AppDs.space2.h,
                   runSpacing: AppDs.space2.v,
                   children: _areaChoices
                       .map(
-                        (area) => FilterChip(
+                        (area) => Chip(
                           label: Text(area.label),
-                          selected: _areas.contains(area.code),
-                          onSelected: (selected) {
-                            setState(() {
-                              if (selected) {
-                                _areas.add(area.code);
-                              } else {
-                                _areas.remove(area.code);
-                              }
-                            });
-                          },
-                          selectedColor: AppDs.accentYellow,
-                          checkmarkColor: AppDs.onAccent,
-                          labelStyle: TextStyle(
-                            color: _areas.contains(area.code)
-                                ? AppDs.onAccent
-                                : AppDs.textOnDarkPrimary,
+                          backgroundColor: AppDs.accentYellow,
+                          labelStyle: const TextStyle(
+                            color: AppDs.onAccent,
                             fontWeight: FontWeight.w600,
                           ),
-                          backgroundColor: AppDs.surfaceRaised,
-                          side: BorderSide(
-                            color: _areas.contains(area.code)
-                                ? AppDs.accentYellow
-                                : AppDs.atelierHairline(0.16),
-                          ),
+                          side: BorderSide.none,
                         ),
                       )
                       .toList(),
                 ),
+              ],
             ],
             if (_step == 3) ...[
               PrintKycTextField(
                 controller: _iban,
                 label: 'lbl_print_iban'.tr,
                 prefixIcon: Icons.account_balance_outlined,
-                helper: 'msg_print_iban_hint'.tr,
                 validator: saudiIbanText,
               ),
               PrintLocationPicker(
@@ -1124,8 +1114,10 @@ class _PrintRiderRegisterScreenState extends State<PrintRiderRegisterScreen> {
             ),
             SizedBox(height: AppDs.space1.v),
             PrintKycReviewChips(
-              items: areaLabels,
-              emptyLabel: 'msg_print_areas_required'.tr,
+              items: areaLabels.isNotEmpty
+                  ? areaLabels
+                  : ['msg_print_areas_global'.tr],
+              emptyLabel: 'msg_print_areas_global'.tr,
             ),
           ],
         ),
